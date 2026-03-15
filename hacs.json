@@ -4,7 +4,5 @@
   "render_readme": true,
   "domains": ["ble_positioning"],
   "content_in_root": false,
-  "zip_release": true,
-  "filename": "ble_positioning.zip",
   "homeassistant": "2024.1.0"
 }

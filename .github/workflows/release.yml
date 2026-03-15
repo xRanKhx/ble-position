@@ -42,10 +42,7 @@ jobs:
         id: changelog
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          # Extract the section for this version
-          NOTES=$(awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md)
-          # Write to file to preserve newlines
-          echo "$NOTES" > release_notes.md
+          awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/{exit} found{print}" CHANGELOG.md > release_notes.md
           echo "Release notes extracted for v$VERSION"
 
       - name: Create GitHub Release
