@@ -1,0 +1,95 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up floor / building",
+        "description": "Enter floor dimensions and an optional floorplan image. Scanners and rooms are configured later via the Lovelace card.",
+        "data": {
+          "floor_name": "Name (e.g. Ground Floor)",
+          "floor_width": "Floor width (m)",
+          "floor_height": "Floor height (m)",
+          "image_path": "Floorplan image (path under /local/, optional)"
+        }
+      },
+      "devices": {
+        "title": "Add tracked device",
+        "description": "Add the first device to track. More devices can be added later via Options.",
+        "data": {
+          "device_name": "Device name (e.g. iPhone 16)",
+          "nearest_entity": "Nearest-scanner entity ID (optional)",
+          "rssi_entity": "RSSI entity ID (optional)"
+        }
+      },
+      "init_options": {
+        "title": "Algorithm settings",
+        "data": {
+          "grid_step": "Grid step (m) – recommended: 0.5",
+          "knn_k": "KNN neighbours – recommended: 3",
+          "ema_alpha": "EMA smoothing – 0.05 (slow) … 0.3 (fast)"
+        }
+      }
+    },
+    "error": {
+      "invalid_floor_size": "Width and height must be > 0",
+      "invalid_entity_id": "Entity ID must start with 'sensor.'",
+      "required": "This field is required"
+    },
+    "abort": {
+      "already_configured": "This floor is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "General options",
+        "data": {
+          "grid_step": "Grid step (m)",
+          "knn_k": "KNN neighbours",
+          "ema_alpha": "EMA smoothing",
+          "sidebar_enabled": "In Seitenleiste anzeigen"
+        }
+      },
+      "auto_cal": {
+        "title": "Auto-calibration",
+        "data": {
+          "auto_cal_enabled": "Enable auto-calibration",
+          "auto_cal_still_sec": "Stillness threshold (seconds)",
+          "auto_cal_max_move_m": "Max movement for stillness (m)",
+          "auto_cal_when": "When to calibrate",
+          "auto_cal_from": "Schedule from (HH:MM)",
+          "auto_cal_to": "Schedule to (HH:MM)",
+          "auto_cal_max_age_days": "Fingerprint age until stale (days)",
+          "auto_cal_notify": "Notification"
+        }
+      }
+    }
+  },
+  "services": {
+    "add_to_sidebar": {
+      "name": "Add to Sidebar",
+      "description": "Adds the BLE Positioning config panel to the HA sidebar.",
+      "fields": {
+        "title": {
+          "name": "Title",
+          "description": "Sidebar entry title",
+          "example": "BLE Positioning"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "MDI icon name",
+          "example": "mdi:map-marker-radius"
+        },
+        "url_path": {
+          "name": "URL path",
+          "description": "URL path for the panel (no slashes)",
+          "example": "ble-positioning-config"
+        }
+      }
+    },
+    "remove_from_sidebar": {
+      "name": "Remove from Sidebar",
+      "description": "Removes the BLE Positioning panel from the HA sidebar.",
+      "fields": {}
+    }
+  }
+}

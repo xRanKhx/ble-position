@@ -1,0 +1,174 @@
+# BLE Positioning – Vollständige Service-Dokumentation
+# Alle Services können in HA-Automationen, Skripten und der UI verwendet werden.
+
+# ── Fingerprint-Management ─────────────────────────────────────────────────────
+capture_fingerprint:
+  name: Fingerprint aufnehmen
+  description: Nimmt einen BLE-Fingerprint an der angegebenen Position auf.
+  fields:
+    device_id:
+      name: Geräte-ID
+      description: ID des BLE-Geräts (z.B. iphone_16)
+      required: true
+      example: "iphone_16"
+      selector:
+        text:
+    mx:
+      name: X-Position (Meter)
+      description: X-Koordinate auf dem Grundriss in Metern
+      required: true
+      example: 5.0
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+    my:
+      name: Y-Position (Meter)
+      required: true
+      example: 3.0
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+
+clear_fingerprints:
+  name: Fingerprints löschen
+  description: Löscht BLE-Fingerprints für ein Gerät.
+  fields:
+    device_id:
+      name: Geräte-ID
+      required: true
+      example: "iphone_16"
+      selector:
+        text:
+    older_than_days:
+      name: Älter als (Tage)
+      description: Nur Fingerprints löschen die älter als N Tage sind (0 = alle)
+      required: false
+      example: 30
+      selector:
+        number:
+          min: 0
+          max: 365
+          step: 1
+
+# ── PTZ Kamera-Steuerung ───────────────────────────────────────────────────────
+ptz_track:
+  name: PTZ Tracking steuern
+  description: >
+    Setzt den Tracking-Modus einer PTZ-Kamera oder richtet sie auf eine
+    bestimmte Grundriss-Position aus. Ideal für Automationen wie
+    "Wenn Tür aufgeht → Kamera auf Eingang".
+  fields:
+    entry_id:
+      name: Entry ID
+      description: ID des BLE-Positioning-Eintrags (leer = erster Eintrag)
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+    camera_id:
+      name: Kamera-ID
+      description: ID der PTZ-Kamera (leer = alle Kameras)
+      required: false
+      example: "ptz_1234567890"
+      selector:
+        text:
+    mode:
+      name: Tracking-Modus
+      description: Neuer Tracking-Modus für die Kamera
+      required: false
+      selector:
+        select:
+          options:
+            - label: "📌 Fixziel"
+              value: fixed
+            - label: "⭐ Priorität"
+              value: priority
+            - label: "🔄 Tour"
+              value: tour
+            - label: "⊕ Mittelpunkt"
+              value: centroid
+    floor_x:
+      name: Ziel X (Meter)
+      description: Direkt auf diese X-Koordinate richten (setzt Modus auf 'fixed')
+      required: false
+      example: 4.5
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+    floor_y:
+      name: Ziel Y (Meter)
+      description: Direkt auf diese Y-Koordinate richten (setzt Modus auf 'fixed')
+      required: false
+      example: 3.2
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 0.1
+
+# ── Sturz-Alarm ────────────────────────────────────────────────────────────────
+fall_alarm_reset:
+  name: Sturz-Alarm quittieren
+  description: >
+    Quittiert einen aktiven Sturz-Alarm für einen bestimmten mmWave-Target.
+    Nützlich für Automationen wie "Wenn Alarm-Button gedrückt → Alarm quittieren".
+  fields:
+    entry_id:
+      name: Entry ID
+      description: ID des BLE-Positioning-Eintrags (leer = erster Eintrag)
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+    sensor_id:
+      name: Sensor-ID
+      description: ID des mmWave-Sensors (leer = alle)
+      required: false
+      example: "sensor_wohnzimmer"
+      selector:
+        text:
+    target_id:
+      name: Target-Nummer
+      description: Target-Nummer (1, 2 oder 3)
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1
+
+# ── KI-Profil ─────────────────────────────────────────────────────────────────
+mmwave_profile_reset:
+  name: KI-Klassifikations-Profil löschen
+  description: >
+    Löscht das eingelerntes KI-Profil für einen mmWave-Target.
+    Der Target muss danach neu eingelernt werden.
+  fields:
+    entry_id:
+      name: Entry ID
+      required: false
+      example: "abc123def456"
+      selector:
+        text:
+    sensor_id:
+      name: Sensor-ID
+      required: false
+      example: "sensor_wohnzimmer"
+      selector:
+        text:
+    target_id:
+      name: Target-Nummer
+      required: false
+      example: 1
+      selector:
+        number:
+          min: 0
+          max: 3
+          step: 1

@@ -1,0 +1,121 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Gebäude / Stockwerk einrichten",
+        "description": "Grundriss-Abmessungen und optionales Bild.\nScanner, Räume und Geräte werden danach vollständig über die Lovelace Card konfiguriert.",
+        "data": {
+          "floor_name": "Name (z.B. Erdgeschoss)",
+          "floor_width": "Grundriss Breite (m)",
+          "floor_height": "Grundriss Höhe (m)",
+          "image_path": "Grundriss-Bild (Pfad unter /local/, optional)"
+        }
+      },
+      "init_options": {
+        "title": "Algorithmus-Einstellungen (kann später angepasst werden)",
+        "data": {
+          "grid_step": "Rasterweite (m) – empfohlen: 0.5",
+          "knn_k": "KNN Nachbarn – empfohlen: 3",
+          "ema_alpha": "EMA Glättung – 0.05 (träge) … 0.3 (direkt)"
+        }
+      }
+    },
+    "error": {
+      "invalid_floor_size": "Breite und Höhe müssen > 0 sein",
+      "invalid_entity_id": "Entity-ID muss mit 'sensor.' beginnen",
+      "required": "Dieses Feld ist erforderlich"
+    },
+    "abort": {
+      "already_configured": "Dieses Gebäude ist bereits eingerichtet"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Allgemeine Optionen",
+        "data": {
+          "grid_step": "Rasterweite (m)",
+          "knn_k": "KNN Nachbarn",
+          "ema_alpha": "EMA Glättung",
+          "sidebar_enabled": "In Seitenleiste anzeigen"
+        }
+      },
+      "auto_cal": {
+        "title": "Auto-Kalibrierung",
+        "data": {
+          "auto_cal_enabled": "Auto-Kalibrierung aktivieren",
+          "auto_cal_still_sec": "Stillstand nach (Sekunden)",
+          "auto_cal_max_move_m": "Max. Bewegung für Stillstand (m)",
+          "auto_cal_when": "Wann kalibrieren",
+          "auto_cal_from": "Zeitfenster von (HH:MM)",
+          "auto_cal_to": "Zeitfenster bis (HH:MM)",
+          "auto_cal_max_age_days": "Fingerprint veraltet nach (Tage)",
+          "auto_cal_notify": "Benachrichtigung",
+          "auto_cal_manual_age_days": "Manuelle Fingerprints veralten nach (Tage)",
+          "away_timeout_sec": "Gerät ausblenden nach (Sekunden ohne Signal)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "room": {
+        "name": "Raum"
+      },
+      "pos_x": {
+        "name": "Position X"
+      },
+      "pos_y": {
+        "name": "Position Y"
+      },
+      "confidence": {
+        "name": "Konfidenz"
+      },
+      "fp_count": {
+        "name": "Fingerprint Anzahl"
+      },
+      "auto_cal_today": {
+        "name": "Auto-Kalibrierungen heute"
+      },
+      "still_seconds": {
+        "name": "Stillstand Sekunden"
+      }
+    },
+    "number": {
+      "manual_fp_age_days": {
+        "name": "Manuelle FP Maximalalter"
+      },
+      "auto_fp_max_age": {
+        "name": "Auto-FP Maximalalter"
+      }
+    }
+  },
+  "services": {
+    "add_to_sidebar": {
+      "name": "Zur Seitenleiste hinzufügen",
+      "description": "Fügt das BLE-Positioning-Konfigurations-Panel zur HA-Seitenleiste hinzu.",
+      "fields": {
+        "title": {
+          "name": "Titel",
+          "description": "Bezeichnung in der Seitenleiste",
+          "example": "BLE Positioning"
+        },
+        "icon": {
+          "name": "Icon",
+          "description": "MDI-Icon-Name",
+          "example": "mdi:map-marker-radius"
+        },
+        "url_path": {
+          "name": "URL-Pfad",
+          "description": "URL-Pfad des Panels (ohne Schrägstriche)",
+          "example": "ble-positioning-config"
+        }
+      }
+    },
+    "remove_from_sidebar": {
+      "name": "Aus Seitenleiste entfernen",
+      "description": "Entfernt das BLE-Positioning-Panel aus der HA-Seitenleiste.",
+      "fields": {}
+    }
+  }
+}
