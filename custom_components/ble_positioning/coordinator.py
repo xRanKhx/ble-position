@@ -763,7 +763,11 @@ class DeviceTracker:
         self._check_presence()
         self._update_nearest_hysteresis()
         self._compute_position()
-        self.hass.async_create_task(self._maybe_auto_calibrate())
+        # FIX: Auto-cal max 1x/10s auslösen statt bei jedem Update
+        now_t = time.monotonic()
+        if now_t - getattr(self, "_last_cal_trigger", 0) >= 10.0:
+            self._last_cal_trigger = now_t
+            self.hass.async_create_task(self._maybe_auto_calibrate())
         self._fire_signal()
 
     def _check_presence(self) -> None:
@@ -784,6 +788,12 @@ class DeviceTracker:
                 _LOGGER.debug("%s: device away", self.device_name)
 
     def _fire_signal(self) -> None:
+        # FIX: Signal max 1x/500ms senden (Throttle gegen Frontend-Overload)
+        import time as _time
+        now_f = _time.monotonic()
+        if now_f - getattr(self, "_last_signal", 0) < 0.5:
+            return
+        self._last_signal = now_f
         async_dispatcher_send(
             self.hass,
             SIGNAL_FP_UPDATED.format(
@@ -796,6 +806,11 @@ class DeviceTracker:
 
     def _update_nearest_hysteresis(self) -> None:
         nearest_eid = self.device_cfg.get(CONF_DEVICE_NEAREST_ENT, "")
+        if not nearest_eid:
+            # Kein Nearest-Entity konfiguriert → trotzdem "confirmed" setzen
+            # damit Auto-Cal nicht dauerhaft blockiert wird
+            self._nearest_confirmed = "no_nearest_configured"
+            return
         raw = str(self._vals.get(nearest_eid, ""))
         now = time.monotonic()
         if raw != self._nearest_raw:
@@ -958,6 +973,7 @@ class DeviceTracker:
             "still_seconds": round(now_m - self._still_since, 1)
                              if self._still_since else 0.0,
             "ac_today":      self._ac_count_today,
+            "ac_last":       getattr(self, "_last_auto_cal_ts", None),
             "ac_last":       self._ac_last_date or None,
             "rssi":          self._vals.get(rssi_eid),
             "present":       self._is_present,
@@ -995,7 +1011,7 @@ class DeviceTracker:
         # RMS distance from centre
         rms = math.sqrt(sum(math.dist(p, (cx, cy))**2 for p in trimmed) / len(trimmed))
 
-        is_still = rms < 0.6   # 0.6m RMS = genuinely still
+        is_still = rms < 0.8   # 0.8m RMS – BLE-Jitter berücksichtigt (war 0.6m)
 
         # ── Update _still_since HERE so state["still_seconds"] is always fresh ──
         if not is_still:
@@ -1067,8 +1083,11 @@ class DeviceTracker:
         if self._still_since is None:
             return   # not still
 
-        # Nearest scanner must be confirmed
-        if self._nearest_confirmed == "":
+        # Nearest scanner: nur prüfen wenn auch konfiguriert.
+        # Wenn kein nearest_entity gesetzt, überspringen wir den Guard –
+        # Auto-Cal soll auch ohne Nearest-Entity funktionieren.
+        nearest_eid = self.device_cfg.get("nearest_entity", "") or self.device_cfg.get("nearest_ent", "")
+        if nearest_eid and self._nearest_confirmed == "":
             return
 
         when = opts.get(OPT_AUTO_CAL_WHEN, WHEN_MISSING)
@@ -1180,6 +1199,7 @@ class DeviceTracker:
             self._ac_last_date   = today
         self._ac_count_today += 1
         self._last_auto_cal = now
+        self._last_auto_cal_ts = time.time()
 
         _LOGGER.info(
             "Auto-calibrated %s @ (%.2f, %.2f)",
