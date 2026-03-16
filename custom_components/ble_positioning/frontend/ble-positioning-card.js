@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "2.11.62";
+const CARD_VERSION = "2.11.66";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -274,6 +274,12 @@ canvas { display: block; cursor: crosshair; touch-action: none; user-select: non
 .compass-deg { position: absolute; top: 27px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: 700; color: #00e5ff; font-family: 'JetBrains Mono', monospace; pointer-events: none; text-align: center; line-height: 1.2; white-space: nowrap; }
 .compass-reset { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #445566; cursor: pointer; background: none; border: none; padding: 1px 4px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
 .compass-reset:hover { color: #00e5ff; }
+/* ── Elevations-Rad ── */
+.elevation-wrap { position: absolute; bottom: 14px; right: 90px; width: 28px; height: 90px; z-index: 10; user-select: none; -webkit-user-select: none; touch-action: none; }
+.elevation-svg { width: 28px; height: 72px; cursor: ns-resize; display: block; }
+.elevation-deg { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); font-size: 7px; font-weight: 700; color: #00e5ff; font-family: 'JetBrains Mono',monospace; white-space: nowrap; pointer-events: none; text-align: center; }
+.elevation-reset { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #445566; background: none; border: none; cursor: pointer; font-family: inherit; padding: 0; }
+.elevation-reset:hover { color: #00e5ff; }
 
 /* ── Tooltip ── */
 .tooltip {
@@ -738,6 +744,10 @@ class BLEPositioningCard extends HTMLElement {
           this._mapRotation    = res.options.mapRotationDeg * Math.PI / 180;
           if (this._compassUpdate) this._compassUpdate();
         }
+        if (res.options.elevation3d != null) {
+          this._3dElevation = Math.max(5, Math.min(85, res.options.elevation3d));
+          if (this._elevationUpdate) this._elevationUpdate();
+        }
         // 3D-Zoom sanity check (max 3x)
         if (res.options.zoom3d != null) {
           this._3dZoom = Math.min(3.0, Math.max(0.3, res.options.zoom3d));
@@ -861,6 +871,18 @@ class BLEPositioningCard extends HTMLElement {
         </svg>
         <div class="compass-deg" id="compass-deg">0°</div>
         <button class="compass-reset" id="compass-reset" title="Zurücksetzen">↺ Reset</button>
+      </div>
+      <div class="elevation-wrap" id="elevation-wrap" style="display:none">
+        <svg class="elevation-svg" id="elevation-svg" viewBox="0 0 28 72">
+          <rect x="11" y="6" width="6" height="60" rx="3" fill="rgba(7,9,13,0.85)" stroke="#1c2535" stroke-width="1.5"/>
+          <rect id="elevation-fill" x="11" y="36" width="6" height="30" rx="3" fill="#00e5ff22"/>
+          <circle id="elevation-thumb" cx="14" cy="36" r="7" fill="rgba(7,9,13,0.9)" stroke="#00e5ff" stroke-width="1.5"/>
+          <line id="elevation-line" x1="10" y1="36" x2="18" y2="36" stroke="#00e5ff" stroke-width="1.5" stroke-linecap="round"/>
+          <text x="14" y="5" text-anchor="middle" font-size="7" fill="#334455" font-family="monospace">▲</text>
+          <text x="14" y="71" text-anchor="middle" font-size="7" fill="#334455" font-family="monospace">▼</text>
+        </svg>
+        <div class="elevation-deg" id="elevation-deg">42°</div>
+        <button class="elevation-reset" id="elevation-reset" title="Elevation zurücksetzen">↺</button>
       </div>
     </div>
   </div>
@@ -14913,7 +14935,7 @@ _drawDoors() {
       case "tv": {
         // Fernseher mit animiertem Bildschirm wenn aktiv
         const tvOn = !!ctx._entityOn;
-        const t_tv = (Date.now()/1000)%1;
+        const t_tv = (Math.floor(Date.now()/66)*66/1000)%1;
         // Gehäuse
         ctx.fillStyle="#1c2535"; ctx.strokeStyle="#334155"; ctx.lineWidth=1.2;
         ctx.fillRect(-hs,-hs*0.75,s,s*1.0); ctx.strokeRect(-hs,-hs*0.75,s,s*1.0);
@@ -14949,7 +14971,7 @@ _drawDoors() {
       case "speaker": {
         // Lautsprecher mit Schallwellen-Animation wenn aktiv
         const spkOn = !!ctx._entityOn;
-        const t_sp = (Date.now()/800)%1;
+        const t_sp = (Math.floor(Date.now()/66)*66/800)%1;
         // Gehäuse
         ctx.fillStyle="#1e293b"; ctx.strokeStyle="#334155"; ctx.lineWidth=1;
         ctx.beginPath(); ctx.roundRect(-hs,-hs,s,s,4); ctx.fill(); ctx.stroke();
@@ -16085,6 +16107,130 @@ _drawDoors() {
         });
         break;
       }
+
+      case "tv": {
+        const isOn3 = !!(deco?.entity && this._hass?.states &&
+          ["on","playing"].includes((this._hass.states[deco.entity]?.state||"").toLowerCase()));
+        const t15 = (Math.floor(Date.now()/66)*66/1000)%1;
+        const tvW = size*0.9, tvH = size*0.52, tvD = size*0.04;
+        const tzBase = size*0.35, tzTop = tzBase + tvH;
+        ctx.save();
+        // Gehäuse-Seiten (Isometrie)
+        const corners = {
+          ftl:p(-tvW/2,0,tzTop), ftr:p(tvW/2,0,tzTop),
+          fbl:p(-tvW/2,0,tzBase), fbr:p(tvW/2,0,tzBase),
+          btl:p(-tvW/2,tvD,tzTop), btr:p(tvW/2,tvD,tzTop),
+          bbl:p(-tvW/2,tvD,tzBase), bbr:p(tvW/2,tvD,tzBase),
+        };
+        // Seite + Decke
+        ctx.fillStyle="#141c28";
+        [[corners.ftl,corners.fbl,corners.bbl,corners.btl],
+         [corners.ftl,corners.ftr,corners.btr,corners.btl]].forEach(face=>{
+          ctx.beginPath(); face.forEach((pt,i)=>i?ctx.lineTo(pt.x,pt.y):ctx.moveTo(pt.x,pt.y));
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle="#2a3a50"; ctx.lineWidth=0.6; ctx.stroke();
+        });
+        // Bildschirm-Vorderseite
+        ctx.fillStyle = isOn3 ? "#0a1628" : "#060c16";
+        ctx.beginPath();
+        ctx.moveTo(corners.ftl.x,corners.ftl.y); ctx.lineTo(corners.ftr.x,corners.ftr.y);
+        ctx.lineTo(corners.fbr.x,corners.fbr.y); ctx.lineTo(corners.fbl.x,corners.fbl.y);
+        ctx.closePath(); ctx.fill();
+        if(isOn3){
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(corners.ftl.x,corners.ftl.y); ctx.lineTo(corners.ftr.x,corners.ftr.y);
+          ctx.lineTo(corners.fbr.x,corners.fbr.y); ctx.lineTo(corners.fbl.x,corners.fbl.y);
+          ctx.closePath(); ctx.clip();
+          // Blauer Hintergrundschein
+          const cx3=(corners.ftl.x+corners.ftr.x+corners.fbl.x+corners.fbr.x)/4;
+          const cy3=(corners.ftl.y+corners.ftr.y+corners.fbl.y+corners.fbr.y)/4;
+          const rd=Math.abs(corners.ftr.x-corners.ftl.x)*0.6;
+          const g=ctx.createRadialGradient(cx3,cy3,0,cx3,cy3,rd);
+          g.addColorStop(0,`rgba(40,100,240,${0.3+Math.sin(t15*Math.PI*2)*0.1})`);
+          g.addColorStop(1,"rgba(5,15,40,0.05)");
+          ctx.fillStyle=g; ctx.fill();
+          // Scan-Linie
+          const sf=t15, sy=corners.ftl.y+(corners.fbl.y-corners.ftl.y)*sf;
+          const slx=corners.ftl.x+(corners.fbl.x-corners.ftl.x)*sf;
+          const srx=corners.ftr.x+(corners.fbr.x-corners.ftr.x)*sf;
+          ctx.strokeStyle=`rgba(80,160,255,${0.5*(1-sf)})`; ctx.lineWidth=1.5;
+          ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(slx,sy); ctx.lineTo(srx,sy); ctx.stroke();
+          ctx.restore();
+          // Grüne Power-LED
+          ctx.fillStyle="#22c55e"; ctx.beginPath();
+          ctx.arc(corners.fbr.x-(corners.ftr.x-corners.ftl.x)*0.06,
+                  corners.fbr.y+(corners.fbl.y-corners.ftl.y)*0.1,2,0,Math.PI*2); ctx.fill();
+        } else {
+          ctx.strokeStyle="#1e2d40"; ctx.lineWidth=0.8;
+          ctx.beginPath();
+          ctx.moveTo(corners.ftl.x,corners.ftl.y); ctx.lineTo(corners.ftr.x,corners.ftr.y);
+          ctx.lineTo(corners.fbr.x,corners.fbr.y); ctx.lineTo(corners.fbl.x,corners.fbl.y);
+          ctx.closePath(); ctx.stroke();
+          ctx.fillStyle="#ef444455"; ctx.beginPath();
+          ctx.arc(corners.fbr.x-(corners.ftr.x-corners.ftl.x)*0.06,
+                  corners.fbr.y+(corners.fbl.y-corners.ftl.y)*0.1,1.5,0,Math.PI*2); ctx.fill();
+        }
+        // Standfuß
+        ctx.strokeStyle="#1e2d40"; ctx.lineWidth=0.8;
+        const fb=p(0,tvD*0.3,tzBase), fl=p(-tvW*0.12,tvD*0.3,tzBase-size*0.06), fr=p(tvW*0.12,tvD*0.3,tzBase-size*0.06);
+        ctx.beginPath(); ctx.moveTo(p(0,0,tzBase).x,p(0,0,tzBase).y); ctx.lineTo(fb.x,fb.y); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(fl.x,fl.y); ctx.lineTo(fr.x,fr.y); ctx.stroke();
+        ctx.restore();
+        break;
+      }
+
+      // ── Speaker: Lautsprecherbox mit Schallwellen ─────────────────────
+      case "speaker": {
+        const spkOn3 = !!(deco?.entity && this._hass?.states &&
+          ["on","playing"].includes((this._hass.states[deco.entity]?.state||"").toLowerCase()));
+        const t15s = (Math.floor(Date.now()/66)*66/800)%1;
+        const bxW=size*0.42, bxH=size*0.7, bxD=bxW*0.85;
+        ctx.save();
+        // Box-Seiten
+        const sf=[p(-bxW/2,0,0),p(bxW/2,0,0),p(bxW/2,0,bxH),p(-bxW/2,0,bxH)];
+        const sb=[p(-bxW/2,bxD,0),p(bxW/2,bxD,0),p(bxW/2,bxD,bxH),p(-bxW/2,bxD,bxH)];
+        ctx.fillStyle="#171f2e";
+        [[sf[0],sf[1],sb[1],sb[0]],[sf[2],sf[3],sb[3],sb[2]],
+         [sb[0],sb[1],sb[2],sb[3]]].forEach(face=>{
+          ctx.beginPath(); face.forEach((pt,i)=>i?ctx.lineTo(pt.x,pt.y):ctx.moveTo(pt.x,pt.y));
+          ctx.closePath(); ctx.fill();
+          ctx.strokeStyle="#2a3a50"; ctx.lineWidth=0.6; ctx.stroke();
+        });
+        ctx.fillStyle="#0d1420";
+        ctx.beginPath(); sf.forEach((pt,i)=>i?ctx.lineTo(pt.x,pt.y):ctx.moveTo(pt.x,pt.y));
+        ctx.closePath(); ctx.fill();
+        // Membran
+        const mc3=p(0,0,bxH*0.45);
+        const mr=unitPx*bxW*0.33;
+        ctx.fillStyle="#080d16"; ctx.strokeStyle="#3a4f68"; ctx.lineWidth=0.9;
+        ctx.beginPath(); ctx.arc(mc3.x,mc3.y,mr,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle="#171f2e"; ctx.beginPath(); ctx.arc(mc3.x,mc3.y,mr*0.3,0,Math.PI*2); ctx.fill();
+        // Tweeter
+        const tc3=p(0,0,bxH*0.83);
+        ctx.fillStyle="#2a3a50"; ctx.beginPath(); ctx.arc(tc3.x,tc3.y,mr*0.22,0,Math.PI*2); ctx.fill();
+        if(spkOn3){
+          [1,2,3].forEach(i=>{
+            const ph=(t15s+i*0.28)%1;
+            ctx.strokeStyle=`rgba(56,189,248,${(1-ph)*0.5})`;
+            ctx.lineWidth=1.2;
+            ctx.beginPath(); ctx.arc(mc3.x,mc3.y,mr*(1+i*0.45+ph*0.5),0,Math.PI*2); ctx.stroke();
+          });
+          ctx.strokeStyle=`rgba(56,189,248,${0.35+Math.sin(t15s*Math.PI*6)*0.15})`;
+          ctx.lineWidth=1.5;
+          ctx.beginPath(); ctx.arc(mc3.x,mc3.y,mr,0,Math.PI*2); ctx.stroke();
+          // LED cyan
+          const ld3=p(bxW*0.32,0,bxH*0.92);
+          ctx.fillStyle=`rgba(0,229,255,${0.6+Math.sin(t15s*Math.PI*4)*0.3})`;
+          ctx.beginPath(); ctx.arc(ld3.x,ld3.y,2,0,Math.PI*2); ctx.fill();
+        } else {
+          const ld3=p(bxW*0.32,0,bxH*0.92);
+          ctx.fillStyle="#2a3a50"; ctx.beginPath(); ctx.arc(ld3.x,ld3.y,2,0,Math.PI*2); ctx.fill();
+        }
+        ctx.restore();
+        break;
+      }
+
     }
 
     // Label in 3D
@@ -16159,8 +16305,11 @@ _drawDoors() {
         });
         ctx.restore();
       }
+
     }
   }
+
+
 
 
   // ── Energy canvas overlay ─────────────────────────────────────────────────
@@ -16628,6 +16777,7 @@ _drawDoors() {
         { id:"comic",     label:"Comic",           icon:"(!)", desc:"Cel-Shading + Outlines" },
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
+        { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
       themeGrid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:3px";
@@ -18572,15 +18722,103 @@ _drawDoors() {
     this._updateCompassVisibility = ()=>{
       const is3D = this._mode==="view" && this._opts?.show3D;
       wrap.style.display = is3D ? "none" : "block";
+      const elevWrap = this.shadowRoot?.getElementById("elevation-wrap");
+      if (elevWrap) elevWrap.style.display = is3D ? "flex" : "none";
     };
     this._updateCompassVisibility();
+
+    // ── Elevations-Rad ────────────────────────────────────────────────────
+    this._initElevation();
+  }
+
+  _initElevation() {
+    const wrap  = this.shadowRoot?.getElementById("elevation-wrap");
+    const svg   = this.shadowRoot?.getElementById("elevation-svg");
+    const degEl = this.shadowRoot?.getElementById("elevation-deg");
+    const thumb = svg?.getElementById ? svg.getElementById("elevation-thumb") :
+                  svg?.querySelector("#elevation-thumb");
+    const fill  = svg?.querySelector ? svg.querySelector("#elevation-fill") : null;
+    const line  = svg?.querySelector ? svg.querySelector("#elevation-line")  : null;
+    const resetBtn = this.shadowRoot?.getElementById("elevation-reset");
+    if (!wrap || !svg || !thumb) return;
+
+    const MIN_EL = 5, MAX_EL = 85;
+    const TRACK_TOP = 13, TRACK_H = 46; // px im SVG-Koordinaten
+
+    const elToPx = (deg) => TRACK_TOP + TRACK_H * (1 - (deg - MIN_EL) / (MAX_EL - MIN_EL));
+
+    const updateElevation = () => {
+      const el = Math.max(MIN_EL, Math.min(MAX_EL, this._3dElevation ?? 42));
+      const py = elToPx(el);
+      if (thumb) { thumb.setAttribute("cy", py); }
+      if (line)  { line.setAttribute("y1", py); line.setAttribute("y2", py); }
+      if (fill) {
+        const fillH = TRACK_TOP + TRACK_H - py;
+        fill.setAttribute("y", py); fill.setAttribute("height", Math.max(0, fillH));
+      }
+      if (degEl) degEl.textContent = Math.round(el) + "°";
+    };
+    updateElevation();
+    this._elevationUpdate = updateElevation;
+
+    // Drag
+    let dragging = false, startY = 0, startEl = 0;
+    const svgRect = () => svg.getBoundingClientRect();
+
+    const pxToEl = (clientY) => {
+      const r = svgRect();
+      const scaleY = 72 / r.height; // SVG viewBox 0–72
+      const svgY   = (clientY - r.top) * scaleY;
+      const t = Math.max(0, Math.min(1, (svgY - TRACK_TOP) / TRACK_H));
+      return MAX_EL - t * (MAX_EL - MIN_EL);
+    };
+
+    const onDown = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dragging = true;
+      startY  = e.clientY ?? e.touches?.[0]?.clientY ?? 0;
+      startEl = this._3dElevation ?? 42;
+      svg.style.cursor = "grabbing";
+    };
+    const onMove = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const clientY = e.clientY ?? e.touches?.[0]?.clientY ?? startY;
+      this._3dElevation = Math.max(MIN_EL, Math.min(MAX_EL, pxToEl(clientY)));
+      updateElevation();
+      this._draw();
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      svg.style.cursor = "ns-resize";
+      if (!this._opts) this._opts = {};
+      this._opts.elevation3d = this._3dElevation;
+      this._saveOptions();
+    };
+
+    svg.addEventListener("mousedown", onDown, {passive:false});
+    svg.addEventListener("touchstart", onDown, {passive:false});
+    window.addEventListener("mousemove", onMove, {passive:false});
+    window.addEventListener("touchmove", onMove, {passive:false});
+    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("touchend",  onUp);
+
+    // Reset
+    const doReset = () => {
+      this._3dElevation = 42;
+      if (this._opts) this._opts.elevation3d = 42;
+      updateElevation(); this._draw(); this._saveOptions();
+    };
+    resetBtn?.addEventListener("click", doReset);
+    svg.addEventListener("dblclick", doReset);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
   // 3D THEMES – jedes Theme definiert alle visuellen Parameter
   // ══════════════════════════════════════════════════════════════════════════
-  _get3DTheme() {
-    const id = this._3dTheme || "default";
+  _get3DTheme(forceId) {
+    const id = forceId || this._3dTheme || "default";
     const THEMES = {
 
       // ── Standard (aktuell) ──────────────────────────────────────────────
@@ -18799,9 +19037,29 @@ _drawDoors() {
         wallShading: "realistic",
         realisticMode: true,
       },
+      "floorplan": {
+        id: "floorplan", label: "Draufsicht", icon: "🗺",
+        bg: "#f8f6f0",
+        grid: { color: "rgba(100,130,180,0.15)", width: 0.4, step: 1 },
+        floor: (rr,gg,bb,wa) => `rgba(${rr},${gg},${bb},0.06)`,
+        wall:  () => "rgba(0,0,0,0)",
+        wallTop: () => "rgba(0,0,0,0)",
+        ceiling: () => "rgba(0,0,0,0)",
+        edge:    () => "rgba(80,100,160,0.3)",
+        topEdge: () => "rgba(80,100,160,0.5)",
+        label:  (rr,gg,bb) => "rgba(40,60,100,0.85)",
+        door:   { frame:"#6688aa", panel:"#7799bb", open:"#22aa66", closed:"#6688aa" },
+        window: { frame:"rgba(100,140,200,0.8)", glass:"rgba(180,210,240,0.2)", open:"#cc4444", closed:"rgba(100,140,200,0.8)" },
+        shutter:{ fill:"rgba(100,120,160,0.6)", slat:"rgba(130,150,190,0.3)", box:"rgba(80,100,140,0.7)" },
+        person: { auraColor:"0,180,255", bodyColor:"rgba(0,60,120,0.85)", headColor:"#88ccff", labelBg:"rgba(0,40,100,0.75)" },
+        ble:    { color:"#0066ff", glow:"rgba(0,102,255,0.3)" },
+        aoCorners: false,
+        wallShading: "none",
+        floorplanMode: true,
+      },
 
     };
-    return THEMES[id] || THEMES.default;
+    return THEMES[id] || THEMES["default"];
   }
 
 
@@ -18868,6 +19126,33 @@ _drawDoors() {
     // ── Background ───────────────────────────────────────────────────────────
     ctx.fillStyle = TH.bg;
     ctx.fillRect(0, 0, cw, ch);
+
+    // ── Draufsicht-Theme: Grundriss-Bild als isometrischer Boden ────────────
+    if (TH.floorplanMode && this._bgLoaded && this._bgImg?.complete) {
+      // Bild auf die 4 Boden-Ecken projizieren (perspektivisch korrekt)
+      const corners = [
+        project(0,  0,  0),
+        project(fw, 0,  0),
+        project(fw, fh, 0),
+        project(0,  fh, 0),
+      ];
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x, corners[0].y);
+      corners.forEach(c => ctx.lineTo(c.x, c.y));
+      ctx.closePath();
+      ctx.clip();
+      // Perspektivische Textur-Abbildung via Canvas-Transform
+      // Nutze das Bild als Boden-Textur (vereinfacht: Bounding-Box)
+      const minX = Math.min(...corners.map(c=>c.x));
+      const minY = Math.min(...corners.map(c=>c.y));
+      const maxX = Math.max(...corners.map(c=>c.x));
+      const maxY = Math.max(...corners.map(c=>c.y));
+      ctx.globalAlpha = 0.85;
+      ctx.drawImage(this._bgImg, minX, minY, maxX-minX, maxY-minY);
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
     // Papier-Textur (Aquarell-Theme)
     if (TH.paperTexture) {
       ctx.save();
