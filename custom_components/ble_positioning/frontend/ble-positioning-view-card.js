@@ -1,59 +1,20 @@
-// BLE Positioning View Card v2.10.81
-// Lovelace dashboard card that embeds the BLE Positioning panel
+// BLE Positioning View Card – DEPRECATED
+// This file is intentionally empty. The view-card has been merged into
+// ble-positioning-card.js (use type: custom:ble-positioning-card instead).
+// Remove any dashboard cards of type ble-positioning-view-card.
 (function() {
-  if (customElements.get('ble-positioning-view-card')) return;
-
-  class BLEPositioningViewCard extends HTMLElement {
-    constructor() {
-      super();
-      this.attachShadow({ mode: 'open' });
-      this._card = null;
-    }
-
-    set hass(hass) {
-      this._hass = hass;
-      if (!this._card) this._build();
-      if (this._card) this._card.hass = hass;
-    }
-
-    setConfig(config) {
-      this._config = config;
-    }
-
-    _build() {
-      // Wait for ble-positioning-card to be defined
-      if (!customElements.get('ble-positioning-card')) {
-        customElements.whenDefined('ble-positioning-card').then(() => this._build());
-        return;
-      }
-      const card = document.createElement('ble-positioning-card');
-      if (this._config) card.setConfig(this._config);
-      if (this._hass)   card.hass = this._hass;
-      this.shadowRoot.innerHTML = '';
-      this.shadowRoot.appendChild(card);
-      this._card = card;
-    }
-
-    getCardSize() { return 8; }
-
-    static getConfigElement() {
-      return document.createElement('ble-positioning-card-editor');
-    }
-
-    static getStubConfig() {
-      return { type: 'custom:ble-positioning-view-card' };
-    }
+  // Remove from customCards registry if somehow loaded
+  if (window.customCards) {
+    const idx = window.customCards.findIndex(c => c.type === 'ble-positioning-view-card');
+    if (idx >= 0) window.customCards.splice(idx, 1);
   }
-
-  customElements.define('ble-positioning-view-card', BLEPositioningViewCard);
-
-  window.customCards = window.customCards || [];
-  if (!window.customCards.find(c => c.type === 'ble-positioning-view-card')) {
-    window.customCards.push({
-      type: 'ble-positioning-view-card',
-      name: 'BLE Positioning',
-      description: 'BLE Indoor Positioning dashboard card',
-      preview: false,
-    });
+  // Register as stub to prevent errors if already in use
+  if (!customElements.get('ble-positioning-view-card')) {
+    class BLEPositioningViewCardStub extends HTMLElement {
+      set hass(h) { if (!this._warned) { console.warn('BLE Positioning: ble-positioning-view-card is deprecated. Use ble-positioning-card instead.'); this._warned=true; } }
+      setConfig(c) { this._config=c; }
+      getCardSize() { return 1; }
+    }
+    customElements.define('ble-positioning-view-card', BLEPositioningViewCardStub);
   }
 })();

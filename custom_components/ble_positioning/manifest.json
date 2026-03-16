@@ -1,7 +1,7 @@
 {
   "domain": "ble_positioning",
   "name": "BLE Indoor Positioning",
-  "version": "2.11.43",
+  "version": "2.11.62",
   "documentation": "https://github.com/yourusername/ha-ble-positioning",
   "issue_tracker": "https://github.com/yourusername/ha-ble-positioning/issues",
   "requirements": [],

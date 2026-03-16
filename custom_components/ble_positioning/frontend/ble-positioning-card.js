@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "2.11.43";
+const CARD_VERSION = "2.11.62";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -43,8 +43,9 @@ const CARD_CSS = `
   display: flex;
   flex-direction: column;
   height: 100%;
-  min-height: 500px;
+  min-height: 420px;
   border: 1px solid var(--border);
+  box-sizing: border-box;
 }
 
 /* ── Header ── */
@@ -261,10 +262,18 @@ const CARD_CSS = `
 /* ── Canvas wrap ── */
 .canvas-wrap {
   flex: 1; position: relative; overflow: hidden;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; flex-direction: column;
   background: var(--bg); min-height: 0; min-width: 0;
 }
-canvas { display: block; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; }
+canvas { display: block; cursor: crosshair; touch-action: none; user-select: none; -webkit-user-select: none; flex: 1; min-width: 0; min-height: 0; }
+
+/* ── Kompass-Rad ── */
+.compass-wrap { position: absolute; bottom: 14px; right: 14px; width: 72px; height: 90px; z-index: 10; user-select: none; -webkit-user-select: none; touch-action: none; }
+.compass-svg { width: 72px; height: 72px; cursor: grab; display: block; }
+.compass-svg:active { cursor: grabbing; }
+.compass-deg { position: absolute; top: 27px; left: 50%; transform: translateX(-50%); font-size: 8px; font-weight: 700; color: #00e5ff; font-family: 'JetBrains Mono', monospace; pointer-events: none; text-align: center; line-height: 1.2; white-space: nowrap; }
+.compass-reset { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); font-size: 8px; color: #445566; cursor: pointer; background: none; border: none; padding: 1px 4px; font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+.compass-reset:hover { color: #00e5ff; }
 
 /* ── Tooltip ── */
 .tooltip {
@@ -318,8 +327,10 @@ canvas { display: block; cursor: crosshair; touch-action: none; user-select: non
 }
 :host(.dashboard-mode) .card-header { display: none !important; }
 :host(.dashboard-mode) .sidebar { display: none !important; }
-:host(.dashboard-mode) .card-body { flex: 1; }
-:host(.dashboard-mode) .canvas-wrap { flex: 1; }
+:host(.dashboard-mode) .card-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+:host(.dashboard-mode) .canvas-wrap { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+:host(.dashboard-mode) { height: 100% !important; display: flex !important; flex-direction: column !important; }
+:host(.dashboard-mode) .card { flex: 1; }
 
 /* ── Universal input/select/textarea reset for dark theme ── */
 input, select, textarea, button {
@@ -564,14 +575,62 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   setConfig(config) {
-    // HA übergibt ein readonly/frozen Object – zuerst kopieren, dann modifizieren
     const cfg = Object.assign({}, config || {});
-    // Always ensure type is present regardless of what HA YAML editor sends
     if (!cfg.type || !cfg.type.includes("ble-positioning")) cfg.type = "custom:ble-positioning-card";
-    this._config       = cfg;
-    this._entryId      = cfg.entry_id || "";
-    this._devId        = cfg.device_id || "";
-    this._dashboardMode = cfg.dashboard_mode !== false; // default: true im Dashboard
+    this._config        = cfg;
+    this._entryId       = cfg.entry_id  || "";
+    this._devId         = cfg.device_id || "";
+    this._dashboardMode = cfg.dashboard_mode !== false;
+
+    // ── Card-Höhe ──────────────────────────────────────────────────
+    const _cfgH = parseInt(cfg.card_height) || 0;
+    this.style.height    = (_cfgH >= 100 ? _cfgH : 420) + "px";
+    this.style.minHeight = (_cfgH >= 100 ? _cfgH : 420) + "px";
+    this.style.display   = "block";
+
+    // ── Anzeigeoptionen aus Config in _opts übernehmen ────────────
+    // Werden sofort angewendet – vor _loadData, also bei jedem setConfig-Aufruf
+    if (!this._opts) this._opts = {};
+
+    // Sichtbarkeits-Toggles
+    const visMap = {
+      show_devices:  "showDevices",
+      show_rooms:    null,          // wird in _draw direkt via cfg geprüft
+      show_doors:    null,
+      show_scanners: "showScanners",
+      show_grid:     null,
+      show_alarms:   "showAlarmOverlay",
+      show_info:     "showInfoOverlay",
+      show_3d:       "show3D",
+    };
+    Object.entries(visMap).forEach(([cfgKey, optsKey]) => {
+      if (cfg[cfgKey] !== undefined && optsKey) {
+        this._opts[optsKey] = cfg[cfgKey];
+      }
+    });
+
+    // 3D-Theme aus Config
+    if (cfg.theme_3d) {
+      this._3dTheme = cfg.theme_3d;
+      if (!this._opts) this._opts = {};
+      this._opts.theme3d = cfg.theme_3d;
+    }
+
+    // Theme-Mode (dark/light/auto) – CSS custom property
+    if (cfg.theme_mode && cfg.theme_mode !== "auto") {
+      this.setAttribute("data-theme", cfg.theme_mode);
+    }
+
+    // show_rooms / show_doors / show_grid → direkt als Flags speichern
+    if (cfg.show_rooms    !== undefined) this._cfgShowRooms   = cfg.show_rooms    !== false;
+    if (cfg.show_doors    !== undefined) this._cfgShowDoors   = cfg.show_doors    !== false;
+    if (cfg.show_grid     !== undefined) this._cfgShowGrid    = cfg.show_grid     !== false;
+    if (cfg.show_devices  !== undefined) this._opts.showDevices = cfg.show_devices !== false;
+    if (cfg.show_scanners !== undefined) this._opts.showScanners = cfg.show_scanners !== false;
+    if (cfg.show_alarms   !== undefined) this._opts.showAlarmOverlay = cfg.show_alarms !== false;
+    if (cfg.show_info     !== undefined) this._opts.showInfoOverlay  = cfg.show_info   !== false;
+    if (cfg.show_3d       !== undefined) this._opts.show3D = cfg.show_3d !== false;
+    if (cfg.theme_3d)                    this._3dTheme = cfg.theme_3d;
   }
 
   static getConfigElement() {
@@ -579,7 +638,18 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { type: "ble-positioning-card", entry_id: "", device_id: "" };
+    return {
+      type:         "ble-positioning-card",
+      entry_id:     "",
+      card_height:  500,
+      theme_3d:     "default",
+      show_devices: true,
+      show_rooms:   true,
+      show_doors:   true,
+      show_scanners:true,
+      show_grid:    true,
+      show_3d:      true,
+    };
   }
 
   getCardSize() { return 6; }
@@ -629,6 +699,7 @@ class BLEPositioningCard extends HTMLElement {
     this._resizeObserver = new ResizeObserver(() => this._onResize());
     this._resizeObserver.observe(this.shadowRoot.getElementById("cwrap"));
     window.addEventListener("resize", this._onResize);
+    this._initCompass();
 
     await this._loadData();
 
@@ -658,7 +729,26 @@ class BLEPositioningCard extends HTMLElement {
       this._windows = res.windows || [];
       if (res.door_penalty !== undefined) this._doorPenalty = res.door_penalty;
       if (res.img_opacity !== undefined) this._imgOpacity = res.img_opacity;
-      if (res.options) { Object.assign(this._opts, res.options); this._loadTextures(); }
+      if (res.options) {
+        Object.assign(this._opts, res.options);
+        // Theme aus gespeicherten opts wiederherstellen
+        if (res.options.theme3d) this._3dTheme = res.options.theme3d;
+        if (res.options.mapRotationDeg != null) {
+          this._mapRotationDeg = res.options.mapRotationDeg;
+          this._mapRotation    = res.options.mapRotationDeg * Math.PI / 180;
+          if (this._compassUpdate) this._compassUpdate();
+        }
+        // 3D-Zoom sanity check (max 3x)
+        if (res.options.zoom3d != null) {
+          this._3dZoom = Math.min(3.0, Math.max(0.3, res.options.zoom3d));
+        }
+        this._loadTextures();
+        // Card-Config-Theme überschreibt gespeichertes Backend-Theme
+        if (this._config?.theme_3d) {
+          this._3dTheme = this._config.theme_3d;
+          this._opts.theme3d = this._config.theme_3d;
+        }
+      }
       if (res.wall_height != null) this._wallHeight = res.wall_height;
       if (res.wall_color  !== undefined) this._3dWallColor = res.wall_color;
       if (res.wall_alpha  != null) this._3dWallAlpha = res.wall_alpha;
@@ -669,6 +759,8 @@ class BLEPositioningCard extends HTMLElement {
       }
       if (firstLoad) {
         setTimeout(() => this._showOnboarding(), 1500);
+        // Standard-Tab aus Config
+        if (this._config?.default_mode) this._mode = this._config.default_mode;
         // FIX: Für kleine Arrays direktes Object-Spread statt structuredClone
         this._pendingScanners = (res.scanners || []).map(s=>({...s}));
         this._pendingRooms    = (res.rooms    || []).map(r=>({...r}));
@@ -755,6 +847,21 @@ class BLEPositioningCard extends HTMLElement {
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
+      <div class="compass-wrap" id="compass-wrap">
+        <svg class="compass-svg" id="compass-svg" viewBox="0 0 72 72">
+          <circle cx="36" cy="36" r="33" fill="rgba(7,9,13,0.85)" stroke="#1c2535" stroke-width="1.5"/>
+          <g id="compass-ticks"></g>
+          <g id="compass-labels"></g>
+          <g id="compass-needle">
+            <polygon points="36,8 39,28 36,24 33,28" fill="#00e5ff"/>
+            <polygon points="36,64 39,44 36,48 33,44" fill="#445566"/>
+            <circle cx="36" cy="36" r="4" fill="#0d1219" stroke="#00e5ff" stroke-width="1.5"/>
+          </g>
+          <circle cx="36" cy="36" r="13" fill="rgba(7,9,13,0.9)" stroke="#1c2535" stroke-width="1"/>
+        </svg>
+        <div class="compass-deg" id="compass-deg">0°</div>
+        <button class="compass-reset" id="compass-reset" title="Zurücksetzen">↺ Reset</button>
+      </div>
     </div>
   </div>
 </div>
@@ -848,6 +955,11 @@ class BLEPositioningCard extends HTMLElement {
         mode === "ptz"       ? (this._ptzPlacing    != null ? "crosshair" : "default") : "default";
     }
 
+    // Rooms-Modus: submode = 'edit' wenn Räume vorhanden, sonst 'draw'
+    if (mode === 'rooms') {
+      const hasRooms = (this._pendingRooms || this._data?.rooms || []).length > 0;
+      this._roomSubMode = hasRooms ? 'edit' : 'draw';
+    }
     this._rebuildSidebar();
   }
 
@@ -996,6 +1108,28 @@ class BLEPositioningCard extends HTMLElement {
       wrap.appendChild(mmBox);
     }
 
+    // ── Trail-Schieberegler ──────────────────────────────────────────────
+    if (this._opts?.showDeviceTrail) {
+      const trailBox = this._sbBox("Bewegungspfad-Einstellungen");
+      const mkSlider = (label, key, defVal, min, max, step, unit) => {
+        const val = this[key] || defVal;
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:5px";
+        const lbl = document.createElement("span");
+        lbl.style.cssText = "font-size:8px;color:var(--muted);width:90px;flex-shrink:0";
+        lbl.textContent = label + ": " + val + unit;
+        const sl = document.createElement("input");
+        sl.type = "range"; sl.min = min; sl.max = max; sl.step = step; sl.value = val;
+        sl.style.cssText = "flex:1;accent-color:var(--accent)";
+        sl.addEventListener("input", () => { this[key] = parseInt(sl.value); lbl.textContent = label + ": " + this[key] + unit; this._draw(); });
+        row.append(lbl, sl);
+        return row;
+      };
+      trailBox.appendChild(mkSlider("Länge", "_trailMaxLen", 20, 5, 100, 5, " Punkte"));
+      trailBox.appendChild(mkSlider("Max Alter", "_trailMaxAgeMin", 10, 1, 60, 1, " Min"));
+      wrap.appendChild(trailBox);
+    }
+
     // ── Sichtbarkeits-Schalter ────────────────────────────────────────────
     const visBox = this._sbBox("Einblenden / Ausblenden");
     const visDefs = [
@@ -1024,6 +1158,7 @@ class BLEPositioningCard extends HTMLElement {
       btn.addEventListener("click", () => {
         if (!this._opts) this._opts = {};
         this._opts[def.key] = !active;
+        this._saveOptions(); // Persistieren (auch show3D!)
         this._rebuildSidebar();
       });
       visGrid.appendChild(btn);
@@ -3253,18 +3388,39 @@ class BLEPositioningCard extends HTMLElement {
       if (sb) sb.style.width = sbW + "px";
     }
 
-    // Use offsetWidth/offsetHeight - more reliable in Shadow DOM than clientWidth
-    const maxW = Math.max(wrap.offsetWidth  - 8, 200);
-    const maxH = Math.max(wrap.offsetHeight - 8, 200);
-    if (this._bgLoaded && this._bgImg.naturalWidth) {
-      const ratio = this._bgImg.naturalWidth / this._bgImg.naturalHeight;
-      const w = Math.min(maxW, maxH * ratio);
-      this._canvas.width  = Math.max(w, 100);
-      this._canvas.height = Math.max(w / ratio, 100);
-    } else {
-      this._canvas.width  = maxW;
-      this._canvas.height = maxH;
+    // ── Canvas-Größe: immer vollen verfügbaren Raum nutzen ──────────────
+    const dpr = window.devicePixelRatio || 1;
+
+    // Zuverlässige Größe: wrap.getBoundingClientRect() statt offsetWidth
+    // (offsetWidth/Height = 0 wenn element kein Layout hat)
+    const wrapRect = wrap.getBoundingClientRect();
+    let cssW = Math.round(wrapRect.width)  || wrap.offsetWidth  || wrap.clientWidth;
+    let cssH = Math.round(wrapRect.height) || wrap.offsetHeight || wrap.clientHeight;
+
+    // Letzter Fallback: Karten-Host-Element
+    if (cssW < 50 || cssH < 50) {
+      const hostRect = this.getBoundingClientRect();
+      if (hostRect.width  > 50) cssW = Math.round(hostRect.width);
+      if (hostRect.height > 50) cssH = Math.round(hostRect.height) - 40; // minus header
     }
+    cssW = Math.max(cssW, 200);
+    cssH = Math.max(cssH, 200);
+
+    // Physische Pixel für HiDPI-Displays
+    const physW = Math.round(cssW * dpr);
+    const physH = Math.round(cssH * dpr);
+
+    if (this._canvas.width !== physW || this._canvas.height !== physH) {
+      this._canvas.width  = physW;
+      this._canvas.height = physH;
+    }
+    // Canvas füllt den Wrap per CSS
+    this._canvas.style.width  = cssW + "px";
+    this._canvas.style.height = cssH + "px";
+
+    // Canvas-Größe für _draw3DScene merken (CSS-Pixel)
+    this._canvasCssW = cssW;
+    this._canvasCssH = cssH;
   }
 
   _attachCanvasEvents() {
@@ -3343,31 +3499,46 @@ class BLEPositioningCard extends HTMLElement {
 
   // ── Canvas coordinate helpers ────────────────────────────────────────────
 
+  // ── Seitenverhältnis-korrekte Koordinaten-Hilfsmethoden ─────────────────
+  // Der Grundriss wird mit gleichem Maßstab in X und Y dargestellt
+  // (kein Strecken auf Canvas-Größe) und zentriert.
+  _floorScale() {
+    if (!this._data || !this._canvas) return { scale: 40, ox: 0, oy: 0 };
+    const W = this._canvas.width, H = this._canvas.height;
+    const fw = this._data.floor_w || 10, fh = this._data.floor_h || 10;
+    const scale = Math.min(W / fw, H / fh);
+    const ox = (W - fw * scale) / 2;
+    const oy = (H - fh * scale) / 2;
+    return { scale, ox, oy };
+  }
+
   _f2c(mx, my) {
     const d = this._data;
     if (!d) return { x: 0, y: 0 };
-    if (!isFinite(mx) || !isFinite(my)) return { x: 0, y: 0 }; // NaN-Guard
-    const W = this._canvas.width, H = this._canvas.height;
-    const fw = d.floor_w || 10, fh = d.floor_h || 10;
-    const baseX = (mx / fw) * W;
-    const baseY = (my / fh) * H;
+    if (!isFinite(mx) || !isFinite(my)) return { x: 0, y: 0 };
+    const { scale, ox, oy } = this._floorScale();
+    const baseX = ox + mx * scale;
+    const baseY = oy + my * scale;
     if (!this._opts?.zoomPan || (this._zoom||1) === 1) return { x: baseX, y: baseY };
     const z   = this._zoom || 1;
     const dpr = window.devicePixelRatio || 1;
+    const W = this._canvas.width, H = this._canvas.height;
+    const fw2 = this._data?.floor_w || 10, fh2 = this._data?.floor_h || 10;
     const panXcv = (this._panX||0) * dpr;
     const panYcv = (this._panY||0) * dpr;
+    const pivX = ox + (fw2/2) * scale;
+    const pivY = oy + (fh2/2) * scale;
     return {
-      x: W/2 + panXcv + (baseX - W/2) * z,
-      y: H/2 + panYcv + (baseY - H/2) * z,
+      x: pivX + panXcv + (baseX - pivX) * z,
+      y: pivY + panYcv + (baseY - pivY) * z,
     };
   }
+
   _f2cBase(mx, my) {
-    // Raw without zoom – used internally
     const d = this._data;
     if (!d) return { x: 0, y: 0 };
-    const W = this._canvas.width, H = this._canvas.height;
-    const fw = d.floor_w || 10, fh = d.floor_h || 10;
-    return { x: (mx / fw) * W, y: (my / fh) * H };
+    const { scale, ox, oy } = this._floorScale();
+    return { x: ox + mx * scale, y: oy + my * scale };
   }
 
   _c2f(cx, cy) {
@@ -3375,16 +3546,25 @@ class BLEPositioningCard extends HTMLElement {
     if (!d) return { mx: 0, my: 0 };
     const W = this._canvas.width, H = this._canvas.height;
     const fw = d.floor_w || 10, fh = d.floor_h || 10;
+    const { scale, ox, oy } = this._floorScale();
     if (!this._opts?.zoomPan || (this._zoom||1) === 1) {
-      return { mx: (cx / W) * fw, my: (cy / H) * fh };
+      return {
+        mx: Math.max(0, Math.min(fw, (cx - ox) / scale)),
+        my: Math.max(0, Math.min(fh, (cy - oy) / scale)),
+      };
     }
     const z   = this._zoom || 1;
     const dpr = window.devicePixelRatio || 1;
     const panXcv = (this._panX||0) * dpr;
     const panYcv = (this._panY||0) * dpr;
-    const baseX = (cx - W/2 - panXcv) / z + W/2;
-    const baseY = (cy - H/2 - panYcv) / z + H/2;
-    return { mx: (baseX / W) * fw, my: (baseY / H) * fh };
+    const pivX2 = ox + (fw/2) * scale;
+    const pivY2 = oy + (fh/2) * scale;
+    const baseX = (cx - pivX2 - panXcv) / z + pivX2;
+    const baseY = (cy - pivY2 - panYcv) / z + pivY2;
+    return {
+      mx: Math.max(0, Math.min(fw, (baseX - ox) / scale)),
+      my: Math.max(0, Math.min(fh, (baseY - oy) / scale)),
+    };
   }
   _canvasXY(e) {
     const r = this._canvas.getBoundingClientRect();
@@ -3883,8 +4063,7 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // Check door handle hits first
-    const floorW = this._data?.floor_w || 10;
-    const scale  = this._canvas.width / floorW;
+    const { scale } = this._floorScale();  // px/m (korrekt mit Seitenverhältnis)
     for (let i = 0; i < this._pendingDoors.length; i++) {
       const d   = this._pendingDoors[i];
       const ang = this._doorAngle(d);
@@ -3893,7 +4072,7 @@ class BLEPositioningCard extends HTMLElement {
       const cosA = Math.cos(ang), sinA = Math.sin(ang);
       const p1 = { mx: d.x - hw * cosA, my: d.y - hw * sinA };
       const p2 = { mx: d.x + hw * cosA, my: d.y + hw * sinA };
-      const hitR = 12 / scale;  // 12px hit radius in floor metres (bigger = easier to grab)
+      const hitR = 20 / scale;  // 20px hit radius – leichter zu greifen
       if (Math.hypot(fl.mx - p1.mx, fl.my - p1.my) < hitR) {
         this._dragDoor = { idx: i, handle: "start" }; return;
       }
@@ -3911,8 +4090,7 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // Window hit detection (scale handles + move)
-    const floorWw = this._data?.floor_w || 10;
-    const scaleWw = this._canvas.width / floorWw;
+    const { scale: scaleWw } = this._floorScale();  // px/m
     for (let i = 0; i < this._pendingWindows.length; i++) {
       const w   = this._pendingWindows[i];
       const ang = w.angle || 0;
@@ -3920,7 +4098,7 @@ class BLEPositioningCard extends HTMLElement {
       const cosA = Math.cos(ang), sinA = Math.sin(ang);
       const p1 = { mx: w.x - hw * cosA, my: w.y - hw * sinA };
       const p2 = { mx: w.x + hw * cosA, my: w.y + hw * sinA };
-      const hitR = 14 / scaleWw;
+      const hitR = 20 / scaleWw;
       if (Math.hypot(fl.mx - p1.mx, fl.my - p1.my) < hitR) {
         this._dragWindow = { idx: i, handle: "start" }; return;
       }
@@ -3936,11 +4114,9 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     if (this._roomSubMode === "edit") {
-      // Check resize handle first (8px corner zones in canvas coords)
-      const handleR = 10; // px in floor-metres scale
-      const scaleX  = (this._data?.floor_w||10) / this._canvas.width;
-      const scaleY  = (this._data?.floor_h||10) / this._canvas.height;
-      const hrm     = handleR * Math.max(scaleX, scaleY); // handle radius in metres
+      // Check resize handle first – korrekt mit _floorScale()
+      const { scale: _scEdit } = this._floorScale();
+      const hrm = 16 / _scEdit; // 16px Handle-Radius // px → Meter
 
       for (let i = this._pendingRooms.length-1; i >= 0; i--) {
         const r = this._pendingRooms[i];
@@ -4020,7 +4196,13 @@ class BLEPositioningCard extends HTMLElement {
       return;
     }
     const { cx, cy } = this._canvasXY(e);
-    const fl = this._c2f(cx, cy);
+    const _fl_raw = this._c2f(cx, cy);
+    // Im Räume-Modus Snap auf Raster
+    const _gs = this._data?.grid_step || 0.5;
+    const fl = (this._mode === "rooms" && this._roomSubMode === "draw")
+      ? { mx: Math.round(_fl_raw.mx / _gs) * _gs, my: Math.round(_fl_raw.my / _gs) * _gs }
+      : _fl_raw;
+    this._mouseFloor = fl;
     const tip = this.shadowRoot.getElementById("tip");
 
     // Track mouse position for scanner placement crosshair
@@ -4106,6 +4288,11 @@ class BLEPositioningCard extends HTMLElement {
         w.width  = parseFloat(Math.max(0.3, hw * 2).toFixed(2));
       }
       return;
+    }
+
+    // mmWave Platzierung: Redraw für Crosshair-Feedback
+    if (this._mode === "mmwave" && this._mmwavePlacing != null) {
+      this._draw(); return;
     }
 
     if (this._mode === "rooms") {
@@ -4394,9 +4581,8 @@ class BLEPositioningCard extends HTMLElement {
 
   _updateRoomCursor(mx, my) {
     if (!this._canvas) return;
-    const scaleX = (this._data?.floor_w||10) / this._canvas.width;
-    const scaleY = (this._data?.floor_h||10) / this._canvas.height;
-    const hrm    = 10 * Math.max(scaleX, scaleY);
+    const { scale: _scCur2 } = this._floorScale();
+    const hrm = 16 / _scCur2;
     for (let i = this._pendingRooms.length-1; i >= 0; i--) {
       const r = this._pendingRooms[i];
       const corners = [
@@ -5703,7 +5889,19 @@ class BLEPositioningCard extends HTMLElement {
       delBtn.style.cssText = "padding:2px 6px;border:1px solid #ef444433;border-radius:3px;background:#ef444411;color:#ef4444;font-size:8px;cursor:pointer;font-family:inherit";
       delBtn.textContent = "✕";
       delBtn.addEventListener("click", (e) => { e.stopPropagation(); sensors.splice(idx,1); this._mmwaveEditIdx=null; this._rebuildSidebar(); });
-      crow.append(dot, nameLbl, prefLbl, cntBadge, chevron, delBtn);
+      // Sichtbarkeits-Toggle
+      const visBtn = document.createElement("button");
+      visBtn.style.cssText = `padding:2px 5px;border:1px solid ${s.hidden?"#f59e0b44":"#1c253588"};border-radius:3px;background:${s.hidden?"#f59e0b22":"transparent"};color:${s.hidden?"#f59e0b":"#445566"};font-size:9px;cursor:pointer`;
+      visBtn.title = s.hidden ? "Sensor einblenden" : "Sensor ausblenden";
+      visBtn.textContent = s.hidden ? "👁" : "👁";
+      visBtn.style.opacity = s.hidden ? "0.4" : "1";
+      visBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        s.hidden = !s.hidden;
+        this._rebuildSidebar();
+        this._draw();
+      });
+      crow.append(dot, nameLbl, prefLbl, cntBadge, visBtn, chevron, delBtn);
       card.appendChild(crow);
 
       // Expanded editor
@@ -5719,8 +5917,10 @@ class BLEPositioningCard extends HTMLElement {
     // Save button
     const saveBtn = document.createElement("button");
     saveBtn.style.cssText = "width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid #22c55e55;background:#22c55e11;color:#22c55e;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit";
-    saveBtn.textContent = sensors.length ? `💾 Speichern (${sensors.length} Sensoren)` : "Keine Sensoren";
-    saveBtn.disabled = sensors.length === 0;
+    saveBtn.textContent = sensors.length
+      ? `💾 Speichern (${sensors.length} Sensor${sensors.length!==1?"en":""})`
+      : "💾 Alle Sensoren löschen";
+    saveBtn.disabled = false; // Auch 0 Sensoren darf gespeichert werden
     saveBtn.addEventListener("click", async () => {
       saveBtn.disabled=true; saveBtn.textContent="⏳...";
       try {
@@ -5958,12 +6158,14 @@ class BLEPositioningCard extends HTMLElement {
       }
       b.appendChild(calStart);
 
-      // Sensor platzieren Button
+      // Sensor platzieren Button – nutzt _mmwavePlacing (korrekt!)
+      const isPlacingNow = this._mmwavePlacing === idx;
       const placeBtn=document.createElement("button"); placeBtn.className="btn btn-outline";
-      placeBtn.style.cssText="width:100%;font-size:8px;padding:3px;margin-top:2px";
-      placeBtn.textContent="📍 Sensor auf Karte platzieren (klicken)";
+      placeBtn.style.cssText=`width:100%;font-size:8px;padding:3px;margin-top:2px;${isPlacingNow?"color:#00e5ff;border-color:#00e5ff44":""}`;
+      placeBtn.textContent = isPlacingNow ? "📍 Klicke auf Karte…" : (s.mx!=null ? "📍 Neu platzieren" : "📍 Auf Karte platzieren");
       placeBtn.addEventListener("click",()=>{
-        this._mmwaveCalib={sensorId:s.id}; this._showToast("Klicke auf die Sensor-Position auf der Karte");
+        this._mmwavePlacing = isPlacingNow ? null : idx;
+        this._showToast(isPlacingNow ? "Platzierung abgebrochen" : "Klicke auf die Sensor-Position auf der Karte");
         this._rebuildSidebar();
       });
       const isCalib=this._mmwaveCalib?.sensorId===s.id;
@@ -7173,6 +7375,7 @@ class BLEPositioningCard extends HTMLElement {
     const t = Date.now() / 1000;
 
     sensors.forEach(sensor => {
+      if (sensor.hidden) return;  // ausgeblendet
       if (sensor.mx == null || sensor.my == null) return;
       if (this._mmwaveCalib?.sensorId === sensor.id) this._mmwaveCalibTick(sensor);
       const sc = this._f2c(sensor.mx, sensor.my);
@@ -7185,10 +7388,9 @@ class BLEPositioningCard extends HTMLElement {
         const rangeM   = sensor.fov_range || 6;
         const d        = this._data;
         if (d) {
-          const W = this._canvas.width, H = this._canvas.height;
-          const fw = d.floor_w||10, fh = d.floor_h||10;
+          const { scale: _mmScale } = this._floorScale();
           const zoom = this._zoom || 1;
-          const rangePx = (rangeM / fw) * W * zoom;
+          const rangePx = rangeM * _mmScale * zoom;
 
           // Base direction: sensor faces "down" (0°=up, 90°=right in floor coords)
           const baseAngle = rot - Math.PI/2; // rotate so 0° = facing up
@@ -7243,12 +7445,31 @@ class BLEPositioningCard extends HTMLElement {
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText(sensor.name||"mmWave", sc.x, sc.y-16.5);
 
-      // ── 3. Place-mode crosshair ────────────────────────────────────────────
-      if (this._mmwavePlacing != null) {
-        ctx.strokeStyle="#f59e0b"; ctx.lineWidth=1; ctx.setLineDash([3,3]);
-        const p=this._f2c(sensor.mx,sensor.my);
-        ctx.beginPath(); ctx.arc(p.x,p.y,14,0,Math.PI*2); ctx.stroke();
-        ctx.setLineDash([]);
+      // ── 3. Place-mode: Crosshair unter der Maus ─────────────────────────
+      const _sIdx = (this._pendingMmwave||[]).indexOf(sensor);
+      if (this._mmwavePlacing === _sIdx) {
+        const mp = this._mouseFloor;
+        if (mp) {
+          const mc = this._f2c(mp.mx, mp.my);
+          ctx.save();
+          ctx.strokeStyle="#f59e0b"; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+          ctx.beginPath();
+          ctx.moveTo(mc.x-12,mc.y); ctx.lineTo(mc.x+12,mc.y);
+          ctx.moveTo(mc.x,mc.y-12); ctx.lineTo(mc.x,mc.y+12);
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(mc.x,mc.y,6,0,Math.PI*2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font="bold 8px 'JetBrains Mono',monospace";
+          ctx.fillStyle="#f59e0b"; ctx.textAlign="center"; ctx.textBaseline="top";
+          ctx.fillText(mp.mx.toFixed(1)+"m / "+mp.my.toFixed(1)+"m", mc.x, mc.y+9);
+          ctx.textAlign="left"; ctx.restore();
+        }
+        if (sensor.mx != null) {
+          const sp = this._f2c(sensor.mx, sensor.my);
+          ctx.save(); ctx.strokeStyle="#ef444466"; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+          ctx.beginPath(); ctx.arc(sp.x,sp.y,10,0,Math.PI*2); ctx.stroke();
+          ctx.setLineDash([]); ctx.restore();
+        }
       }
 
       // ── 4. Targets ────────────────────────────────────────────────────────
@@ -7280,12 +7501,10 @@ class BLEPositioningCard extends HTMLElement {
 
         // ── Movement vector arrow ──────────────────────────────────────────
         if (target.moving && Math.abs(target.speed) > 0.05) {
-          const d = this._data;
-          const W = this._canvas.width;
-          const fw = d?.floor_w||10;
-          const zoom = this._zoom||1;
+          const { scale: _mmScale2 } = this._floorScale();
+          const zoom2 = this._zoom||1;
           const speedScale = Math.min(Math.abs(target.speed)*0.8, 2.5);
-          const vLen = speedScale * (W/fw) * zoom * 0.18;
+          const vLen = speedScale * _mmScale2 * zoom2 * 0.18;
           const vAngle = (target.angle||0)*Math.PI/180 + (sensor.rotation||0)*Math.PI/180 - Math.PI/2;
           const vx = tc.x + Math.cos(vAngle)*vLen;
           const vy = tc.y + Math.sin(vAngle)*vLen;
@@ -9575,21 +9794,27 @@ draw();
     };
 
     // ── Raum-Aufenthalt ───────────────────────────────────────────────────
-    scroll.appendChild(section("🏠 RAUM-AUFENTHALT (Ges.)"));
+    scroll.appendChild(section("🏠 RAUM-AUFENTHALT (Heute)"));
     if (report.rooms.length === 0) {
-      const empty=document.createElement("div"); empty.style.cssText="font-size:8px;color:var(--muted);padding:4px";
-      empty.textContent="Noch keine Daten – KI läuft im Hintergrund..."; scroll.appendChild(empty);
+      const em=document.createElement("div"); em.style.cssText="font-size:8px;color:var(--muted);font-style:italic;padding:4px";
+      em.textContent="Noch keine Daten. Aktivitäts-Tracking einschalten: OPT > Aktivitäts-Tracking."; scroll.appendChild(em);
     }
-    report.rooms.slice(0,8).forEach(r => {
-      const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:5px;margin-bottom:3px";
-      const lbl=document.createElement("span"); lbl.style.cssText="font-size:8px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"; lbl.textContent=r.name;
-      const val=document.createElement("span"); val.style.cssText="font-size:8px;color:#f59e0b;white-space:nowrap"; val.textContent=`${r.hours}h`;
-      const bar=document.createElement("div"); bar.style.cssText="width:60px;height:4px;background:var(--surf3);border-radius:2px;overflow:hidden";
-      const fill=document.createElement("div");
-      const maxH = Math.max(...report.rooms.map(x=>parseFloat(x.hours)),0.1);
-      fill.style.cssText=`height:100%;background:#f59e0b;border-radius:2px;width:${Math.round(parseFloat(r.hours)/maxH*100)}%`;
-      bar.appendChild(fill); row.append(lbl,bar,val); scroll.appendChild(row);
-    });
+    if (report.rooms.length > 0) {
+      const maxH4 = Math.max(...report.rooms.map(r=>parseFloat(r.hours)), 0.1);
+      const COLS4 = ["#00e5ff","#f59e0b","#a78bfa","#22c55e","#f43f5e","#fb923c"];
+      report.rooms.slice(0,6).forEach((r, ri) => {
+        const pct = parseFloat(r.hours) / maxH4;
+        const col = COLS4[ri % COLS4.length];
+        const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:4px";
+        const lbl=document.createElement("span"); lbl.style.cssText=`font-size:7.5px;color:var(--text);width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap`;
+        lbl.textContent=r.name;
+        const barWrap=document.createElement("div"); barWrap.style.cssText="flex:1;height:10px;background:var(--surf2);border-radius:3px;overflow:hidden";
+        const fill=document.createElement("div"); fill.style.cssText=`height:100%;width:${Math.round(pct*100)}%;background:${col};border-radius:3px`;
+        barWrap.appendChild(fill);
+        const val=document.createElement("span"); val.style.cssText=`font-size:7.5px;color:${col};min-width:28px;text-align:right`; val.textContent=r.hours+"h";
+        row.append(lbl,barWrap,val); scroll.appendChild(row);
+      });
+    }
 
     // ── Schlaf ────────────────────────────────────────────────────────────
     if (this._opts?.showSleep && Object.keys(report.sleep).length) {
@@ -9656,6 +9881,53 @@ draw();
       scroll.appendChild(toggleBtn);
     }
 
+    // ── Fingerprint-Qualitäts-Report ─────────────────────────────────────
+    scroll.appendChild(section("🎯 FINGERPRINT-QUALITÄT","#00e5ff"));
+    {
+      const rooms4   = this._data?.rooms || [];
+      const allFps4  = this._data?.fingerprints || [];
+      const devices4 = this._data?.devices || [];
+      const REC = 15;
+      if (!rooms4.length) {
+        const em=document.createElement("div"); em.style.cssText="font-size:8px;color:var(--muted);font-style:italic";
+        em.textContent="Keine Räume konfiguriert."; scroll.appendChild(em);
+      } else {
+        const fpRows = rooms4.map(r => {
+          const cnt = allFps4.filter(fp=>fp.mx>=r.x1&&fp.mx<=r.x2&&fp.my>=r.y1&&fp.my<=r.y2).length;
+          return { name:r.name||"?", cnt, pct:Math.min(100,Math.round(cnt/REC*100)) };
+        });
+        const avgPct = Math.round(fpRows.reduce((a,b)=>a+b.pct,0)/Math.max(fpRows.length,1));
+        const gc = avgPct>=80?"#22c55e":avgPct>=40?"#f59e0b":"#ef4444";
+        const badge=document.createElement("div"); badge.style.cssText=`display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:6px;margin-bottom:5px;background:${gc}22;border:1px solid ${gc}44`;
+        badge.innerHTML=`<span style="font-size:8px;color:var(--text)">Gesamt-Qualität</span><span style="font-size:13px;font-weight:700;color:${gc}">${avgPct}%</span>`;
+        scroll.appendChild(badge);
+        fpRows.forEach(r => {
+          const c = r.pct>=80?"#22c55e":r.pct>=33?"#f59e0b":"#ef4444";
+          const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:3px";
+          row.innerHTML=`<div style="width:5px;height:5px;border-radius:50%;background:${c};flex-shrink:0"></div>
+            <span style="font-size:7.5px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</span>
+            <div style="width:40px;height:4px;background:var(--border);border-radius:2px;overflow:hidden"><div style="width:${r.pct}%;height:100%;background:${c}"></div></div>
+            <span style="font-size:7px;color:${c};min-width:22px;text-align:right">${r.cnt}</span>`;
+          scroll.appendChild(row);
+        });
+        const poor = fpRows.filter(r=>r.cnt<5);
+        if (poor.length) {
+          const tip=document.createElement("div"); tip.style.cssText="font-size:7.5px;color:#f59e0b;padding:4px 6px;background:#f59e0b11;border-radius:4px;margin-top:4px;line-height:1.5";
+          tip.innerHTML=`<b>Empfehlung:</b> ${poor.map(r=>r.name).join(", ")} brauchen mehr Fingerprints → CAL-Tab`;
+          scroll.appendChild(tip);
+        }
+        if (devices4.length > 1) {
+          const dh=document.createElement("div"); dh.style.cssText="font-size:7px;font-weight:700;color:var(--muted);margin:5px 0 2px";
+          dh.textContent="PRO GERÄT"; scroll.appendChild(dh);
+          devices4.forEach(d => {
+            const n = allFps4.filter(fp=>fp.device_id===d.device_id).length;
+            const dr=document.createElement("div"); dr.style.cssText="display:flex;justify-content:space-between;font-size:7.5px;margin-bottom:2px";
+            dr.innerHTML=`<span style="color:var(--text)">${d.device_name||d.device_id}</span><span style="color:var(--cyan)">${n} FPs</span>`;
+            scroll.appendChild(dr);
+          });
+        }
+      }
+    }
     // ── AR-Export ─────────────────────────────────────────────────────────
     scroll.appendChild(section("📱 AR-EXPORT","#a78bfa"));
     const arBtn=document.createElement("button");
@@ -10238,6 +10510,23 @@ draw();
 
 
   // Lumen → Glow-Skalierung (Referenz: 800lm = 1.0)
+  // Ermittle ob eine Lampe wirklich eingeschaltet ist:
+  // Im LIGHTS-Tab (Simulations-Modus) = light.on (explizit gesetzt)
+  // Im VIEW/anderen Modi = echter HA-Entity-State
+  _isLightOn(light) {
+    if (this._mode === "lights") {
+      // Simulations-Modus: light.on ist explizit gesetzt
+      return light.on === true;
+    }
+    // Echter Betrieb: HA-State hat Vorrang
+    if (light.entity && this._hass?.states) {
+      const s = this._hass.states[light.entity]?.state;
+      if (s !== undefined) return s === "on";
+    }
+    // Fallback auf gespeichertes on-Flag
+    return light.on === true;
+  }
+
   _lumensToGlowFactor(lumen, bri) {
     const refLm = 800;
     const lm = Math.max(1, lumen || refLm);
@@ -10258,7 +10547,7 @@ draw();
       const ri = this._lightRoomIdx(light, rooms);
       if (ri >= 0) {
         roomInfo[ri].anyLight = true;
-        if (light.on) roomInfo[ri].anyOn = true;
+        if (this._isLightOn(light)) roomInfo[ri].anyOn = true;
       }
     });
 
@@ -10275,13 +10564,24 @@ draw();
 
     // ── Pass 2: glow per light, clipped to assigned room ─────────────────
     lights.forEach(light => {
-      if (!light.on) return;
+      if (!this._isLightOn(light)) return;
 
       const ri = this._lightRoomIdx(light, rooms);
 
-      // Glow color
+      // Glow color: HA-State hat Vorrang (Echtzeit-Farbe)
       let r = 255, g = 248, b = 180;
-      if (light.rgb && light.rgb.length === 3) {
+      let bri = 1.0;
+      const _haState = (this._mode !== "lights" && light.entity)
+        ? this._hass?.states?.[light.entity] : null;
+      if (_haState?.attributes?.rgb_color) {
+        [r, g, b] = _haState.attributes.rgb_color;
+      } else if (_haState?.attributes?.color_temp) {
+        const ct = Math.max(153, Math.min(500, _haState.attributes.color_temp));
+        const t  = (ct - 153) / 347;
+        r = Math.round(200 + 55 * t);
+        g = Math.round(220 - 30 * t);
+        b = Math.round(255 - 100 * t);
+      } else if (light.rgb && light.rgb.length === 3) {
         [r, g, b] = light.rgb;
       } else if (light.color_temp) {
         const ct = Math.max(153, Math.min(500, light.color_temp));
@@ -10290,15 +10590,20 @@ draw();
         g = Math.round(220 - 30 * t);
         b = Math.round(255 - 100 * t);
       }
-
-      const bri    = (light.brightness ?? 255) / 255;
+      // Helligkeit aus HA-State (0-255 → 0-1)
+      if (_haState?.attributes?.brightness != null) {
+        bri = _haState.attributes.brightness / 255;
+      } else {
+        bri = (light.brightness ?? 255) / 255;
+      }
       const lumFactor2D = this._lumensToGlowFactor(light.lumen, bri);
-      const scaleX = this._canvas.width  / (this._data?.floor_w || 10);
-      const scaleY = this._canvas.height / (this._data?.floor_h || 10);
-      const glowPx = lumFactor2D * (scaleX + scaleY) / 2;
+      const { scale: _lScale } = this._floorScale();
+      const glowPx = lumFactor2D * _lScale;
       const alpha  = Math.min(0.55, 0.10 + lumFactor2D * 0.22);
       const pos    = this._f2c(light.mx, light.my);
 
+      // Sicherheitscheck VOR ctx.save()
+      if (!isFinite(pos.x) || !isFinite(pos.y) || !isFinite(glowPx) || glowPx <= 0) return;
       ctx.save();
 
       // Build clip set: own room + group siblings
@@ -10381,15 +10686,16 @@ draw();
             const nB = parseInt(nHex.slice(4,6),16)||255;
             const nAlpha = (nLight.brightness ?? 80) / 100 * 0.55;
             // Clip to our room and draw bleed
+            const nGlowPx = Math.max(40, ((nLight.radius ?? 3) * (this._unitPx2d || 40)));
+            const bleedAlpha2 = nAlpha * nFactor;
+            // Sicherheitscheck VOR ctx.save() – verhindert unbalancierten State
+            if (!isFinite(nPos.x) || !isFinite(nPos.y) || !isFinite(nGlowPx)) return;
             ctx.save();
             ctx.beginPath();
             const myRm = rooms[ri];
             const mc1 = this._f2c(myRm.x1, myRm.y1), mc2 = this._f2c(myRm.x2, myRm.y2);
             ctx.rect(mc1.x, mc1.y, mc2.x - mc1.x, mc2.y - mc1.y);
             ctx.clip();
-            const nGlowPx = Math.max(40, ((nLight.radius ?? 3) * this._scale));
-            const bleedAlpha2 = nAlpha * nFactor;
-            if (!isFinite(nPos.x) || !isFinite(nPos.y)) { ctx.restore(); return; }
             const bg2 = ctx.createRadialGradient(nPos.x, nPos.y, 0, nPos.x, nPos.y, nGlowPx * 1.4);
             bg2.addColorStop(0,   `rgba(${nR},${nG},${nB},${bleedAlpha2.toFixed(3)})`);
             bg2.addColorStop(0.5, `rgba(${nR},${nG},${nB},${(bleedAlpha2*0.4).toFixed(3)})`);
@@ -10461,6 +10767,7 @@ draw();
       }
       ctx.clip();
 
+      if (!isFinite(glowPx) || glowPx <= 0) { ctx.restore(); return; }
       const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, glowPx);
       grad.addColorStop(0,   `rgba(${r},${g},${b},${alpha.toFixed(3)})`);
       grad.addColorStop(0.4, `rgba(${r},${g},${b},${(alpha * 0.5).toFixed(3)})`);
@@ -10502,7 +10809,10 @@ draw();
   _drawLampSymbol2D(ctx, light, cx, cy, bri, r, g, b) {
     const type = light.lamp_type || "bulb";
     const s = 8 + bri * 4; // symbol size
-    const on = light.on !== false;
+    const on = (this._mode === "lights") ? (light.on !== false) :
+               (light.entity && this._hass?.states
+                 ? this._hass.states[light.entity]?.state === "on"
+                 : light.on !== false);
     const col = on ? `rgba(${r},${g},${b},0.95)` : "rgba(140,130,110,0.5)";
     ctx.save();
     ctx.translate(cx, cy);
@@ -10822,7 +11132,10 @@ draw();
     const type = light.lamp_type || "bulb";
     const mz = light.mz != null ? light.mz : wallH * 0.88;
     const lp = project(light.mx, light.my, mz);
-    const on = light.on !== false;
+    const on = (this._mode === "lights") ? (light.on !== false) :
+              (light.entity && this._hass?.states
+                ? this._hass.states[light.entity]?.state === "on"
+                : light.on !== false);
     const s = 6 + bri * 3;
 
     ctx.save();
@@ -11081,16 +11394,48 @@ draw();
       ctx.textAlign = "left";
       return;
     }
+    // Physische Canvas-Größe für clearRect
     const W = c.width, H = c.height;
     ctx.clearRect(0, 0, W, H);
+    // Stelle sicher dass Canvas die aktuelle Größe hat
+    if (!this._canvasCssW || !this._canvasCssH) this._onResize();
+    // 2D: _f2c() rechnet bereits in physischen Canvas-Pixeln (canvas.width)
+    // → kein ctx.scale(dpr) nötig (würde alles nochmal skalieren → schwarzer Rand)
+    this._dpr2dScaled = false;
+
+    // ── Kompass im 3D-Modus ausblenden ────────────────────────────────────
+    {
+      const _cw = this.shadowRoot?.getElementById("compass-wrap");
+      if (_cw) {
+        const _is3DNow = this._mode === "view" && this._opts?.show3D;
+        _cw.style.display = _is3DNow ? "none" : "block";
+      }
+    }
+
+    // ── Kartenrotation (nur 2D) ───────────────────────────────────────────
+    const _rot2d = this._mapRotation || 0;
+    const _is3D  = this._mode === "view" && this._opts?.show3D;
+    if (_rot2d !== 0 && !_is3D) {
+      ctx.save();
+      ctx.translate(W/2, H/2);
+      ctx.rotate(_rot2d);
+      ctx.translate(-W/2, -H/2);
+      this._rotActive = true;
+    } else { this._rotActive = false; }
 
     // ── 3D mode: skip all 2D drawing ─────────────────────────────────────
-    if (this._mode === "view" && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "lights") && this._opts?.show3D) {
+      // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
+      if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
+      // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
+      const _3dLights = this._mode === "lights"
+        ? (this._pendingLights || []).map(l => ({...l, on: true, brightness: 200, rgb: null}))
+        : (this._data?.lights || []);
       this._draw3DScene(ctx,
         this._data?.rooms   || [],
         this._data?.doors   || [],
         this._data?.windows || [],
-        this._data?.lights  || [],
+        _3dLights,
         this._data?.devices || []);
       // Note: _drawEnergyOverlay3D is called from inside _draw3DScene (project is only defined there)
       this._drawDaytimeSunIcon(ctx, c.width, c.height);
@@ -11123,28 +11468,46 @@ draw();
         // Normal (no zoom): full canvas
         if (this._imgVisible !== false) {
           ctx.globalAlpha = this._imgOpacity ?? 0.35;
-          ctx.drawImage(this._bgImg, 0, 0, W, H);
+          // Hintergrundbild auf Grundriss-Bereich zeichnen (mit Seitenverhältnis)
+      const { scale: _bgSc, ox: _bgOx, oy: _bgOy } = this._floorScale();
+      const _fw = this._data?.floor_w || 10, _fh = this._data?.floor_h || 10;
+      ctx.drawImage(this._bgImg, 0, 0,
+        this._bgImg.naturalWidth, this._bgImg.naturalHeight,
+        _bgOx, _bgOy, _fw * _bgSc, _fh * _bgSc);
           ctx.globalAlpha = 1.0;
         }
-        ctx.fillStyle = "rgba(7,9,13," + _ovAlpha + ")";
+        // Rand außerhalb des Grundrisses
+        ctx.fillStyle = "#07090d";
         ctx.fillRect(0, 0, W, H);
+        // Dark overlay nur auf Grundriss-Bereich
+        const {scale:_ov_sc,ox:_ov_ox,oy:_ov_oy}=this._floorScale();
+        const _fw2=this._data?.floor_w||10,_fh2=this._data?.floor_h||10;
+        ctx.fillStyle = "rgba(7,9,13," + _ovAlpha + ")";
+        ctx.fillRect(_ov_ox, _ov_oy, _fw2*_ov_sc, _fh2*_ov_sc);
       }
     } else {
-      ctx.fillStyle = "#0d1219";
+      ctx.fillStyle = "#07090d";
       ctx.fillRect(0, 0, W, H);
+      // Grundriss-Bereich leicht heller
+      const {scale:_bg_sc,ox:_bg_ox,oy:_bg_oy}=this._floorScale();
+      const _fw3=this._data?.floor_w||10,_fh3=this._data?.floor_h||10;
+      ctx.fillStyle = "#0d1219";
+      ctx.fillRect(_bg_ox, _bg_oy, _fw3*_bg_sc, _fh3*_bg_sc);
     }
 
     const mode = this._mode;
     const rooms    = mode === "rooms"    ? this._pendingRooms    : (this._data.rooms    || []);
     const scanners = mode === "scanners" ? this._pendingScanners : (this._data.scanners || []);
 
-    // unitPx2d für Textur-Skalierung: Pixel pro Meter im 2D-Canvas
-    const fw2d = this._data?.floor_w || 10;
-    this._unitPx2d = this._canvas.width / fw2d;
+    // unitPx2d für Textur-Skalierung: Pixel pro Meter im 2D-Canvas (gleichmäßig)
+    const { scale: _scale2d } = this._floorScale();
+    this._unitPx2d = _scale2d;
 
     this._checkNightMode();
+    // Im Räume-Modus: Reißbrett als Hintergrund ZUERST
+    if (mode === "rooms") this._drawGrid();
     this._drawRooms(rooms);
-    this._drawGrid();
+    if (mode !== "rooms") this._drawGrid();
     this._drawScanners(scanners);
 
     // Draw light glows BEFORE devices (they are part of the room layer)
@@ -11162,6 +11525,9 @@ draw();
         if (this._opts?.journeyEnabled !== false) this._collectJourneySnapshot();
       }
     }
+    // Canvas-State nach _drawLights bereinigen (Türen/Fenster immer sichtbar)
+    this._ctx.globalAlpha = 1;
+    this._ctx.globalCompositeOperation = 'source-over';
     this._drawDoors();
     this._drawWindows();
     // mmWave sensor overlay (targets + FOV + heatmap)
@@ -11241,6 +11607,9 @@ draw();
     if (mode === "scanners")   this._drawScannerOverlay();
     if (mode === "lights")     this._drawLightsOverlay();
     this._drawNightOverlay(this._ctx, this._canvas.width / (window.devicePixelRatio||1), this._canvas.height / (window.devicePixelRatio||1));
+    // Kartenrotation aufheben
+    if (this._rotActive) { ctx.restore(); this._rotActive = false; }
+    // (DPR-Scale im 2D-Pfad nicht mehr aktiv – _f2c rechnet in physischen Pixeln)
   }
 
 
@@ -12322,6 +12691,11 @@ draw();
   }
 
   _drawGrid() {
+    // Reißbrett im Räume-Modus
+    if (this._mode === "rooms") {
+      this._drawReissbrett();
+      return;
+    }
     if (this._mode !== "calibrate") {
       // In non-calibrate modes just show faint calibrated-point markers
       if (this._mode !== "view") return;
@@ -12523,12 +12897,12 @@ draw();
     const ctx = this._ctx;
     const wins = this._mode === "rooms" ? this._pendingWindows : (this._windows || []);
     const isEditMode = this._mode === "rooms";
-    const floorW = this._data?.floor_w || 10;
-    const scale  = this._canvas.width / floorW;
+    const { scale } = this._floorScale();
 
     wins.forEach((w, i) => {
       const c   = this._f2c(w.x, w.y);
-      const len = (w.width || 1.0) * scale;
+      const _zW = this._opts?.zoomPan ? (this._zoom||1) : 1;
+      const len = (w.width || 1.0) * scale * _zW;
       const ang = (w.angle || 0);  // 0=horizontal wall, PI/2=vertical wall
 
       // Determine state color from entity
@@ -12679,9 +13053,9 @@ _drawDoors() {
     doors.forEach((d, i) => {
       const c   = this._f2c(d.x, d.y);
       const w   = d.width || 0.9;
-      const floorW = this._data?.floor_w || 10;
-      const scale  = this._canvas.width / floorW;
-      const pw  = w * scale;   // door width in px
+      const { scale: _scDoor } = this._floorScale();
+      const _zD = this._opts?.zoomPan ? (this._zoom||1) : 1;
+      const pw  = w * _scDoor * _zD;   // door width in px
       const ang = this._doorAngle(d);  // 0=horizontal, PI/2=vertical
 
       ctx.save();
@@ -12782,6 +13156,169 @@ _drawDoors() {
     ctx.fillText("KALIBRIERUNG", bx + 7, by + 13);
     ctx.fillStyle = "#00ff88"; ctx.font = "10px 'JetBrains Mono',monospace";
     ctx.fillText(`${done} / ${total} (${pct}%)`, bx + 7, by + 27);
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // REISSBRETT – Technisches Zeichenpapier-Hintergund für Räume-Modus
+  // ══════════════════════════════════════════════════════════════════════════
+  _drawReissbrett() {
+    const ctx = this._ctx;
+    const c   = this._canvas;
+    const dpr = window.devicePixelRatio || 1;
+    // Physische Pixel (kein DPR-Scale aktiv)
+    const cw  = c.width;
+    const ch  = c.height;
+    const fw  = this._data?.floor_w || 10;
+    const fh  = this._data?.floor_h || 10;
+    const step = this._data?.grid_step || 0.5;
+
+    // Ankerpunkte des Grundrisses im Canvas
+    const tl = this._f2c(0, 0);
+    const br = this._f2c(fw, fh);
+    const ppm = (br.x - tl.x) / fw; // Pixel pro Meter
+
+    // ── Hintergrund: cremefarbiges Zeichenpapier ──────────────────────────
+    ctx.fillStyle = "#f5f0e8";
+    ctx.fillRect(0, 0, cw, ch);
+
+    // Leichter Rand (Zeichenblock-Effekt)
+    ctx.strokeStyle = "rgba(160,130,90,0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(1, 1, cw - 2, ch - 2);
+
+    // ── Rasterlinien ─────────────────────────────────────────────────────
+    const drawLines = (isHorizontal) => {
+      const total = isHorizontal ? fh : fw;
+      for (let m = 0; m <= total + 1e-6; m = Math.round((m + step) * 100) / 100) {
+        const isMeter = Math.abs(m - Math.round(m)) < 0.01;
+        const px = isHorizontal
+          ? tl.y + m * ppm
+          : tl.x + m * ppm;
+        if (px < -2 || px > (isHorizontal ? ch : cw) + 2) continue;
+        ctx.strokeStyle = isMeter
+          ? "rgba(100,130,180,0.40)"
+          : "rgba(100,130,180,0.18)";
+        ctx.lineWidth = isMeter ? 0.8 : 0.35;
+        ctx.beginPath();
+        if (isHorizontal) {
+          ctx.moveTo(0, px); ctx.lineTo(cw, px);
+        } else {
+          ctx.moveTo(px, 0); ctx.lineTo(px, ch);
+        }
+        ctx.stroke();
+      }
+    };
+    drawLines(false); // Vertikale Linien
+    drawLines(true);  // Horizontale Linien
+
+    // ── Kreuzpunkte an Gitter-Schnitten ──────────────────────────────────
+    if (ppm * step > 10) { // nur zeichnen wenn Abstand groß genug
+      ctx.fillStyle = "rgba(100,130,180,0.30)";
+      for (let mx = 0; mx <= fw + 1e-6; mx = Math.round((mx + step) * 100) / 100) {
+        for (let my = 0; my <= fh + 1e-6; my = Math.round((my + step) * 100) / 100) {
+          const px = tl.x + mx * ppm, py = tl.y + my * ppm;
+          ctx.beginPath(); ctx.arc(px, py, 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+
+    // ── X-Achse Beschriftung (Meter oben) ────────────────────────────────
+    ctx.font = "bold 8px 'JetBrains Mono', monospace";
+    ctx.fillStyle = "rgba(80,100,160,0.75)";
+    ctx.textBaseline = "bottom";
+    ctx.textAlign    = "center";
+    const labelStepX = ppm >= 40 ? 1 : ppm >= 20 ? 2 : 5;
+    for (let mx = 0; mx <= fw + 1e-6; mx += labelStepX) {
+      const px = tl.x + mx * ppm;
+      if (px < 8 || px > cw - 8) continue;
+      // Tick-Strich
+      ctx.strokeStyle = "rgba(80,100,160,0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(px, tl.y - 1); ctx.lineTo(px, tl.y - 5); ctx.stroke();
+      // Zahl
+      ctx.fillText(mx + "m", px, tl.y - 6);
+    }
+
+    // ── Y-Achse Beschriftung (Meter links) ───────────────────────────────
+    ctx.textAlign    = "right";
+    ctx.textBaseline = "middle";
+    const labelStepY = ppm >= 40 ? 1 : ppm >= 20 ? 2 : 5;
+    for (let my = 0; my <= fh + 1e-6; my += labelStepY) {
+      const py = tl.y + my * ppm;
+      if (py < 8 || py > ch - 8) continue;
+      ctx.strokeStyle = "rgba(80,100,160,0.6)";
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(tl.x - 1, py); ctx.lineTo(tl.x - 5, py); ctx.stroke();
+      ctx.fillStyle = "rgba(80,100,160,0.75)";
+      ctx.fillText(my + "m", tl.x - 7, py);
+    }
+
+    // ── Maßstab-Leiste (unten links) ─────────────────────────────────────
+    const barLen = Math.min(ppm * 2, ppm * Math.floor(fw / 4)); // max 1/4 der Breite
+    const barM   = barLen / ppm; // Meter die der Balken zeigt
+    const barX   = tl.x + 4;
+    const barY   = br.y + 10;
+    if (barY + 14 < ch && barLen > 15) {
+      ctx.strokeStyle = "rgba(60,80,140,0.8)";
+      ctx.lineWidth   = 1.5;
+      // Balken
+      ctx.beginPath(); ctx.moveTo(barX, barY); ctx.lineTo(barX + barLen, barY); ctx.stroke();
+      // Endstriche
+      [[barX, barY], [barX + barLen, barY]].forEach(([x, y]) => {
+        ctx.beginPath(); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4); ctx.stroke();
+      });
+      // Mittelteilung
+      if (barM > 1) {
+        const mid = barX + barLen / 2;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath(); ctx.moveTo(mid, barY - 3); ctx.lineTo(mid, barY + 3); ctx.stroke();
+      }
+      ctx.font = "bold 9px 'JetBrains Mono', monospace";
+      ctx.fillStyle = "rgba(60,80,140,0.9)";
+      ctx.textAlign    = "center";
+      ctx.textBaseline = "top";
+      const barLabel = barM % 1 === 0 ? barM + "m" : barM.toFixed(1) + "m";
+      ctx.fillText(barLabel, barX + barLen / 2, barY + 5);
+      ctx.textAlign = "left";
+      ctx.fillText("0", barX, barY + 5);
+    }
+
+    // ── Info-Leiste oben links ────────────────────────────────────────────
+    ctx.font = "8px 'JetBrains Mono', monospace";
+    ctx.textAlign    = "left";
+    ctx.textBaseline = "top";
+    ctx.fillStyle    = "rgba(100,110,160,0.65)";
+    ctx.fillText(`${fw}×${fh}m  |  Raster: ${step}m`, 4, 4);
+
+    // ── Snap-Cursor im Zeichen-Modus ─────────────────────────────────────
+    if (this._mouseFloor && this._roomSubMode === "draw") {
+      const snap = this._snapToGrid(this._mouseFloor.mx, this._mouseFloor.my);
+      const sc   = this._f2c(snap.mx, snap.my);
+      // Fadenkreuz
+      ctx.strokeStyle = "rgba(140,100,240,0.8)";
+      ctx.lineWidth   = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(sc.x - 8, sc.y); ctx.lineTo(sc.x + 8, sc.y); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(sc.x, sc.y - 8); ctx.lineTo(sc.x, sc.y + 8); ctx.stroke();
+      ctx.setLineDash([]);
+      // Koordinaten
+      ctx.font = "8px 'JetBrains Mono', monospace";
+      ctx.fillStyle = "#a78bfa";
+      ctx.textAlign = "left"; ctx.textBaseline = "bottom";
+      ctx.fillText(`${snap.mx.toFixed(2)}/${snap.my.toFixed(2)}m`, sc.x + 9, sc.y - 2);
+    }
+
+    ctx.textBaseline = "alphabetic";
+    ctx.textAlign    = "left";
+  }
+
+  _snapToGrid(mx, my) {
+    const step = this._data?.grid_step || 0.5;
+    return {
+      mx: parseFloat((Math.round(mx / step) * step).toFixed(3)),
+      my: parseFloat((Math.round(my / step) * step).toFixed(3)),
+    };
   }
 
   _drawRoomDrawingOverlay() {
@@ -16101,7 +16638,14 @@ _drawDoors() {
           const isA = (this._3dTheme||"default") === th.id;
           btn.style.cssText = `padding:5px 6px;border-radius:5px;text-align:left;cursor:pointer;font-family:inherit;border:1px solid ${isA?"#00e5ff":"var(--border)"};background:${isA?"#00e5ff18":"var(--surf3)"}`;
           btn.innerHTML = `<div style="display:flex;align-items:center;gap:4px"><span style="font-size:12px">${th.icon}</span><span style="font-size:7.5px;font-weight:700;color:${isA?"#00e5ff":"var(--text)"}">${th.label}</span></div><div style="font-size:6.5px;color:#445566;margin-top:1px;padding-left:16px">${th.desc}</div>`;
-          btn.addEventListener("click", () => { this._3dTheme=th.id; renderThemeBtns(); this._draw(); });
+          btn.addEventListener("click", async () => {
+            this._3dTheme = th.id;
+            if (!this._opts) this._opts = {};
+            this._opts.theme3d = th.id;
+            renderThemeBtns(); this._draw();
+            await this._saveOptions();
+            this._showToast("Theme gespeichert: " + th.label);
+          });
           themeGrid.appendChild(btn);
         });
       };
@@ -17017,8 +17561,8 @@ _drawDoors() {
       const key = room.name || `${room.x1},${room.y1}`;
       if (!this._heatmapData[key]) this._heatmapData[key] = [];
       this._heatmapData[key].push({ ts: now, devId: dev.device_id });
-      // Keep last hour
-      const cutoff = now - 3600000;
+      // 24h behalten
+      const cutoff = now - 24 * 3600000;
       this._heatmapData[key] = this._heatmapData[key].filter(e => e.ts > cutoff);
     });
   }
@@ -17033,15 +17577,16 @@ _drawDoors() {
     rooms.forEach(room => {
       const key    = room.name || `${room.x1},${room.y1}`;
       const events = this._heatmapData[key] || [];
-      // Count events weighted by recency
+      // 24h akkumuliert – frische Events (< 1h) stärker gewichten
+      const dayMs = 24 * 3600000;
       let heat = 0;
       events.forEach(ev => {
-        const age = (now - ev.ts) / hour; // 0=now, 1=1h ago
-        heat += Math.max(0, 1 - age);
+        const age = now - ev.ts;
+        if (age > dayMs) return;
+        heat += age < hour ? (1 - age/hour) * 0.7 + 0.3 : 0.3;
       });
-      if (heat < 0.05) return;
-
-      const intensity = Math.min(1, heat / 10);
+      if (heat < 0.3) return;
+      const intensity = Math.min(1, heat / 50);
       const c1 = this._f2c(room.x1, room.y1);
       const c2 = this._f2c(room.x2, room.y2);
       const cx = (c1.x+c2.x)/2, cy = (c1.y+c2.y)/2;
@@ -17601,6 +18146,7 @@ _drawDoors() {
     const t = Date.now() / 1000;
 
     sensors.forEach(sensor => {
+      if (sensor.hidden) return;  // ausgeblendet
       if (sensor.mx == null || sensor.my == null) return;
 
       // ── FOV-Kegel (flach auf Boden) ──────────────────────────────────────
@@ -17616,13 +18162,14 @@ _drawDoors() {
         ctx.globalAlpha = 0.13;
         ctx.fillStyle = col;
         ctx.beginPath();
-        const sc3 = project(sensor.mx, sensor.my, 0);
+        const _sH3 = sensor.mount_height_m || 1.5;
+        const sc3 = project(sensor.mx, sensor.my, _sH3);  // Kegel-Spitze auf Montagehöhe
         ctx.moveTo(sc3.x, sc3.y);
         for (let i = 0; i <= steps; i++) {
           const a = baseAngle - fovAngle/2 + (fovAngle * i / steps);
           const px3 = sensor.mx + Math.cos(a) * rangeM;
           const py3 = sensor.my + Math.sin(a) * rangeM;
-          const pp3 = project(px3, py3, 0);
+          const pp3 = project(px3, py3, 0);  // Boden-Auftreffpunkt
           ctx.lineTo(pp3.x, pp3.y);
         }
         ctx.closePath();
@@ -17636,8 +18183,19 @@ _drawDoors() {
         ctx.restore();
       }
 
-      // ── Sensor-Dot ───────────────────────────────────────────────────────
-      const sc3 = project(sensor.mx, sensor.my, 0.05);
+      // ── Sensor-Körper auf korrekter Montagehöhe ─────────────────────────
+      const sensorH = sensor.mount_height_m || 1.5;
+      const sc3 = project(sensor.mx, sensor.my, sensorH);
+      // Verbindungslinie zum Boden
+      const scFloor = project(sensor.mx, sensor.my, 0);
+      const scol2 = sensor.color || "#ff6b35";
+      ctx.save();
+      ctx.strokeStyle = scol2 + "44";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(scFloor.x, scFloor.y); ctx.lineTo(sc3.x, sc3.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
       const scol = sensor.color || "#ff6b35";
       const pulse3 = 0.6 + 0.4 * Math.sin(t * 2.5);
       ctx.save();
@@ -17908,6 +18466,116 @@ _drawDoors() {
     render(); overlay.appendChild(modal); document.body.appendChild(overlay);
   }
 
+
+  _initCompass() {
+    const wrap    = this.shadowRoot.getElementById("compass-wrap");
+    const svg     = this.shadowRoot.getElementById("compass-svg");
+    const degEl   = this.shadowRoot.getElementById("compass-deg");
+    const resetBtn= this.shadowRoot.getElementById("compass-reset");
+    if (!wrap || !svg) return;
+
+    this._mapRotation    = this._mapRotation    || 0;
+    this._mapRotationDeg = this._mapRotationDeg || 0;
+
+    // ── Statische Ring-Elemente ──────────────────────────────────────────
+    const ticksG  = svg.querySelector("#compass-ticks");
+    const labelsG = svg.querySelector("#compass-labels");
+
+    for (let i=0; i<12; i++) {
+      const a=i*30*Math.PI/180, r1=i%3===0?26:29, r2=33;
+      const cos=Math.cos(a-Math.PI/2), sin=Math.sin(a-Math.PI/2);
+      const t=document.createElementNS("http://www.w3.org/2000/svg","line");
+      t.setAttribute("x1",36+r1*cos); t.setAttribute("y1",36+r1*sin);
+      t.setAttribute("x2",36+r2*cos); t.setAttribute("y2",36+r2*sin);
+      t.setAttribute("stroke",i%3===0?"#334455":"#1c2535");
+      t.setAttribute("stroke-width",i%3===0?"1.5":"0.8");
+      ticksG.appendChild(t);
+    }
+    ["N","O","S","W"].forEach((dir,i) => {
+      const a=i*90*Math.PI/180, r=20;
+      const tx=document.createElementNS("http://www.w3.org/2000/svg","text");
+      tx.setAttribute("x",36+r*Math.cos(a-Math.PI/2));
+      tx.setAttribute("y",36+r*Math.sin(a-Math.PI/2)+3);
+      tx.setAttribute("text-anchor","middle"); tx.setAttribute("font-size","7");
+      tx.setAttribute("font-family","JetBrains Mono,monospace"); tx.setAttribute("font-weight","700");
+      tx.setAttribute("fill",dir==="N"?"#00e5ff":"#334455");
+      tx.textContent=dir; labelsG.appendChild(tx);
+    });
+
+    const needle = svg.querySelector("#compass-needle");
+
+    const CARD = ["N","NO","O","SO","S","SW","W","NW"];
+    const updateCompass = () => {
+      const d = this._mapRotationDeg || 0;
+      needle.setAttribute("transform",`rotate(${d},36,36)`);
+      // Ring dreht sich gegenläufig (erscheint stationär)
+      labelsG.setAttribute("transform",`rotate(${-d},36,36)`);
+      ticksG.setAttribute("transform",`rotate(${-d},36,36)`);
+      const idx = Math.round(((d%360)+360)%360/45)%8;
+      degEl.textContent = Math.round(d)+"° "+CARD[idx];
+    };
+    updateCompass();
+    this._compassUpdate = updateCompass;
+
+    // ── Drag-Interaktion ─────────────────────────────────────────────────
+    let dragging=false, startA=0, startRot=0;
+
+    const angle = (e) => {
+      const r=svg.getBoundingClientRect();
+      const px=(e.clientX??e.touches?.[0]?.clientX??0)-(r.left+r.width/2);
+      const py=(e.clientY??e.touches?.[0]?.clientY??0)-(r.top+r.height/2);
+      return Math.atan2(py,px)*180/Math.PI;
+    };
+
+    svg.addEventListener("mousedown", e=>{
+      e.preventDefault(); e.stopPropagation();
+      dragging=true; startA=angle(e); startRot=this._mapRotationDeg||0;
+      svg.style.cursor="grabbing";
+    }, {passive:false});
+
+    svg.addEventListener("touchstart", e=>{
+      e.preventDefault(); e.stopPropagation();
+      dragging=true; startA=angle(e); startRot=this._mapRotationDeg||0;
+    }, {passive:false});
+
+    const onMove = e=>{
+      if(!dragging) return; e.preventDefault();
+      const d = angle(e)-startA;
+      this._mapRotationDeg = ((startRot+d)%360+360)%360;
+      this._mapRotation    = this._mapRotationDeg*Math.PI/180;
+      updateCompass(); this._draw();
+    };
+    const onUp = ()=>{
+      if(!dragging) return; dragging=false;
+      svg.style.cursor="grab";
+      if(!this._opts) this._opts={};
+      this._opts.mapRotationDeg = this._mapRotationDeg;
+      this._saveOptions();
+    };
+
+    window.addEventListener("mousemove", onMove, {passive:false});
+    window.addEventListener("touchmove", onMove, {passive:false});
+    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("touchend",  onUp);
+
+    // ── Reset ────────────────────────────────────────────────────────────
+    const doReset = ()=>{
+      this._mapRotationDeg=0; this._mapRotation=0;
+      if(this._opts) this._opts.mapRotationDeg=0;
+      updateCompass(); this._draw(); this._saveOptions();
+      this._showToast("Norden ausgerichtet");
+    };
+    resetBtn?.addEventListener("click", doReset);
+    svg.addEventListener("dblclick", doReset);
+
+    // ── Kompass im 3D-Modus ausblenden ───────────────────────────────────
+    this._updateCompassVisibility = ()=>{
+      const is3D = this._mode==="view" && this._opts?.show3D;
+      wrap.style.display = is3D ? "none" : "block";
+    };
+    this._updateCompassVisibility();
+  }
+
   // ══════════════════════════════════════════════════════════════════════════
   // 3D THEMES – jedes Theme definiert alle visuellen Parameter
   // ══════════════════════════════════════════════════════════════════════════
@@ -18142,8 +18810,12 @@ _drawDoors() {
     // Texturen laden/aktualisieren
     this._loadTextures();
     const dpr = window.devicePixelRatio || 1;
-    const cw  = this._canvas.width  / dpr;
-    const ch  = this._canvas.height / dpr;
+    // Canvas-Kontext auf CSS-Pixel skalieren (HiDPI/Retina Fix)
+    // Alle Koordinaten arbeiten dann in CSS-Pixel, Canvas-Auflösung ist dpr-fach höher
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    const cw  = this._canvasCssW || (this._canvas.width  / dpr);
+    const ch  = this._canvasCssH || (this._canvas.height / dpr);
     const fw  = this._data?.floor_w || 10;
     const fh  = this._data?.floor_h || 10;
     const wallH = Math.max(0.5, Math.min(6, this._wallHeight ?? 2.5));
@@ -18796,7 +19468,9 @@ _drawDoors() {
     lights.forEach(light => {
       if (light.mx==null||light.my==null) return;
       let isOn=true;
-      if (light.entity&&this._hass?.states) isOn=this._hass.states[light.entity]?.state==="on";
+      // Wenn light.on explizit gesetzt (Simulations-Modus im LIGHTS-Tab)
+      // _isLightOn berücksichtigt Simulations-Modus vs. echten HA-State
+      isOn = this._isLightOn(light);
       const ri = this._lightRoomIdx(light, rooms);
 
       // Lichtfarbe aus Entity-State
@@ -18895,13 +19569,14 @@ _drawDoors() {
         const neighbourName = connects.find(n => n !== myRoom.name);
         if (!neighbourName) return;
         const nRoom = rooms.find(r2 => r2.name === neighbourName);
-        if (nRoom) extraClipRooms.push({ room: nRoom, factor: 0.30 });
+        if (nRoom) extraClipRooms.push({ room: nRoom, factor: 0.55 }); // Türen: kräftiger Bleed
       });
       allWindows.forEach(win => {
         const connects = win.connects||[];
         if (!connects.includes(myRoom.name)) return;
         const isWinOpen = (() => {
-          if (!win.entity_id || !this._hass?.states) return false;
+          if (!win.entity_id) return true; // kein Entity = immer offen (schwacher Bleed)
+          if (!this._hass?.states) return true;
           const s = this._hass.states[win.entity_id]?.state;
           return s==="open"||s==="on";
         })();
@@ -18909,7 +19584,7 @@ _drawDoors() {
         const neighbourName = connects.find(n => n !== myRoom.name);
         if (!neighbourName) return;
         const nRoom = rooms.find(r2 => r2.name === neighbourName);
-        if (nRoom) extraClipRooms.push({ room: nRoom, factor: 0.15 });
+        if (nRoom) extraClipRooms.push({ room: nRoom, factor: 0.30 }); // Fenster: mittlerer Bleed
       });
 
       // Berechne Radius: Boden-Skala basierend auf Raumgröße
@@ -18993,7 +19668,7 @@ _drawDoors() {
         bleedGrd.addColorStop(0, `rgba(${rr},${gg},${bb},${alpha3D*factor})`);
         bleedGrd.addColorStop(1, `rgba(${rr},${gg},${bb},0)`);
         ctx.fillStyle = bleedGrd;
-        ctx.beginPath(); ctx.arc(floorPos.x,floorPos.y,glowRadiusPx*1.5,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(floorPos.x,floorPos.y,glowRadiusPx*2.2,0,Math.PI*2); ctx.fill();
         ctx.restore();
       });
     });
@@ -19160,7 +19835,9 @@ _drawDoors() {
       this._drawMmwave3D(ctx, project, unitPx, wallH);
       if (this._mode === "view") this._updateMmwavePersonsSidebar();
     }
-}
+    // DPR-Skalierung aufheben
+    ctx.restore();
+  }
 
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -19586,9 +20263,10 @@ if (!customElements.get("ble-positioning-card")) {
 window.customCards = window.customCards || [];
 window.customCards.push({
   type:        "ble-positioning-card",
-  name:        "BLE Indoor Positioning",
-  description: "Live indoor positioning via BLE fingerprinting",
+  name:        "BLE Positioning",
+  description: "Live indoor positioning via BLE fingerprinting – Dashboard card",
   preview:     false,
+  documentationURL: "https://github.com/xRanKhx/ble-position",
 });
 
 console.info(
@@ -19654,43 +20332,159 @@ if (!customElements.get("ha-panel-ble-positioning")) {
 }
 
 class BLEPositioningCardEditor extends HTMLElement {
-  constructor(){super();this._config={};this._built=false;}
-  set hass(h){this._hass=h;if(!this._built)this._build();}
-  setConfig(cfg){this._config={...cfg};if(this._built)this._sync();}
-  _fire(p){var c=Object.assign({type:"ble-positioning-card"},this._config,p);this.dispatchEvent(new CustomEvent("config-changed",{detail:{config:c},bubbles:true,composed:true}));this._config=c;}
-  _build(){
-    this._built=true;
-    var s=document.createElement("style");
-    s.textContent=".ed{padding:12px;font-family:sans-serif;display:flex;flex-direction:column;gap:8px}.row{display:flex;align-items:center;gap:8px}label{font-size:12px;color:#555;min-width:130px}input[type=text],select{flex:1;padding:5px;border:1px solid #ccc;border-radius:5px;font-size:12px}input[type=number]{width:80px;padding:5px;border:1px solid #ccc;border-radius:5px;font-size:12px}.trow{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid #f0f0f0}.trow span{font-size:12px;color:#444}input[type=checkbox]{width:18px;height:18px;cursor:pointer;accent-color:#00b4cc}h4{margin:6px 0 2px;font-size:10px;text-transform:uppercase;color:#999}.info{font-size:10px;color:#aaa;line-height:1.5}";
-    this.appendChild(s);
-    this._wrap=document.createElement("div");this._wrap.className="ed";
-    this.appendChild(this._wrap);this._sync();
+  constructor() {
+    super();
+    this._config = {};
+    this._built  = false;
   }
-  _sync(){
-    if(!this._wrap)return;
-    this._wrap.innerHTML="";
-    var cfg=this._config,W=this._wrap,self=this;
-    function row(l,i){var d=document.createElement("div");d.className="row";var lb=document.createElement("label");lb.textContent=l;d.append(lb,i);return d;}
-    function inp(t,v,a){var i=document.createElement("input");i.type=t;i.value=v||"";if(a)Object.keys(a).forEach(function(k){i.setAttribute(k,a[k]);});return i;}
-    var eId=inp("text",cfg.entry_id);eId.placeholder="z.B. abc123...";
-    eId.onchange=function(){self._fire({entry_id:eId.value.trim()});};
-    W.appendChild(row("Entry ID *",eId));
-    var ht=inp("number",cfg.card_height||400,{min:150,max:1200,step:50});
-    ht.onchange=function(){self._fire({card_height:parseInt(ht.value)||400});};
-    W.appendChild(row("Hoehe (px)",ht));
-    var th=document.createElement("select");
-    ["auto","dark","light"].forEach(function(o){var op=document.createElement("option");op.value=op.textContent=o;if(o===(cfg.theme_mode||"auto"))op.selected=true;th.appendChild(op);});
-    th.onchange=function(){self._fire({theme_mode:th.value});};
-    W.appendChild(row("Theme",th));
-    var h4=document.createElement("h4");h4.textContent="Ebenen";W.appendChild(h4);
-    [["show_devices","Geraete"],["show_rooms","Raumnamen"],["show_doors","Tueren & Fenster"],["show_scanners","Scanner"],["show_alarms","Alarme"],["show_info","Info-Sensoren"],["show_grid","Gitterlinien"]].forEach(function(pair){
-      var d=document.createElement("div");d.className="trow";
-      var sp=document.createElement("span");sp.textContent=pair[1];
-      var cb=inp("checkbox","");cb.checked=(cfg[pair[0]]!==false);
-      cb.onchange=(function(k){return function(){self._fire({[k]:cb.checked});};})(pair[0]);
-      d.append(sp,cb);W.appendChild(d);
+  set hass(h) { this._hass = h; if (!this._built) this._build(); }
+  setConfig(cfg) { this._config = {...cfg}; if (this._built) this._sync(); }
+
+  _fire(p) {
+    const c = Object.assign({ type: "ble-positioning-card" }, this._config, p);
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: c }, bubbles: true, composed: true }));
+  }
+
+  _build() {
+    this._built = true;
+    const style = document.createElement("style");
+    style.textContent = `
+      .ed { padding:14px; font-family:'JetBrains Mono',monospace; display:flex; flex-direction:column; gap:10px; background:#07090d; color:#c8d8ec; font-size:12px; }
+      .section { border:1px solid #1c2535; border-radius:8px; padding:10px 12px; }
+      .section-title { font-size:9px; font-weight:700; color:#00e5ff; letter-spacing:0.5px; margin-bottom:8px; text-transform:uppercase; }
+      .row { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; gap:8px; }
+      .row label { font-size:11px; color:#c8d8ec; flex:1; }
+      .row input[type=text], .row input[type=number], .row select {
+        background:#0d1219; border:1px solid #1c2535; border-radius:4px; color:#c8d8ec;
+        padding:4px 8px; font-size:11px; font-family:inherit; width:160px;
+      }
+      .row input[type=text]:focus, .row input[type=number]:focus, .row select:focus {
+        outline:none; border-color:#00e5ff;
+      }
+      .row input[type=checkbox] { width:16px; height:16px; accent-color:#00e5ff; cursor:pointer; }
+      .toggle-row { display:flex; align-items:center; justify-content:space-between; padding:3px 0; }
+      .toggle-row label { font-size:11px; color:#c8d8ec; }
+      .info { font-size:9px; color:#445566; margin-top:4px; line-height:1.5; }
+      .theme-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:4px; }
+      .theme-btn { padding:5px 3px; border-radius:4px; border:1px solid #1c2535; background:#0d1219; color:#445566; font-size:8px; cursor:pointer; text-align:center; font-family:inherit; transition:all 0.15s; }
+      .theme-btn.active { border-color:#00e5ff; color:#00e5ff; background:#00e5ff11; }
+      .theme-btn:hover { border-color:#334455; color:#c8d8ec; }
+    `;
+    this.appendChild(style);
+    this._wrap = document.createElement("div");
+    this._wrap.className = "ed";
+    this.appendChild(this._wrap);
+    this._sync();
+  }
+
+  _sync() {
+    if (!this._wrap) return;
+    this._wrap.innerHTML = "";
+    const cfg = this._config;
+    const self = this;
+
+    const section = (title) => {
+      const s = document.createElement("div"); s.className = "section";
+      const t = document.createElement("div"); t.className = "section-title"; t.textContent = title;
+      s.appendChild(t);
+      this._wrap.appendChild(s);
+      return s;
+    };
+
+    const row = (label, input) => {
+      const r = document.createElement("div"); r.className = "row";
+      const l = document.createElement("label"); l.textContent = label;
+      r.append(l, input);
+      return r;
+    };
+
+    const inp = (type, val, attrs={}) => {
+      const i = document.createElement("input"); i.type = type;
+      if (type === "checkbox") i.checked = val;
+      else i.value = val ?? "";
+      Object.assign(i, attrs);
+      return i;
+    };
+
+    const toggle = (label, key, defaultVal=true) => {
+      const r = document.createElement("div"); r.className = "toggle-row";
+      const l = document.createElement("label"); l.textContent = label;
+      const cb = inp("checkbox", cfg[key] !== undefined ? cfg[key] : defaultVal);
+      cb.onchange = () => self._fire({ [key]: cb.checked });
+      r.append(l, cb);
+      return r;
+    };
+
+    // ── Verbindung ────────────────────────────────────────────────
+    const s1 = section("Verbindung");
+    const eId = inp("text", cfg.entry_id || ""); eId.placeholder = "z.B. abc123..."; eId.style.width = "200px";
+    eId.onchange = () => self._fire({ entry_id: eId.value.trim() });
+    s1.appendChild(row("Entry ID *", eId));
+    const info1 = document.createElement("div"); info1.className = "info";
+    info1.textContent = "* Entry ID findest du unter Einstellungen → Geräte & Dienste → BLE Positioning";
+    s1.appendChild(info1);
+
+    // ── Darstellung ───────────────────────────────────────────────
+    const s2 = section("Darstellung");
+
+    const ht = inp("number", cfg.card_height || 500, { min:200, max:1200, step:50 }); ht.style.width="80px";
+    ht.onchange = () => self._fire({ card_height: parseInt(ht.value) || 500 });
+    s2.appendChild(row("Kartenhöhe (px)", ht));
+
+    const dmSel = document.createElement("select"); dmSel.style.width="160px";
+    [["view","Live-Ansicht (view)"],["cal","Kalibrierung (cal)"],["rooms","Räume (rooms)"]].forEach(([v,l2])=>{
+      const o=document.createElement("option"); o.value=v; o.textContent=l2;
+      if((cfg.default_mode||"view")===v) o.selected=true;
+      dmSel.appendChild(o);
     });
-    var inf=document.createElement("div");inf.className="info";inf.textContent="* Entry ID: Einstellungen > Geraete & Dienste > BLE Positioning";W.appendChild(inf);
+    dmSel.onchange = () => self._fire({ default_mode: dmSel.value });
+    s2.appendChild(row("Standard-Tab", dmSel));
+
+    // ── 3D-Theme ──────────────────────────────────────────────────
+    const s3 = section("3D-Theme");
+    const themeLabel = document.createElement("div"); themeLabel.style.cssText="font-size:10px;color:#c8d8ec;margin-bottom:4px";
+    themeLabel.textContent = "Wähle das Standard-Theme für diese Karte:";
+    s3.appendChild(themeLabel);
+    const themeGrid = document.createElement("div"); themeGrid.className = "theme-grid";
+    const THEMES = [
+      ["default","Standard","🏠"],["soft","Weiches Licht","🌅"],["glass","Glas","🪟"],
+      ["neon","Neon","⚡"],["arch","Architektur","📐"],["blueprint","Blueprint","🔵"],
+      ["midnight","Midnight","🌙"],["comic","Comic","💬"],["painterly","Aquarell","🎨"],
+      ["realistic","Realistisch","🏡"],
+    ];
+    const curTheme = cfg.theme_3d || "default";
+    THEMES.forEach(([id, label, icon]) => {
+      const btn = document.createElement("button"); btn.className = "theme-btn" + (curTheme===id?" active":"");
+      btn.textContent = label;
+      btn.title = icon + " " + label;
+      btn.onclick = () => {
+        themeGrid.querySelectorAll(".theme-btn").forEach(b=>b.classList.remove("active"));
+        btn.classList.add("active");
+        self._fire({ theme_3d: id });
+      };
+      themeGrid.appendChild(btn);
+    });
+    s3.appendChild(themeGrid);
+
+    // ── Ebenen ────────────────────────────────────────────────────
+    const s4 = section("Ebenen anzeigen");
+    [
+      ["show_devices",  "Personen / Geräte",    true],
+      ["show_rooms",    "Räume + Labels",        true],
+      ["show_doors",    "Türen & Fenster",       true],
+      ["show_scanners", "Scanner",               true],
+      ["show_grid",     "Gitterlinien",          true],
+      ["show_alarms",   "Alarm-Overlay",         true],
+      ["show_info",     "Info-Sensoren",         true],
+      ["show_3d",       "3D-Modus",              true],
+    ].forEach(([k,l2,def]) => s4.appendChild(toggle(l2, k, cfg[k]!==undefined ? cfg[k] : def)));
+
+    // ── Erweitert ─────────────────────────────────────────────────
+    const s5 = section("Erweitert");
+    s5.appendChild(toggle("Dashboard-Modus (kein Header)", "dashboard_mode", cfg.dashboard_mode !== false));
+    const dId = inp("text", cfg.device_id || ""); dId.placeholder = "Optional..."; dId.style.width="200px";
+    dId.onchange = () => self._fire({ device_id: dId.value.trim() });
+    s5.appendChild(row("Standard-Gerät (device_id)", dId));
   }
 }
 if (!customElements.get("ble-positioning-card-editor")) {

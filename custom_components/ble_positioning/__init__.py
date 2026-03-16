@@ -29,9 +29,7 @@ _TRACKER_URL       = "/ble_positioning/ble-positioning-tracker.js" # internal st
 # Cache-busting: version appended at runtime in async_setup_entry
 _CARD_LOCAL_URL      = "/local/ble_positioning/ble-positioning-card.js"      # Lovelace
 _TRACKER_LOCAL_URL   = "/local/ble_positioning/ble-positioning-tracker.js"  # Lovelace
-_VIEW_CARD_JS        = pathlib.Path(__file__).parent / "frontend" / "ble-positioning-view-card.js"
-_VIEW_CARD_URL       = "/ble_positioning/ble-positioning-view-card.js"
-_VIEW_CARD_LOCAL_URL = "/local/ble_positioning/ble-positioning-view-card.js"
+# View-Card entfernt (war überflüssiger Wrapper für ble-positioning-card)
 _WWW_SUBDIR        = "ble_positioning"  # all www files live in /config/www/ble_positioning/
 
 # Version aus manifest.json – einmalig beim Modul-Import geladen
@@ -125,7 +123,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     await hass.async_add_executor_job(_copy_js_files, hass)
 
     # Register static path as fallback
-    for url, path in [(_CARD_URL, _CARD_JS), (_TRACKER_URL, _TRACKER_JS), (_VIEW_CARD_URL, _VIEW_CARD_JS)]:
+    for url, path in [(_CARD_URL, _CARD_JS), (_TRACKER_URL, _TRACKER_JS)]:
         try:
             hass.http.register_static_path(url, str(path), cache_headers=False)
         except Exception:
@@ -145,7 +143,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if lovelace and hasattr(lovelace, "resources"):
             existing_urls = {r.get("url", "").split("?")[0]
                              for r in lovelace.resources.async_items()}
-            our_base_paths = {_CARD_LOCAL_URL, _TRACKER_LOCAL_URL, _VIEW_CARD_LOCAL_URL}
+            our_base_paths = {_CARD_LOCAL_URL, _TRACKER_LOCAL_URL}
             missing = our_base_paths - existing_urls
             if missing:
                 _LOGGER.warning(
@@ -215,7 +213,7 @@ def _migrate_www_paths(hass, entry) -> None:
     os.makedirs(www_sub, exist_ok=True)
 
     # Move JS files
-    for js in ("ble-positioning-card.js", "ble-positioning-tracker.js", "ble-positioning-view-card.js"):
+    for js in ("ble-positioning-card.js", "ble-positioning-tracker.js"):
         old_path = os.path.join(www_root, js)
         new_path = os.path.join(www_sub,  js)
         if os.path.exists(old_path) and not os.path.exists(new_path):
@@ -245,7 +243,7 @@ def _copy_js_files(hass: HomeAssistant) -> None:
     for src_path, filename in [
         (_CARD_JS,    "ble-positioning-card.js"),
         (_TRACKER_JS, "ble-positioning-tracker.js"),
-        (_VIEW_CARD_JS, "ble-positioning-view-card.js"),
+
     ]:
         dst = os.path.join(www_dir, filename)
         try:
