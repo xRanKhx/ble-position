@@ -567,17 +567,26 @@ class BLEFloorCoordinator(DataUpdateCoordinator):
     # ── Public helpers ────────────────────────────────────────
 
     def get_card_data(self) -> dict:
-        """Return everything the Lovelace card needs in one call."""
-        opts = self.entry.options
+        """Return everything the Lovelace card needs in one call.
+        Kept for backwards compatibility – merges all segments."""
         return {
-            "entry_id":   self.entry.entry_id,
-            "floor_name": self.entry.data.get("floor_name", ""),
-            "floor_w":    self.floor_w,
-            "floor_h":    self.floor_h,
-            "image_path": self.image_path,
-            "grid_step":  self.grid_step,
-            "scanners":   self.scanners,
-            "rooms":      self.rooms,
+            **self.get_card_data_base(),
+            **self.get_card_data_tracking(),
+            **self.get_card_data_mmwave(),
+        }
+
+    def get_card_data_base(self) -> dict:
+        """Base segment: layout, lights, rooms, decos.
+        Always needed regardless of active modules.
+        Polled every second by all clients."""
+        return {
+            "entry_id":     self.entry.entry_id,
+            "floor_name":   self.entry.data.get("floor_name", ""),
+            "floor_w":      self.floor_w,
+            "floor_h":      self.floor_h,
+            "image_path":   self.image_path,
+            "grid_step":    self.grid_step,
+            "rooms":        self.rooms,
             "doors":        self.doors,
             "windows":      self.windows,
             "door_penalty": self.door_penalty,
@@ -595,20 +604,27 @@ class BLEFloorCoordinator(DataUpdateCoordinator):
             "floors":       self.floors,
             "active_floor": self.active_floor,
             "custom_designs": self.custom_designs,
-            "mmwave_sensors": self.mmwave_sensors,
-            "ptz_cameras":    self.ptz_cameras,
-            "heating_rooms":  self.heating_rooms,
-            # Age thresholds – readable + writable via /options endpoint
+            "ptz_cameras":  self.ptz_cameras,
+            "heating_rooms": self.heating_rooms,
+        }
+
+    def get_card_data_tracking(self) -> dict:
+        """BLE tracking segment: devices, scanners, fingerprints.
+        Only needed when BLE/tracking module is active.
+        Skipping this saves: tracker.state calculation (RSSI→XY),
+        sensor_vals reads, fingerprint serialization (~3KB/request)."""
+        opts = self.entry.options
+        return {
+            "scanners": self.scanners,
             "auto_fp_max_age":   opts.get(OPT_AUTO_CAL_MAX_AGE,    DEFAULT_MAX_AGE_DAYS),
             "manual_fp_max_age": opts.get(OPT_AUTO_CAL_MANUAL_AGE, DEFAULT_MANUAL_AGE_DAYS),
-            "devices":    [
+            "devices": [
                 {
-                    "device_id": did,
+                    "device_id":   did,
                     "device_name": tracker.device_name,
                     "scanner_entities":     tracker.device_cfg.get("scanner_entities", {}),
                     "scanner_entities_raw": tracker.device_cfg.get("scanner_entities_raw", {}),
                     **tracker.state,
-                    # Include live sensor values for card debug display
                     "sensor_vals": {
                         **{
                             s.get(CONF_SCANNER_ENTITY, ""): tracker._vals.get(s.get(CONF_SCANNER_ENTITY, ""))
@@ -633,6 +649,14 @@ class BLEFloorCoordinator(DataUpdateCoordinator):
                 for did, tracker in self.trackers.items()
                 for fp in tracker.fingerprints
             ],
+        }
+
+    def get_card_data_mmwave(self) -> dict:
+        """mmWave segment: sensor positions, targets.
+        Only needed when mmWave module is active.
+        Skipping this saves: mmwave state reads (~1KB/request)."""
+        return {
+            "mmwave_sensors": self.mmwave_sensors,
         }
 
 

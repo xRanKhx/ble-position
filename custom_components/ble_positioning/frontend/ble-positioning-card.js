@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "2.11.66";
+const CARD_VERSION = "4.4.7";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -103,6 +103,108 @@ const CARD_CSS = `
   scrollbar-width: none;
 }
 .mode-tabs::-webkit-scrollbar { display: none; }
+
+/* ── Screensaver ── */
+.ss-overlay {
+  position: absolute; inset: 0; z-index: 100;
+  background: transparent;           /* kein dunkler Schleier */
+  display: flex; flex-direction: column;
+  align-items: flex-start;           /* oben links: Uhrzeit */
+  justify-content: space-between;
+  pointer-events: none;              /* Karte bleibt voll interaktiv */
+  padding: 14px 14px 14px 14px;
+}
+.ss-clock {
+  font-size: 36px; font-weight: 200; color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace; letter-spacing: 3px;
+  text-shadow: 0 2px 8px #000a;
+}
+.ss-date { font-size: 11px; color: #94a3b8; letter-spacing: 1px; text-shadow: 0 1px 4px #000c; }
+.ss-info-block {
+  background: rgba(13,18,25,0.72);
+  border: 1px solid #1c2535;
+  border-radius: 10px;
+  padding: 8px 12px;
+  backdrop-filter: blur(6px);
+  display: flex; flex-direction: column; gap: 2px;
+  pointer-events: none;
+}
+.ss-btns {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  justify-content: flex-end; max-width: 100%;
+  pointer-events: all;               /* Buttons bleiben klickbar */
+}
+.ss-btn {
+  padding: 7px 14px; border-radius: 8px;
+  border: 1px solid #334155;
+  background: rgba(13,18,25,0.82); color: #e2e8f0;
+  font-size: 11px; cursor: pointer;
+  backdrop-filter: blur(6px);
+  text-decoration: none; display: inline-flex;
+  align-items: center; gap: 5px;
+  pointer-events: all;
+  box-shadow: 0 2px 8px #0006;
+}
+.ss-btn:hover { background: #1e293b; border-color: #00e5ff; color: #00e5ff; }
+.ss-hint { font-size: 8px; color: #334155; text-align: right; pointer-events: none; }
+
+/* ── Kiosk-Modus ── */
+:host(.kiosk-mode) .card-header { display: none !important; }
+:host(.kiosk-mode) .sidebar      { display: none !important; }
+:host(.kiosk-mode) .sidebar-toggle { display: none !important; }
+:host(.kiosk-mode) .canvas-wrap  { border-radius: 0; }
+
+/* ── Schnellzugriff-Leiste (Kiosk-Shortbar) ── */
+.kiosk-bar {
+  position: absolute; z-index: 30;
+  display: flex; gap: 6px; align-items: center;
+  transition: opacity 0.2s, transform 0.25s;
+}
+.kiosk-bar.pos-bottom {
+  bottom: 14px; left: 50%; transform: translateX(-50%);
+  flex-direction: row;
+}
+.kiosk-bar.pos-right {
+  right: 14px; top: 50%; transform: translateY(-50%);
+  flex-direction: column;
+}
+.kiosk-bar.pos-slide-right {
+  right: 0; top: 50%; transform: translateY(-50%) translateX(calc(100% - 14px));
+  flex-direction: column;
+  background: var(--surf); border-radius: 8px 0 0 8px;
+  padding: 8px 6px; border: 1px solid var(--border); border-right: none;
+}
+.kiosk-bar.pos-slide-right:hover,
+.kiosk-bar.pos-slide-right.open { transform: translateY(-50%) translateX(0); }
+.kiosk-bar.pos-overlay {
+  top: 50%; left: 50%; transform: translate(-50%, -50%);
+  flex-wrap: wrap; justify-content: center;
+  pointer-events: all; max-width: 80%;
+}
+.kiosk-btn {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  padding: 8px 12px; border-radius: 8px;
+  background: rgba(13,18,25,0.82); border: 1px solid #1c2535;
+  color: var(--text); cursor: pointer; text-decoration: none;
+  font-size: 9px; backdrop-filter: blur(6px);
+  box-shadow: 0 2px 8px #0006; white-space: nowrap;
+  pointer-events: all; min-width: 48px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.kiosk-btn:hover  { background: #1e293b; border-color: #00e5ff; color: #00e5ff; }
+.kiosk-btn .kb-icon { font-size: 18px; line-height: 1; }
+.kiosk-btn .kb-label { font-size: 8px; color: #94a3b8; }
+
+/* ── Wetter-Block im Screensaver ── */
+.ss-weather {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: #94a3b8;
+  pointer-events: none;
+}
+.ss-weather-icon { font-size: 18px; }
+.ss-weather-temp { font-size: 14px; font-weight: 600; color: #e2e8f0; }
+.ss-weather-detail { font-size: 8px; color: #445566; }
+
 .mode-tab {
   padding: 3px 9px;
   font-size: 9px;
@@ -169,7 +271,37 @@ const CARD_CSS = `
   flex-shrink: 0;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  transition: width 0.22s ease, min-width 0.22s ease, padding 0.22s ease, opacity 0.18s ease;
 }
+.sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  border-right: none !important;
+  opacity: 0;
+}
+/* Toggle-Button: immer sichtbar am linken Rand der Canvas */
+.sidebar-toggle {
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 18px; height: 44px;
+  background: var(--surf);
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 0 6px 6px 0;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--muted);
+  font-size: 10px;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, left 0.22s ease;
+  box-shadow: 2px 0 6px #0004;
+}
+.sidebar-toggle:hover { background: var(--surf2); color: var(--cyan); }
+.sidebar-toggle.open  { left: 0; }
 .sidebar::-webkit-scrollbar { width: 4px; }
 .sidebar::-webkit-scrollbar-track { background: transparent; }
 .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
@@ -370,6 +502,190 @@ textarea {
 `;
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+// BLE POSITIONING – MODUL-REGISTRY
+// Optionale Module die nur bei Bedarf geladen werden.
+// Jedes Modul ist eine separate JS-Datei die sich hier registriert.
+//
+// Interface pro Modul:
+//   id:          string       – eindeutiger Bezeichner
+//   name:        string       – Anzeigename
+//   icon:        string       – Emoji für Tab
+//   tabId:       string       – mode-name für _setMode()
+//   version:     string
+//   init(card):  function     – wird einmalig beim Laden aufgerufen
+//   destroy():   function     – Cleanup beim Deaktivieren
+//   buildSidebar(card): HTMLElement  – Sidebar-Inhalt
+//   buildConfig(card):  HTMLElement  – Einstellungen in ⚙ OPT
+//   onDraw(ctx, card):  function     – optional: auf Canvas zeichnen
+//   onPoll(data, card): function     – optional: nach jedem Poll
+//   isActive(card):     boolean      – Saison-Check etc.
+// ════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// INLINE MODULE – lazy evaluiert erst bei Aktivierung
+// Der Code liegt als String vor → kein Parse-Overhead beim Start
+// eval() erst wenn Nutzer das Modul in ⚙ OPT aktiviert
+// ════════════════════════════════════════════════════════════════════════
+
+
+// Module-IDs registrieren (werden per fetch() geladen, nicht mehr inline)
+function _registerInlineModules() {
+  // Bekannte Modul-IDs vormerken damit die Sidebar sie anzeigen kann
+  ['elektro', 'energie', 'pool'].forEach(id => {
+    BLEModuleRegistry._knownIds = BLEModuleRegistry._knownIds || new Set();
+    BLEModuleRegistry._knownIds.add(id);
+  });
+}
+const BLEModuleRegistry = {
+  _modules:    {},   // id → Modul-Objekt
+  _loaded:     {},   // id → true wenn geladen
+  _loading:    {},   // id → Promise (verhindert Doppel-Load)
+  _etags:      {},   // id → Last-Modified Header (für Update-Detect)
+  _loadTimes:  {},   // id → Ladezeit in ms
+  _errors:     {},   // id → Fehlermeldung
+  _updateAvail:{},   // id → true wenn neue Version auf Server
+
+  // Basis-URL für Modul-Dateien
+  get _baseUrl() {
+    return '/local/ble_positioning/modules/';
+  },
+
+  // Modul registrieren (wird vom Modul selbst aufgerufen nach fetch)
+  register(module) {
+    if (!module?.id) return;
+    this._modules[module.id] = module;
+    this._loaded[module.id]  = true;
+    delete this._errors[module.id];
+    console.info(`[BLE Modules] ✅ ${module.name} v${module.version} registriert`);
+    window.BLEModuleRegistry = BLEModuleRegistry;
+  },
+
+  // Modul laden: erst fetch(), dann eval im sicheren Scope
+  async load(id, card) {
+    // Bereits geladen?
+    if (this._modules[id]) {
+      const m = this._modules[id];
+      if (typeof m.init === 'function') m.init(card);
+      return m;
+    }
+
+    // Bereits am Laden? (Promise teilen)
+    if (this._loading[id]) {
+      const m = await this._loading[id];
+      if (m && typeof m.init === 'function') m.init(card);
+      return m;
+    }
+
+    // Neu laden
+    this._loading[id] = this._fetchModule(id, card);
+    const mod = await this._loading[id];
+    delete this._loading[id];
+    return mod;
+  },
+
+  async _fetchModule(id, card) {
+    const url = `${this._baseUrl}${id}.js`;
+    const t0  = performance.now();
+    try {
+      const resp = await fetch(url, { cache: 'no-cache' });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+
+      const src = await resp.text();
+      this._etags[id]     = resp.headers.get('Last-Modified') || resp.headers.get('ETag') || Date.now().toString();
+      this._loadTimes[id] = Math.round(performance.now() - t0);
+
+      // eval im sicheren Scope
+      const factory = new Function('BLEModuleRegistry', src + `\nreturn typeof ElektroModul!=="undefined"?ElektroModul:typeof EnergieModul!=="undefined"?EnergieModul:typeof PoolModul!=="undefined"?PoolModul:typeof MmwaveModul!=="undefined"?MmwaveModul:null;`);
+      const mod = factory(BLEModuleRegistry);
+
+      if (mod) {
+        this.register(mod);
+        if (typeof mod.init === 'function') mod.init(card);
+        console.info(`[BLE Modules] ✅ ${id} geladen in ${this._loadTimes[id]}ms`);
+        return mod;
+      }
+      throw new Error('Modul-Objekt nicht gefunden nach eval');
+    } catch(e) {
+      this._errors[id] = e.message;
+      console.error(`[BLE Modules] ❌ ${id} Fehler: ${e.message}`);
+      return null;
+    }
+  },
+
+  // Update-Check: HEAD-Request auf Modul-Datei
+  async checkUpdates(ids) {
+    let anyUpdate = false;
+    for (const id of (ids || Object.keys(this._modules))) {
+      if (!this._etags[id]) continue;
+      try {
+        const resp = await fetch(`${this._baseUrl}${id}.js`, { method: 'HEAD', cache: 'no-cache' });
+        const serverEtag = resp.headers.get('Last-Modified') || resp.headers.get('ETag');
+        if (serverEtag && serverEtag !== this._etags[id]) {
+          this._updateAvail[id] = true;
+          anyUpdate = true;
+          console.info(`[BLE Modules] ⟳ Update verfügbar: ${id}`);
+        }
+      } catch(e) { /* offline/Netzwerkfehler ignorieren */ }
+    }
+    return anyUpdate;
+  },
+
+  // Hot-Reload: Modul neu laden ohne HA-Neustart
+  async reload(id, card) {
+    const old = this._modules[id];
+    if (old && typeof old.destroy === 'function') {
+      try { old.destroy(); } catch(e) {}
+    }
+    delete this._modules[id];
+    delete this._loaded[id];
+    delete this._etags[id];
+    delete this._updateAvail[id];
+    const mod = await this.load(id, card);
+    if (mod) {
+      console.info(`[BLE Modules] ♻ ${id} hot-reloaded`);
+      card?._rebuildSidebar?.();
+      card?._markDirty?.();
+    }
+    return mod;
+  },
+
+  // Modul deaktivieren
+  unload(id) {
+    const m = this._modules[id];
+    if (m && typeof m.destroy === 'function') {
+      try { m.destroy(); } catch(e) {}
+    }
+    delete this._modules[id];
+    delete this._loaded[id];
+  },
+
+  // Status eines Moduls
+  status(id) {
+    if (this._errors[id])        return 'error';
+    if (this._updateAvail[id])   return 'update';
+    if (this._modules[id])       return 'loaded';
+    if (this._loading[id])       return 'loading';
+    return 'unloaded';
+  },
+
+  isAvailable(id, card) {
+    const m = this._modules[id];
+    if (!m) return false;
+    if (!card?._opts?.['module_' + id]) return false;
+    if (typeof m.isActive === 'function' && !m.isActive(card)) return false;
+    return true;
+  },
+
+  activeModules(card) {
+    return Object.values(this._modules).filter(m =>
+      card?._opts?.['module_' + m.id] === true
+    );
+  },
+
+  get ids() { return Object.keys(this._modules); },
+};
+
+
 class BLEPositioningCard extends HTMLElement {
 
   // ── Custom element boilerplate ──────────────────────────────────────────
@@ -709,10 +1025,14 @@ class BLEPositioningCard extends HTMLElement {
 
     await this._loadData();
 
+    // Module initialisieren (bereits registrierte laden sofort)
+    await this._initModules();
+
     // Wait for layout to settle before first resize
     requestAnimationFrame(() => {
       this._onResize();
       this._startRenderLoop();
+      this._initSidebarToggle();
     });
     } catch(e) { console.error("BLE Positioning: _boot error", e); }
   }
@@ -838,6 +1158,7 @@ class BLEPositioningCard extends HTMLElement {
       <button class="mode-tab info"     data-mode="info">ℹ INFO</button>
       <button class="mode-tab energie"  data-mode="energie">⚡ ENERGIE</button>
       <button class="mode-tab deko"     data-mode="deko">🏗 DEKO</button>
+      <button class="mode-tab screensaver" data-mode="screensaver">💤 SCREEN</button>
       <button class="mode-tab design"    data-mode="design">🎨 DESIGN</button>
       <button class="mode-tab settings"  data-mode="settings">⚙ OPT</button>
       <button class="mode-tab automate" data-mode="automate">🤖 AUTO</button>
@@ -853,6 +1174,7 @@ class BLEPositioningCard extends HTMLElement {
   <div class="card-body">
     <div class="sidebar" id="sidebar"></div>
     <div class="canvas-wrap" id="cwrap">
+      <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
@@ -955,10 +1277,25 @@ class BLEPositioningCard extends HTMLElement {
     this.shadowRoot.querySelectorAll(".mode-tab").forEach(b => {
       b.classList.toggle("active", b.dataset.mode === mode);
     });
+    // Screensaver: Tab-Klick beendet Screensaver + wechselt in gewählten Modus
+    if (mode === "screensaver") {
+      this.shadowRoot.querySelectorAll(".mode-tab").forEach(b => {
+        if (b.dataset.mode !== "screensaver" && !b._ssHandler) {
+          b._ssHandler = () => { if (this._ssActive) this._stopScreensaver(); };
+          b.addEventListener("click", b._ssHandler);
+        }
+      });
+    } else {
+      // Handler wieder entfernen wenn nicht im Screensaver
+      this.shadowRoot.querySelectorAll(".mode-tab[data-mode]").forEach(b => {
+        if (b._ssHandler) { b.removeEventListener("click", b._ssHandler); delete b._ssHandler; }
+      });
+    }
 
     // Hint text
     const hints = {
       view:      "",
+      screensaver: "",
       calibrate: "Rasterpunkt anklicken → stehen bleiben → AUFNEHMEN",
       scanners:  "Scanner anklicken zum Bearbeiten · Neu: + Scanner",
       rooms:     "Rechteck ziehen: Raum · 🏠/🌿 Typ umschalten für Innen/Außen",
@@ -981,6 +1318,19 @@ class BLEPositioningCard extends HTMLElement {
     if (mode === 'rooms') {
       const hasRooms = (this._pendingRooms || this._data?.rooms || []).length > 0;
       this._roomSubMode = hasRooms ? 'edit' : 'draw';
+    }
+    // Sidebar automatisch aufklappen wenn ein Tab (außer LIVE) gewählt wird
+    if (mode !== "view" && this._sidebarCollapsed) {
+      const sb = this.shadowRoot?.getElementById("sidebar");
+      const tb = this.shadowRoot?.getElementById("sidebar-toggle");
+      const cw = this.shadowRoot?.getElementById("cwrap");
+      if (sb && tb && cw) {
+        this._applySidebarState(sb, tb, cw, false);
+        if (!this._opts) this._opts = {};
+        this._opts.sidebar_collapsed = false;
+        this._saveOptions();
+        setTimeout(() => { this._onResize(); this._markDirty(); }, 250);
+      }
     }
     this._rebuildSidebar();
   }
@@ -1006,6 +1356,23 @@ class BLEPositioningCard extends HTMLElement {
     this._rebuildFloorSelector();
     // Always redraw after sidebar rebuild (instant feedback)
     requestAnimationFrame(() => this._draw());
+    // Screensaver-Timer starten wenn konfiguriert
+    this._resetSsTimer();
+    // Kiosk-Modus "immer" direkt beim Start anwenden
+    if (this._opts?.kiosk_hide_mode === "always") this._applyKioskMode(true);
+    // Kiosk-Shortbar permanent (außerhalb Screensaver) einsetzen
+    if (this._opts?.kiosk_bar_always) {
+      const pos = this._opts?.kiosk_bar_pos || "bottom";
+      const wrap = this.shadowRoot?.querySelector("#cwrap");
+      if (wrap) {
+        const bar = this._buildKioskBar("pos-" + pos);
+        if (bar) { wrap.appendChild(bar); this._kioskBarPermanent = bar; }
+      }
+    }
+    // Ambient Light Sensor (wenn Browser unterstützt und Nutzer aktiviert)
+    this._initAmbientLight();
+    // WebSocket Live-Updates (wenn aktiviert, ersetzt/ergänzt Polling)
+    if (this._opts?.ws_updates) this._startWsUpdates();
 
     switch (this._mode) {
       case "view":       sb.appendChild(this._sidebarView());       break;
@@ -1021,9 +1388,18 @@ class BLEPositioningCard extends HTMLElement {
       case "info":       sb.appendChild(this._sidebarInfo());        break;
       case "deko":       sb.appendChild(this._sidebarDeko());        break;
       case "design":     sb.appendChild(this._sidebarDesign());      break;
+      case "screensaver": sb.appendChild(this._sidebarScreensaver()); break;
       case "mmwave":     sb.appendChild(this._sidebarMmwave());      break;
       case "analytics":  sb.appendChild(this._sidebarAnalytics());    break;
       case "ptz":        sb.appendChild(this._sidebarPtz());           break;
+      default: {
+        // Modul-Sidebar: falls ein externes Modul diesen Tab-Mode registriert hat
+        const mod = Object.values(BLEModuleRegistry._modules)
+          .find(m => (m.tabId || m.id) === this._mode);
+        if (mod && typeof mod.buildSidebar === 'function') {
+          try { sb.appendChild(mod.buildSidebar(this)); } catch(e) {}
+        }
+      }
     }
   }
 
@@ -1211,14 +1587,19 @@ class BLEPositioningCard extends HTMLElement {
       const devs  = this._data?.devices || [];
       const dev   = devs.find(d => d.device_id === this._devId) || devs[0];
       const curX  = dev?.x, curY = dev?.y, stillSec = dev?.still_seconds || 0;
+      // mmWave-Position nur wenn Nutzer mmw_fp_source aktiviert hat
+      const mmwPos = this._opts?.mmw_fp_source ? this._getMmwavePositionForCalib() : null;
+      const useX = mmwPos ? mmwPos.mx : curX;
+      const useY = mmwPos ? mmwPos.my : curY;
       const posCard = document.createElement("div");
       posCard.style.cssText = "background:var(--surf2);border-radius:6px;padding:6px 8px;margin-bottom:6px;border:1px solid var(--border)";
       if (!dev || curX == null) {
-        posCard.innerHTML = `<div style="font-size:8px;color:var(--red)">⚠ Kein Gerät – muss im BLE-Bereich sein</div>`;
+        posCard.innerHTML = `<div style="font-size:8px;color:var(--red)">⚠ Kein Gerät${mmwPos?` – mmWave: ${mmwPos.mx.toFixed(1)}/${mmwPos.my.toFixed(1)}m`:" – muss im BLE-Bereich sein"}</div>`;
       } else {
-        const detRoom = rooms.find(r => curX>=r.x1&&curX<=r.x2&&curY>=r.y1&&curY<=r.y2);
+        const detRoom = rooms.find(r => useX>=r.x1&&useX<=r.x2&&useY>=r.y1&&useY<=r.y2);
         const detName = detRoom?.name || dev.room || "Außerhalb";
-        const stillOk = stillSec >= 2;
+        const stillOk = stillSec >= 2 || !!mmwPos;
+        const posSource = mmwPos ? `<span style="font-size:7px;color:#00e5ff">📡 mmWave: ${mmwPos.sensor}</span>` : "";
         posCard.innerHTML = `<div style="display:flex;justify-content:space-between;margin-bottom:4px">
           <b style="font-size:8px;color:var(--text)">📍 Aktuelle Position</b>
           <span style="font-size:7px;color:${stillOk?"#22c55e":"#f59e0b"}">${stillOk?"● Still":"◌ Bewegung"} ${Math.round(stillSec)}s</span></div>
@@ -1227,14 +1608,81 @@ class BLEPositioningCard extends HTMLElement {
               <div style="font-size:7px;color:var(--muted)">Erkannter Raum</div>
               <div style="font-size:9px;font-weight:700;color:var(--cyan)">${detName}</div></div>
             <div style="background:var(--bg);border-radius:4px;padding:3px 6px">
-              <div style="font-size:7px;color:var(--muted)">Position</div>
-              <div style="font-size:9px;color:var(--text)">${curX.toFixed(1)}m / ${curY.toFixed(1)}m</div></div></div>`;
+              <div style="font-size:7px;color:var(--muted)">Position ${mmwPos?"(mmWave)":"(BLE)"}</div>
+              <div style="font-size:9px;color:var(--text)">${useX.toFixed(1)}m / ${useY.toFixed(1)}m</div></div></div>`;
       }
       wtBox.appendChild(posCard);
       const guide = document.createElement("div");
       guide.style.cssText = "font-size:7.5px;color:#445566;line-height:1.6;padding:5px 7px;background:var(--surf2);border-radius:5px;margin-bottom:6px";
       guide.innerHTML = `<b style="color:var(--text)">Anleitung:</b> Raum betreten → stillstehen (2s) → Position bestätigen oder korrigieren`;
       wtBox.appendChild(guide);
+      // mmWave-Optionen (nur wenn mmWave vorhanden)
+      const hasMmw = (this._data?.mmwave_sensors||[]).some(s=>s.entity_prefix);
+      if (hasMmw) {
+        // Toggle: mmWave als Fingerprint-Positionsquelle
+        const fpSrcRow = document.createElement("div");
+        fpSrcRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:5px 7px;background:var(--surf2);border-radius:5px;margin-bottom:4px;border:1px solid #00e5ff22";
+        const fpSrcLbl = document.createElement("span");
+        fpSrcLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+        fpSrcLbl.textContent = "📡 mmWave als FP-Positionsquelle";
+        const fpSrcCb = document.createElement("input");
+        fpSrcCb.type = "checkbox";
+        fpSrcCb.checked = !!this._opts?.mmw_fp_source;
+        fpSrcCb.style.cssText = "accent-color:#00e5ff;width:14px;height:14px;cursor:pointer";
+        fpSrcCb.addEventListener("change", () => {
+          if (!this._opts) this._opts = {};
+          this._opts.mmw_fp_source = fpSrcCb.checked;
+          this._saveOptions();
+          this._showToast(fpSrcCb.checked ? "📡 mmWave als FP-Quelle aktiv" : "FP-Quelle: BLE");
+        });
+        fpSrcRow.append(fpSrcLbl, fpSrcCb);
+        wtBox.appendChild(fpSrcRow);
+      } // end if (hasMmw) – mmWave als FP-Quelle
+
+      // Auto-Kalibrierung: immer sichtbar (BLE braucht kein mmWave)
+      {
+        const hasMmw2 = (this._data?.mmwave_sensors||[]).some(s=>s.entity_prefix);
+        const autoRow = document.createElement("div");
+        autoRow.style.cssText = "margin-bottom:4px;margin-top:4px";
+        const autoLbl = document.createElement("div");
+        autoLbl.style.cssText = "font-size:8px;color:#94a3b8;margin-bottom:3px";
+        autoLbl.textContent = "\uD83E\uDD16 Auto-Kalibrierung";
+        const autoSel = document.createElement("select");
+        autoSel.style.cssText = "width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        const calMode = this._opts?.auto_cal_mode || "off";
+        const calOpts = [
+          {v:"off", l:"\u2B1C Aus \u2013 manuell klicken"},
+          {v:"ble", l:"\u26A0 BLE-Position (ungenau, \u00B11-2m)"},
+        ];
+        if (hasMmw2) calOpts.push({v:"mmwave", l:"\uD83D\uDCE1 mmWave-Position (pr\u00E4zise, <0.3m)"});
+        calOpts.forEach(({v,l}) => {
+          const o = document.createElement("option");
+          o.value = v; o.textContent = l;
+          if (v === calMode) o.selected = true;
+          autoSel.appendChild(o);
+        });
+        const autoHint = document.createElement("div");
+        autoHint.style.cssText = "font-size:7px;color:#445566;margin-top:2px;min-height:12px";
+        const _updateCalHint = (mode) => {
+          autoHint.textContent = mode==="off"
+            ? "Fingerprints manuell durch Klick auf Karte aufnehmen."
+            : mode==="ble"
+            ? "BLE-Trilateration ist ungenau \u2013 gut f\u00FCr schnelle Erstkalibrierung."
+            : "Sensor muss dich erkennen und still stehen (\u22652s).";
+        };
+        _updateCalHint(calMode);
+        autoSel.addEventListener("change", () => {
+          if (!this._opts) this._opts = {};
+          const v = autoSel.value;
+          this._opts.auto_cal_mode = v;
+          this._opts.auto_mmw_cal = (v === "mmwave");
+          this._saveOptions();
+          _updateCalHint(v);
+          this._showToast(v==="off"?"Auto-Cal aus":v==="ble"?"Auto-Cal via BLE (ungenau)":"Auto-Cal via mmWave");
+        });
+        autoRow.append(autoLbl, autoSel, autoHint);
+        wtBox.appendChild(autoRow);
+      }
       if (this._wtCorrecting) {
         const ch = document.createElement("div");
         ch.style.cssText = "font-size:8px;font-weight:700;color:var(--red);margin-bottom:4px";
@@ -1468,8 +1916,8 @@ class BLEPositioningCard extends HTMLElement {
     wrap.appendChild(gsBox);
 
     // Show live sensor values so user can see if scanner data is arriving
-    const dev = (this._data?.devices || []).find(d => d.device_id === this._devId);
-    const svals = dev?.sensor_vals || {};
+    const devSv = (this._data?.devices || []).find(d => d.device_id === this._devId);
+    const svals = devSv?.sensor_vals || {};
     const scanners = this._data?.scanners || [];
     if (scanners.length > 0) {
       const svBox = document.createElement("div");
@@ -1871,6 +2319,29 @@ class BLEPositioningCard extends HTMLElement {
         let editName = dev.device_name || "";
         mkField("Gerätename", editName, v => editName = v);
 
+        // Geräte-Kategorie: bestimmt Abwesenheits-Logik
+        let editType = dev.device_type || "phone";
+        const typeRow = document.createElement("div");
+        typeRow.style.cssText = "margin-top:5px";
+        const typeLbl = document.createElement("span");
+        typeLbl.style.cssText = "font-size:8px;color:var(--muted);display:block;margin-bottom:3px";
+        typeLbl.textContent = "Geräte-Typ (für Anwesenheitserkennung)";
+        const typeSel = document.createElement("select");
+        typeSel.style.cssText = "width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        [
+          {v:"phone",      l:"📱 Telefon (mobil, manchmal dabei)"},
+          {v:"wearable",   l:"⌚ Wearable (Watch, fast immer dabei)"},
+          {v:"stationary", l:"🖥 Stationär (iPad, Tablet – zählt NICHT für Anwesenheit)"},
+        ].forEach(({v,l}) => {
+          const o = document.createElement("option");
+          o.value = v; o.textContent = l;
+          if (v === editType) o.selected = true;
+          typeSel.appendChild(o);
+        });
+        typeSel.addEventListener("change", () => editType = typeSel.value);
+        typeRow.append(typeLbl, typeSel);
+        ef.appendChild(typeRow);
+
         // Pro Scanner: Distanz-Entity + Roh-Entity
         const scannerEntities = dev.scanner_entities || {};
         const scannerEntitiesRaw = dev.scanner_entities_raw || {};
@@ -1904,6 +2375,7 @@ class BLEPositioningCard extends HTMLElement {
             await this._hass.callApi("POST",
               `ble_positioning/${this._entryId}/update_device`,
               { device_id: dev.device_id, device_name: editName,
+                device_type: editType,
                 entity_map: tmpEntities, entity_map_raw: tmpRaw });
             await this._loadData();
             this._editDevice = null;
@@ -3725,8 +4197,8 @@ class BLEPositioningCard extends HTMLElement {
   // ── Canvas events ────────────────────────────────────────────────────────
 
   async _onCanvasClick(e) {
-    // ── 3D: nur Reset-Button prüfen ────────────────────────────────────────
-    if (this._mode === "view" && this._opts?.show3D) {
+    // ── 3D: Reset-Button prüfen ─────────────────────────────────────────────
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       if (this._3dResetBtn) {
         const { cx, cy } = this._canvasXY(e);
         const b = this._3dResetBtn;
@@ -3742,7 +4214,9 @@ class BLEPositioningCard extends HTMLElement {
           return;
         }
       }
-      return;
+      // view + 3D: kein weiterer Click-Handler (kein Platzieren etc.)
+      // screensaver + 3D: Licht-Toggle erlauben → nicht return, weiter unten
+      if (this._mode === "view") return;
     }
 
     // ── Deko: place element ─────────────────────────────────────────────────
@@ -3928,8 +4402,32 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
-    // Room tap → light toggle (view mode, optional)
-    if (this._mode === "view" && this._opts?.roomTapLight) {
+    // ── Musik-Bubble: Play/Pause per Klick ──────────────────────
+    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
+      const {cx:mcx,cy:mcy} = this._canvasXY(e);
+      const dpr = window.devicePixelRatio||1;
+      for (const z of this._musicClickZonesFrame) {
+        if (mcx>=z.x*dpr && mcx<=(z.x+z.w)*dpr && mcy>=z.y*dpr && mcy<=(z.y+z.h)*dpr) {
+          try { await this._hass.callService("media_player","media_play_pause",{entity_id:z.entity}); this._showToast("\u23ef Play/Pause"); } catch(e2){}
+          return;
+        }
+      }
+    }
+
+    // ── Aktives Modul: Tap delegieren (generisch für alle Module) ────
+    {
+      const activeMod = Object.values(BLEModuleRegistry._modules).find(
+        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
+      );
+      if (activeMod && typeof activeMod.onTap === "function") {
+        const rect = this._canvas.getBoundingClientRect();
+        activeMod.onTap(e.clientX - rect.left, e.clientY - rect.top, this);
+        return;
+      }
+    }
+
+    // Room tap → light toggle (view + screensaver mode, optional)
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.roomTapLight) {
       const handled = await this._handleRoomTap(fl.mx, fl.my);
       if (handled) return;
     }
@@ -3979,7 +4477,7 @@ class BLEPositioningCard extends HTMLElement {
 
   _onCanvasDown(e) {
     // ── 3D mode: intercept for orbit drag ──────────────────────────────────
-    if (this._mode === "view" && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       this._3dDrag = { x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
                        y: e.clientY ?? e.touches?.[0]?.clientY ?? 0,
                        az: this._3dAzimuth, el: this._3dElevation };
@@ -3989,7 +4487,7 @@ class BLEPositioningCard extends HTMLElement {
     // Middle mouse / Alt+click / Space+LMB / right-click = pan in ANY mode (incl 3D)
     if (this._opts?.zoomPan &&
         (e.button === 1 || e.altKey || this._spaceHeld || e.button === 2)) {
-      if (this._mode === "view" && this._opts?.show3D) {
+      if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
         // 3D pan via mouse
         this._is3dPanning = true;
         const rect = this._canvas.getBoundingClientRect();
@@ -4012,6 +4510,22 @@ class BLEPositioningCard extends HTMLElement {
       this._canvas.style.cursor = "grabbing";
       return;
     }
+    // ── Aktives Modul: Drag/Resize starten (generisch) ────────────────────
+    {
+      const activeMod = Object.values(BLEModuleRegistry._modules).find(
+        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
+      );
+      if (activeMod && typeof activeMod.onDragStart === "function") {
+        const rect = this._canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left);
+        const py = (e.clientY - rect.top);
+        if (activeMod.onDragStart(px, py, this)) {
+          this._canvas.style.cursor = "grabbing";
+          return;
+        }
+      }
+    }
+
     // ── Deko drag: pick up existing deco element ──────────────────────────────
     if (this._mode === "deko" && !this._dekoPlacing) {
       const { cx: dCx, cy: dCy } = this._canvasXY(e);
@@ -4169,6 +4683,28 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasMove(e) {
+    // ── Aktives Modul: Drag/Resize bewegen (generisch) ───────────────────
+    {
+      const activeMod = Object.values(BLEModuleRegistry._modules).find(
+        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
+      );
+      if (activeMod && (activeMod._dragNode || activeMod._resizeNode || activeMod._panelDrag || activeMod._panelResize) && typeof activeMod.onDragMove === "function") {
+        const rect = this._canvas.getBoundingClientRect();
+        const px = (e.clientX - rect.left);
+        const py = (e.clientY - rect.top);
+        activeMod.onDragMove(px, py, this);
+        this._canvas.style.cursor = activeMod._resizeNode ? "nwse-resize" : "grabbing";
+        return;
+      }
+      // Elektro: Connecting-Cursor aktualisieren
+      const em = BLEModuleRegistry._modules?.elektro;
+      if (this._mode === "elektro" && em?._connectFrom) {
+        const rect = this._canvas.getBoundingClientRect();
+        const dpr  = window.devicePixelRatio || 1;
+        em._connectCursor = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr };
+        this._markDirty();
+      }
+    }
     // ── 3D orbit + pan drag ─────────────────────────────────────────────────
     if (this._mode === "view" && this._opts?.show3D) {
       const cx = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
@@ -4466,6 +5002,18 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasUp(e) {
+    // ── Aktives Modul: Drag/Resize beenden (generisch) ──────────────────
+    {
+      const activeMod = Object.values(BLEModuleRegistry._modules).find(
+        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
+      );
+      if (activeMod && (activeMod._dragNode || activeMod._resizeNode || activeMod._panelDrag || activeMod._panelResize) && typeof activeMod.onDragEnd === "function") {
+        const rect = this._canvas.getBoundingClientRect();
+        activeMod.onDragEnd((e.clientX - rect.left), (e.clientY - rect.top), this);
+        this._canvas.style.cursor = activeMod._editMode ? "move" : "default";
+        return;
+      }
+    }
     // ── 3D orbit release ────────────────────────────────────────────────────
     if (this._mode === "view" && this._opts?.show3D) {
       this._3dDrag = null;
@@ -4486,6 +5034,7 @@ class BLEPositioningCard extends HTMLElement {
     if (this._mode === "deko" && this._dekoDragging >= 0) {
       this._dekoDragging = -1;
       this._canvas.style.cursor = this._dekoPlacing ? "crosshair" : "default";
+      this._saveDecoNow(); // Position nach Drag persistieren
       return;
     }
     if (this._mode === "deko") return; // no drag active, let touchend call _onCanvasClick
@@ -4661,6 +5210,11 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   async _captureAt(mx, my) {
+    // mmWave als FP-Quelle nur wenn Nutzer es explizit aktiviert hat
+    if (this._opts?.mmw_fp_source) {
+      const mmwPos = this._getMmwavePositionForCalib();
+      if (mmwPos) { mx = mmwPos.mx; my = mmwPos.my; }
+    }
     try {
       await this._hass.callApi("POST",
         `ble_positioning/${this._entryId}/capture`,
@@ -4689,6 +5243,92 @@ class BLEPositioningCard extends HTMLElement {
       this._showCalStatus("✗ " + (errMsg || "Unbekannter Fehler"), "var(--red)");
       this._showToast("✗ " + (errMsg || "Fehler beim Speichern"));
     }
+  }
+
+  // Sensor-Fusion: wenn 2+ Sensoren die gleiche Person sehen → gewichteter Durchschnitt
+  // Gewichtung: 1/d² (quadratisch nach Distanz → näherer Sensor dominiert)
+  _fuseMmwaveTargets(targets) {
+    // targets: [{floor_mx, floor_my, dist_m, sensor}, ...]
+    // Proximity-Check: gleiche Person wenn Abstand < 0.8m
+    const groups = [];
+    for (const t of targets) {
+      let merged = false;
+      for (const g of groups) {
+        const dx = g.mx - t.floor_mx, dy = g.my - t.floor_my;
+        if (Math.sqrt(dx*dx+dy*dy) < 0.8) {
+          // Gleiche Person – zum Cluster hinzufügen
+          g.members.push(t); merged = true; break;
+        }
+      }
+      if (!merged) groups.push({mx:t.floor_mx, my:t.floor_my, members:[t]});
+    }
+    // Für jeden Cluster: gewichteter Durchschnitt
+    return groups.map(g => {
+      if (g.members.length === 1) return g.members[0];
+      let sumW=0, sumX=0, sumY=0;
+      for (const m of g.members) {
+        const d = Math.max(0.1, m.dist_m || 1);
+        const w = 1 / (d*d);
+        sumW += w; sumX += w * m.floor_mx; sumY += w * m.floor_my;
+      }
+      return {...g.members[0], floor_mx: sumX/sumW, floor_my: sumY/sumW, fused: g.members.length};
+    });
+  }
+
+  // Gibt mmWave-Position zurück wenn Sensor aktiv, Person erkannt und still
+  _getMmwavePositionForCalib() {
+    const sensors = this._data?.mmwave_sensors || [];
+    for (const sensor of sensors) {
+      if (!sensor.entity_prefix) continue;
+      const t = this._getMmwaveTarget(sensor, 1);
+      if (!t || !t.present) continue;
+      // Nur wenn Person still steht (speed < 50mm/s)
+      if (Math.abs(t.speed || 0) > 0.05) continue;
+      return { mx: t.floor_mx, my: t.floor_my, sensor: sensor.name };
+    }
+    return null;
+  }
+
+  // Auto-Cal: wenn mmWave Person still erkennt → automatisch Fingerprint aufnehmen
+  // Auto-Cal: automatisch Fingerprint aufnehmen – BLE (ungenau) oder mmWave (präzise)
+  _tryAutoMmwCalibrate() {
+    if (this._autoMmwCooldown) return;
+    const mode = this._opts?.auto_cal_mode || "off";
+    if (mode === "off") return;
+
+    let mx, my, source;
+    if (mode === "mmwave") {
+      // Präzise: mmWave-Position nutzen
+      const mmwPos = this._getMmwavePositionForCalib();
+      if (!mmwPos) return;
+      mx = mmwPos.mx; my = mmwPos.my; source = "mmWave";
+    } else if (mode === "ble") {
+      // Ungenau: aktuelle BLE-Position des Geräts (mind. 3s still)
+      const devs = this._data?.devices || [];
+      const dev = devs.find(d => d.device_id === this._devId) || devs[0];
+      if (!dev || dev.x == null || dev.y == null) return;
+      if ((dev.still_seconds || 0) < 3) return;
+      mx = dev.x; my = dev.y; source = "BLE ⚠";
+    } else return;
+
+    // Auf Grid-Punkt runden
+    const step = this._data?.grid_step ?? 0.5;
+    mx = Math.round(mx / step) * step;
+    my = Math.round(my / step) * step;
+    const key = `${mx.toFixed(2)}_${my.toFixed(2)}`;
+    if (this._localFpHints[key]) return; // schon kalibriert
+
+    this._autoMmwCooldown = true;
+    setTimeout(() => { this._autoMmwCooldown = false; }, 10000);
+    // Direkt API aufrufen (nicht _captureAt – das würde mmw_fp_source nochmals prüfen)
+    this._hass.callApi("POST",
+      `ble_positioning/${this._entryId}/capture`,
+      { device_id: this._devId, x: mx, y: my }
+    ).then(() => {
+      this._localFpHints[key] = true;
+      this._showToast(`🤖 Auto-FP (${source}): ${mx.toFixed(1)}/${my.toFixed(1)}m`);
+      this._loadData();
+    }).catch(e => this._showToast("✗ Auto-Cal: " + (e?.message||e)));
   }
 
   async _captureFingerprint() {
@@ -4820,6 +5460,14 @@ class BLEPositioningCard extends HTMLElement {
     this._calStatusTimer = setTimeout(() => { el.textContent = ""; }, 3000);
   }
 
+  // ── Deko-Elemente sofort persistieren (z.B. nach Entity-Änderung) ─────────
+  _saveDecoNow() {
+    if (!this._opts) this._opts = {};
+    // Sync pendingDecos → data.decos → opts
+    if (this._data) this._data.decos = this._pendingDecos ? [...this._pendingDecos] : [];
+    this._saveOptions();
+  }
+
   _showToast(msg) {
     const t = this.shadowRoot.getElementById("toast");
     if (!t) return;
@@ -4849,63 +5497,196 @@ class BLEPositioningCard extends HTMLElement {
     return `#${[m[1],m[2],m[3]].map(v => parseInt(v).toString(16).padStart(2,"0")).join("")}`;
   }
 
+  // ── WebSocket Live-Updates (opt-in, ersetzt Polling) ───────────────────
+  _startWsUpdates() {
+    if (this._wsUnsub) return; // bereits aktiv
+    if (!this._hass?.connection) return;
+    // Abonniere HA state_changed Events für BLE-Positioning Entities
+    this._hass.connection.subscribeEvents((event) => {
+      const eid = event.data?.entity_id || "";
+      // Nur BLE-Positioning relevante Entities
+      if (!eid.includes("ble_position") && !eid.includes("mmwave_sensor")) return;
+      // Position geändert → dirty markieren + sofort poll
+      this._markDirty();
+      // Sofort Daten holen (kein Warten auf nächsten Poll-Zyklus)
+      this._pollPositions();
+    }, "state_changed").then(unsub => {
+      this._wsUnsub = unsub;
+    }).catch(() => {
+      this._wsUnsub = null;
+    });
+  }
+
+  _stopWsUpdates() {
+    if (this._wsUnsub) { this._wsUnsub(); this._wsUnsub = null; }
+  }
+
   // ── Render loop ──────────────────────────────────────────────────────────
+
+  // Gibt aktuelles FPS-Ziel, Poll-Intervall und Canvas-Skalierung zurück
+  _getLoopParams() {
+    // Browser-Tab versteckt → kein Zeichnen, seltenes Polling
+    if (document.hidden) return { fps: 0, pollMs: 30000, scale: 1 };
+    // Screensaver → 1fps, Polling selten, halbe Auflösung (optional)
+    if (this._ssActive) {
+      const ssScale = this._opts?.ss_low_res ? 0.5 : 1;
+      return { fps: 1, pollMs: 5000, scale: ssScale };
+    }
+    // Nacht-Modus (22-6h)
+    const h = new Date().getHours();
+    const isNight = h >= 22 || h < 6;
+    if (isNight && this._opts?.nightMode) return { fps: 5, pollMs: 3000, scale: 0.75 };
+    // Battery API: wenn Akku niedrig → Energiesparmodus
+    if (this._lowBattery) return { fps: 10, pollMs: 2000, scale: 0.75 };
+    // Nutzer-einstellbares FPS-Limit
+    const userFps = parseInt(this._opts?.target_fps || 30);
+    const userPoll = parseInt(this._opts?.poll_interval_ms || 1000);
+    return { fps: userFps, pollMs: userPoll, scale: 1 };
+  }
+
+  // Canvas-Auflösung dynamisch anpassen (spart GPU-Arbeit)
+  _applyCanvasScale(scale) {
+    if (!this._canvas || !this._canvasCssW) return;
+    if (scale === (this._currentCanvasScale||1)) return;
+    this._currentCanvasScale = scale;
+    const dpr = window.devicePixelRatio || 1;
+    this._canvas.width  = Math.round(this._canvasCssW * dpr * scale);
+    this._canvas.height = Math.round(this._canvasCssH * dpr * scale);
+    this._canvas.style.width  = this._canvasCssW + "px";
+    this._canvas.style.height = this._canvasCssH + "px";
+  }
+
+  // Dirty-Flag: markiert dass ein Neuzeichnen nötig ist
+  _markDirty() { this._dirty = true; }
 
   _startRenderLoop() {
     let lastPoll = 0;
+    let lastFrame = 0;
+    this._dirty = true; // Erstes Frame immer zeichnen
     const loop = (ts) => {
-      this._draw();
-      // Poll card_data every 500ms for live position updates
-      if (ts - lastPoll > 500) {
+      const { fps, pollMs } = this._getLoopParams();
+
+      // FPS-Drosselung: nur zeichnen wenn genug Zeit vergangen
+      const minFrameMs = fps > 0 ? 1000 / fps : Infinity;
+      if (fps > 0 && ts - lastFrame >= minFrameMs) {
+        // Dirty-Rendering: nur zeichnen wenn nötig (opt-in)
+        const useDirty = this._opts?.dirty_render !== false;
+        // Immer zeichnen wenn: Animationen aktiv, Screensaver, oder dirty
+        const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
+        const hasMusicAnim = this._opts?.show_music_bubble &&
+          (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
+            this._hass?.states?.[d.entity]?.state==="playing");
+        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasElektroAnim) {
+          lastFrame = ts;
+          this._dirty = false;
+          // Canvas-Auflösung anpassen (optional)
+          if (this._opts?.adaptive_resolution) this._applyCanvasScale(scale);
+          this._draw();
+        }
+      }
+
+      // Poll-Intervall: Daten von HA holen
+      if (ts - lastPoll > pollMs) {
         lastPoll = ts;
         this._pollPositions();
       }
+
       this._raf = requestAnimationFrame(loop);
     };
     this._raf = requestAnimationFrame(loop);
   }
 
   async _pollPositions() {
-    // Poll in view, lights AND calibrate mode (so FP dots stay fresh)
-    if (!["view", "lights", "calibrate", "energie"].includes(this._mode)) return;
-    try {
-      const res = await this._hass.callApi("GET",
-        `ble_positioning/${this._entryId}/card_data`);
-      if (!res || !this._data) return;
-
-      // Always update lights, fingerprints and info sensors
-      if (res.lights?.length > 0) this._data.lights = res.lights; // FIX: nie mit leerem Array überschreiben
-      this._data.info_sensors  = res.info_sensors || [];
-      if (res.decos) { this._data.decos = res.decos; this._pendingDecos = structuredClone(res.decos); }
-      this._pendingInfoSensors = structuredClone(res.info_sensors || []);
-
-      this._data.fingerprints = res.fingerprints;  // FIX4: keep FP dots fresh
-      this._data.windows      = res.windows || [];
-      this._windows           = res.windows || [];
-      this._data.fp_counts    = res.fp_counts;
-
-      if (this._mode === "view") {
-        this._data.devices = res.devices;
-        // FIX3: device away (x/y=null) → clear EMA so dot disappears
-        res.devices.forEach(dev => {
-          const x = dev.x, y = dev.y;
-          if (x == null || y == null) {
-            delete this._ema[dev.device_id];
-            return;
-          }
-          if (!this._ema[dev.device_id]) {
-            this._ema[dev.device_id] = { x, y };
-          } else {
-            const e = this._ema[dev.device_id];
-            const dist = Math.hypot(x - e.x, y - e.y);
-            const alpha = dist > 2.0 ? 0.85 : dist > 1.0 ? 0.6 : 0.4;
-            e.x += alpha * (x - e.x);
-            e.y += alpha * (y - e.y);
-          }
+    // Update-Check für Module (alle 5 Minuten)
+    const now = Date.now();
+    if (!this._lastModuleUpdateCheck || now - this._lastModuleUpdateCheck > 300000) {
+      this._lastModuleUpdateCheck = now;
+      const loadedIds = Object.keys(BLEModuleRegistry._modules);
+      if (loadedIds.length > 0) {
+        BLEModuleRegistry.checkUpdates(loadedIds).then(anyUpdate => {
+          if (anyUpdate) this._rebuildSidebar?.();
         });
-        this._updateSidebarFromData(res.devices);
       }
+    }
+    // Poll in view, lights AND calibrate mode (so FP dots stay fresh)
+    if (!["view", "lights", "calibrate", "energie", "screensaver"].includes(this._mode)) return;
+    // Auto-Cal: wenn im cal-Modus und ein Modus gewählt ist (BLE oder mmWave)
+    if (this._mode === "calibrate" && this._opts?.auto_cal_mode && this._opts.auto_cal_mode !== "off") {
+      this._tryAutoMmwCalibrate();
+    }
+
+    // ── Segmentiertes Polling ────────────────────────────────────────────────
+    // Bestimme welche Segmente gerade gebraucht werden
+    const needTracking = this._opts?.module_ble !== false;   // default: AN
+    const needMmwave   = !!this._opts?.module_mmwave;         // default: AUS
+
+    try {
+      // BASE immer holen (lights, rooms, decos, alarms, info_sensors)
+      const base = await this._hass.callApi("GET",
+        `ble_positioning/${this._entryId}/card_data/base`);
+      if (!base || !this._data) return;
+
+      // Base-Daten übernehmen
+      if (base.lights?.length > 0) this._data.lights = base.lights;
+      this._data.info_sensors  = base.info_sensors || [];
+      if (base.decos) { this._data.decos = base.decos; this._pendingDecos = structuredClone(base.decos); }
+      this._pendingInfoSensors = structuredClone(base.info_sensors || []);
+      this._data.windows       = base.windows || [];
+      this._windows            = base.windows || [];
+      if (base.alarms)        this._data.alarms        = base.alarms;
+      if (base.batteries)     this._data.batteries     = base.batteries;
+      if (base.energy_lines)  this._data.energy_lines  = base.energy_lines;
+
+      // TRACKING nur wenn BLE-Modul aktiv
+      if (needTracking) {
+        const tracking = await this._hass.callApi("GET",
+          `ble_positioning/${this._entryId}/card_data/tracking`);
+        if (tracking) {
+          this._data.fingerprints = tracking.fingerprints;
+          this._data.fp_counts    = tracking.fp_counts;
+          this._data.scanners     = tracking.scanners || this._data.scanners;
+          if (this._mode === "view" || this._mode === "calibrate") {
+            this._data.devices = tracking.devices;
+            // EMA-Smoothing für Gerätepositionen
+            (tracking.devices || []).forEach(dev => {
+              const x = dev.x, y = dev.y;
+              if (x == null || y == null) {
+                delete this._ema[dev.device_id];
+                return;
+              }
+              if (!this._ema[dev.device_id]) {
+                this._ema[dev.device_id] = { x, y };
+              } else {
+                const e = this._ema[dev.device_id];
+                const dist = Math.hypot(x - e.x, y - e.y);
+                const alpha = dist > 2.0 ? 0.85 : dist > 1.0 ? 0.6 : 0.4;
+                e.x += alpha * (x - e.x);
+                e.y += alpha * (y - e.y);
+              }
+            });
+            this._updateSidebarFromData(tracking.devices);
+          }
+        }
+      }
+
+      // MMWAVE nur wenn mmWave-Modul aktiv
+      if (needMmwave) {
+        const mmwave = await this._hass.callApi("GET",
+          `ble_positioning/${this._entryId}/card_data/mmwave`);
+        if (mmwave) {
+          this._data.mmwave_sensors = mmwave.mmwave_sensors;
+        }
+      }
+
       this._setConnected(true);
+      this._markDirty(); // Neue Daten → Neuzeichnen nötig
+      // Module über neue Daten informieren
+      Object.values(BLEModuleRegistry._modules).forEach(m => {
+        if (this._opts?.['module_' + m.id] && typeof m.onPoll === 'function') {
+          try { m.onPoll(base, this); } catch(e) {}
+        }
+      });
     } catch (_) {
       this._setConnected(false);
     }
@@ -6044,8 +6825,10 @@ class BLEPositioningCard extends HTMLElement {
       });
       b.appendChild(discoBtn);
 
-      // Entity-Status live
-      this._updateMmwaveEntityStatus(b, s);
+      // Entity-Status live (in eigenem div-Container, nicht direkt in b)
+      const statusDiv = document.createElement("div");
+      b.appendChild(statusDiv);
+      this._updateMmwaveEntityStatus(statusDiv, s);
 
       // Position + Rotation
       const posRow=document.createElement("div"); posRow.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:4px";
@@ -6088,6 +6871,99 @@ class BLEPositioningCard extends HTMLElement {
 
       b.appendChild(tog("X-Achse umkehren", !!s.invert_x, v=>{s.invert_x=v;this._draw();}));
       b.appendChild(tog("Y-Achse umkehren", !!s.invert_y, v=>{s.invert_y=v;this._draw();}));
+
+      // ── Sensor-Fusion (nur relevant wenn ≥2 Sensoren konfiguriert) ──────
+      const numSensors=(this._pendingMmwave||this._data?.mmwave_sensors||[]).length;
+      if(numSensors>=2){
+        const fusRow=document.createElement("div");
+        fusRow.style.cssText="display:flex;align-items:center;gap:6px;margin-top:5px;padding:4px 0;border-top:1px solid #1c2535";
+        const fusLbl=document.createElement("span");
+        fusLbl.style.cssText="font-size:8px;color:#94a3b8;flex:1";
+        fusLbl.textContent="🔀 Sensor-Fusion (2+ Sensoren)";
+        const fusCb=document.createElement("input");
+        fusCb.type="checkbox";
+        fusCb.checked=!!this._opts?.mmw_fusion;
+        fusCb.style.cssText="accent-color:#a78bfa;width:14px;height:14px;cursor:pointer";
+        fusCb.title="Wenn eine Person von 2 Sensoren erfasst wird: gewichteter Durchschnitt statt Doppeldarstellung";
+        fusCb.addEventListener("change",()=>{
+          if(!this._opts)this._opts={};
+          this._opts.mmw_fusion=fusCb.checked;
+          this._saveOptions();
+          this._showToast(fusCb.checked?"🔀 Sensor-Fusion aktiv":"Sensor-Fusion deaktiviert");
+        });
+        fusRow.append(fusLbl,fusCb);
+        b.appendChild(fusRow);
+      }
+
+      // ── Dämpfungs-Schieberegler ──────────────────────────────────────────
+      const dampRow=document.createElement("div");
+      dampRow.style.cssText="display:flex;align-items:center;gap:4px;margin-top:5px;padding:4px 0;border-top:1px solid #1c2535";
+      const dampLbl=document.createElement("span");
+      dampLbl.style.cssText="font-size:8px;color:#94a3b8;min-width:60px";
+      dampLbl.textContent="\uD83C\uDF9A Dämpfung";
+      const dampSlider=document.createElement("input");
+      dampSlider.type="range"; dampSlider.min=1; dampSlider.max=10; dampSlider.step=1;
+      dampSlider.value=s.damping??5;
+      dampSlider.style.cssText="flex:1;accent-color:#00e5ff;height:14px";
+      const dampVal=document.createElement("span");
+      dampVal.style.cssText="font-size:8px;color:#00e5ff;min-width:28px;text-align:right;font-weight:700";
+      const dampDesc=document.createElement("span");
+      dampDesc.style.cssText="font-size:7px;color:#445566;min-width:50px;text-align:right";
+      const updateDamp=()=>{
+        const v=parseInt(dampSlider.value);
+        dampVal.textContent=v+"/10";
+        dampDesc.textContent=v<=2?"reaktiv":v<=4?"leicht":v<=6?"mittel":v<=8?"weich":"sehr weich";
+        s.damping=v;
+        if(this._mmwaveKalman){
+          Object.keys(this._mmwaveKalman).forEach(k=>{if(k.startsWith(s.id))delete this._mmwaveKalman[k];});
+        }
+        this._draw();
+      };
+      updateDamp();
+      dampSlider.addEventListener("input",updateDamp);
+      dampRow.append(dampLbl,dampSlider,dampVal,dampDesc);
+      b.appendChild(dampRow);
+
+      // ── Positions-Hysterese (Dead-Zone) ─────────────────────────────────
+      const dzRow=document.createElement("div");
+      dzRow.style.cssText="display:flex;align-items:center;gap:4px;margin-top:4px";
+      const dzLbl=document.createElement("span");
+      dzLbl.style.cssText="font-size:8px;color:#94a3b8;min-width:60px";
+      dzLbl.textContent="\uD83D\uDCCD Dead-Zone";
+      const dzSlider=document.createElement("input");
+      dzSlider.type="range"; dzSlider.min=0; dzSlider.max=400; dzSlider.step=20;
+      dzSlider.value=s.dead_zone??80;
+      dzSlider.style.cssText="flex:1;accent-color:#f59e0b;height:14px";
+      const dzVal=document.createElement("span");
+      dzVal.style.cssText="font-size:8px;color:#f59e0b;min-width:36px;text-align:right;font-weight:700";
+      const updateDZ=()=>{
+        const v=parseInt(dzSlider.value);
+        dzVal.textContent=v+"mm";
+        s.dead_zone=v;
+        if(this._mmwaveKalman){
+          Object.keys(this._mmwaveKalman).forEach(k=>{if(k.startsWith(s.id))delete this._mmwaveKalman[k];});
+        }
+        this._draw();
+      };
+      updateDZ();
+      dzSlider.addEventListener("input",updateDZ);
+      dzRow.append(dzLbl,dzSlider,dzVal);
+      b.appendChild(dzRow);
+
+      // ── Haltungsschwellen ─────────────────────────────────────────────────
+      const ptLbl=document.createElement("div");
+      ptLbl.style.cssText="font-size:8px;color:#94a3b8;margin-top:5px;padding-top:4px;border-top:1px solid #1c2535";
+      ptLbl.textContent="\uD83E\uDDD8 Haltungsschwellen (mm Höhe)";
+      b.appendChild(ptLbl);
+      [["Stehen ab","stand_min",1500,300,2200],["Sitzen ab","sit_min",900,200,1500],["Liegen ab","fall_height",600,100,1000],["Hysterese","±hysteresis",60,0,200]].forEach(([lbl,key,def,mn,mx2])=>{
+        const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:3px;margin-top:2px";
+        const l2=document.createElement("span"); l2.style.cssText="font-size:7.5px;color:#445566;min-width:65px"; l2.textContent=lbl;
+        const realKey=key.replace("±","");
+        const curVal=(s.posture_thresholds?.[realKey])??def;
+        const i2=inp("number",curVal,mn,mx2,10,v=>{if(!s.posture_thresholds)s.posture_thresholds={};s.posture_thresholds[realKey]=parseInt(v)||def;},52);
+        const u2=document.createElement("span"); u2.style.cssText="font-size:7.5px;color:#445566"; u2.textContent=key.startsWith("±")?"\u00b1mm":"mm";
+        row.append(l2,i2,u2); b.appendChild(row);
+      });
 
       // Target-Namen
       const numT=s.targets||3;
@@ -6416,9 +7292,12 @@ class BLEPositioningCard extends HTMLElement {
       const isMoving = Math.abs(speed_raw) > 0.05 || (dirState?.state||"").toLowerCase() === "moving";
       const isStill  = Math.abs(speed_raw) < 0.03 && !isMoving;
 
-      // Rauschparameter: aus Kalibrierungs-Profil wenn vorhanden, sonst Defaults
+      // Rauschparameter: aus Kalibrierungs-Profil + Dämpfungs-Schieberegler
       const kalProf = sensor.kalman_profiles?.[targetNum-1];
-      const R_still_cal = kalProf?.R_still || 200000;
+      // Dämpfung: 1=reaktiv (R_still=5000), 10=sehr weich (R_still=2000000)
+      const dampLevel = Math.max(1, Math.min(10, sensor.damping ?? 5));
+      const R_still_base = 5000 * Math.pow(dampLevel, 2.2);
+      const R_still_cal = kalProf?.R_still || R_still_base;
       const R = isStill  ? R_still_cal : isMoving ? 3000  : Math.round(R_still_cal * 0.15);
       const Q = isMoving ? 8000        : isStill  ? 5     : 200;
 
@@ -6441,10 +7320,10 @@ class BLEPositioningCard extends HTMLElement {
       ks.y  = ks.y + Ky * (y_raw - ks.y);
       ks.Py = (1 - Ky) * Py_pred;
 
-      // Dead-Zone: Wenn still und Änderung < threshold → komplett einfrieren
-      // (verhindert restliches Zittern bei sehr niedrigem Rauschen)
-      const deadZone = isStill ? 80 : 0; // mm
-      if (Math.abs(x_raw - ks.x) < deadZone) ks.x = ks.x; // kein Update
+      // Dead-Zone: Wenn still und Änderung < threshold → einfrieren
+      // Konfigurierbar via sensor.dead_zone (Schieberegler, default 80mm)
+      const deadZone = isStill ? (sensor.dead_zone ?? 80) : 0;
+      if (Math.abs(x_raw - ks.x) < deadZone) ks.x = ks.x;
       if (Math.abs(y_raw - ks.y) < deadZone) ks.y = ks.y;
     }
 
@@ -7652,6 +8531,37 @@ class BLEPositioningCard extends HTMLElement {
     }
   }
 
+  // Anwesenheitserkennung: nur phone + wearable zählen, nicht stationary
+  // Gibt zurück: "home" | "away" | "unknown"
+  _getPresenceState() {
+    const devices = this._data?.devices || [];
+    if (!devices.length) return "unknown";
+    let hasTracking = false;
+    for (const dev of devices) {
+      const type = dev.device_type || "phone";
+      if (type === "stationary") continue; // iPad etc. ignorieren
+      hasTracking = true;
+      // Prüfe ob Gerät sichtbar (x/y vorhanden = in Reichweite)
+      if (dev.x != null && dev.y != null) return "home";
+    }
+    // mmWave sieht jemanden? → auch "home"
+    const mmwPersons = (this._data?.mmwave_persons || []);
+    if (mmwPersons.length > 0) return "home";
+    return hasTracking ? "away" : "unknown";
+  }
+
+  // Raumzuweisung per Koordinate – unabhängig von BLE oder mmWave
+  // Kann von beiden genutzt werden
+  _getRoomForPosition(mx, my) {
+    if (mx == null || my == null) return null;
+    const rooms = this._pendingRooms || this._data?.rooms || [];
+    for (const r of rooms) {
+      if (mx >= r.x1 && mx <= r.x2 && my >= r.y1 && my <= r.y2)
+        return r.name || r.id || null;
+    }
+    return null;
+  }
+
   _getMmwaveZoneForTarget(sensor, target) {
     const fx = target?.floor_mx, fy = target?.floor_my;
     if (fx == null || fy == null) return null;
@@ -7961,8 +8871,21 @@ class BLEPositioningCard extends HTMLElement {
 
     switch(cls) {
       case "adult": {
-        // Haltungs-abhängige Figur: stehend / sitzend / liegend
         const posture = target?._posture || "standing";
+        // Sturz: rotes Blink-Symbol
+        if (posture === "fallen") {
+          ctx.save();
+          ctx.strokeStyle = `rgba(239,68,68,${0.7+Math.sin(Date.now()/200)*0.3})`;
+          ctx.lineWidth = 3 * scale;
+          const r = 12 * scale;
+          ctx.beginPath(); ctx.moveTo(tc.x-r,tc.y-r); ctx.lineTo(tc.x+r,tc.y+r); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(tc.x+r,tc.y-r); ctx.lineTo(tc.x-r,tc.y+r); ctx.stroke();
+          ctx.font = `bold ${10*scale}px monospace`;
+          ctx.fillStyle = "#ef4444"; ctx.textAlign="center"; ctx.textBaseline="bottom";
+          ctx.fillText("⚠ STURZ", tc.x, tc.y - r - 3);
+          ctx.textAlign="left"; ctx.restore();
+          break;
+        }
         if (posture === "lying") {
           // Liegend: horizontaler Strich mit Kopf am Ende
           const r = 7 * scale;
@@ -8304,24 +9227,66 @@ class BLEPositioningCard extends HTMLElement {
 
     // ── Deckenmontage: y_mm = Abstand nach unten → direkte Höheninfo ────
     if (mount === "ceiling") {
-      const T = { stand_min: th.stand_min ?? 1500, sit_min: th.sit_min ?? 900 };
+      const T = {
+        stand_min:   th.stand_min   ?? 1500,
+        sit_min:     th.sit_min     ?? 900,
+        fall_height: th.fall_height ?? 600,  // Sturz: unter diesem Wert = am Boden
+        hysteresis:  th.hysteresis  ?? 60,
+      };
       const personHeight_mm = Math.max(0, mountH - y_mm);
-      if (personHeight_mm >= T.stand_min) return "standing";
-      if (personHeight_mm >= T.sit_min)   return "sitting";
-      return "lying";
+
+      // ── Liegen zuerst prüfen: niedrige Höhe + niedrige Speed + großer x-Spread ──
+      // Liegend: Person nimmt mehr horizontale Fläche ein → |x_mm| größer
+      const xSpread = Math.abs(x_mm);
+      // Sturz / Boden: unter fall_height → fallen
+      if (personHeight_mm < T.fall_height && speed < 0.3) return "fallen";
+
+      const isLyingCandidate = personHeight_mm < (T.sit_min - T.hysteresis) &&
+                               speed < 0.12;
+      const lyingConfirmed = isLyingCandidate && (xSpread > 250 || personHeight_mm < (T.fall_height + 300));
+
+      // Hysterese: vorherige Haltung aus letztem Frame einbeziehen
+      const prevPosture = target._posture || "standing";
+      const hysteresis = T.hysteresis;
+
+      if (lyingConfirmed) return "lying";
+
+      // Stehend: Höhe ≥ stand_min (+ Hysterese-Puffer wenn vorher nicht stehend)
+      const standThresh = prevPosture === "standing"
+        ? T.stand_min - hysteresis   // War stehend → mehr Toleranz
+        : T.stand_min + hysteresis;  // War sitzend/liegend → braucht klar mehr Höhe
+
+      if (personHeight_mm >= standThresh) return "standing";
+
+      // Sitzend: Höhe ≥ sit_min mit Hysterese
+      const sitThresh = prevPosture === "sitting"
+        ? T.sit_min - hysteresis
+        : T.sit_min + hysteresis;
+
+      if (personHeight_mm >= sitThresh) return "sitting";
+
+      // Fallback: vorherige Haltung beibehalten wenn im Hysterese-Band
+      return prevPosture === "lying" ? "lying" : "sitting";
     }
 
     // ── Wandmontage MIT Neigungswinkel (≥ 15°): Höhe berechenbar ────────
     const tiltDeg  = sensor.mount_tilt_deg || 0;
     const tiltRad  = Math.abs(tiltDeg) * Math.PI / 180;
     if (Math.abs(tiltDeg) >= 15) {
-      const T = { stand_min: th.stand_min ?? 1500, sit_min: th.sit_min ?? 900 };
+      const T = { stand_min: th.stand_min ?? 1500, sit_min: th.sit_min ?? 900,
+                   fall_height: th.fall_height ?? 600, hysteresis: th.hysteresis ?? 60 };
       const sinF = Math.sin(tiltRad);
       const personHeight_mm = Math.max(0, mountH - y_mm * sinF);
-      if (personHeight_mm >= T.stand_min) return "standing";
-      if (personHeight_mm >= T.sit_min)   return "sitting";
-      if (speed < 0.08)                   return "lying";
-      return "sitting";
+      const prevP = target._posture || "standing";
+      const xSpreadT = Math.abs(x_mm);
+      if (personHeight_mm < T.fall_height && speed < 0.3) return "fallen";
+      if (speed < 0.12 && personHeight_mm < (T.sit_min - T.hysteresis) &&
+          (xSpreadT > 250 || personHeight_mm < (T.fall_height + 300))) return "lying";
+      const standT = prevP==="standing" ? T.stand_min-T.hysteresis : T.stand_min+T.hysteresis;
+      const sitT   = prevP==="sitting"  ? T.sit_min-T.hysteresis   : T.sit_min+T.hysteresis;
+      if (personHeight_mm >= standT) return "standing";
+      if (personHeight_mm >= sitT)   return "sitting";
+      return prevP==="lying" ? "lying" : "sitting";
     }
 
     // ── Wandmontage OHNE Neigung: kein Höhensignal ───────────────────────
@@ -8565,8 +9530,8 @@ class BLEPositioningCard extends HTMLElement {
       if (wiz.step === 0)                  this._wizStep0(content, sensor, wiz, render);
       else if (wiz.step === 1)             this._wizStep1(content, sensor, wiz, render);
       else if (wiz.step === 2)             this._wizStep2(content, sensor, wiz, render);
-      else if (wiz.step >= 3 && wiz.step <= 5) this._wizStepPose(content, sensor, wiz, render);
-      else if (wiz.step === 6)             this._wizStepDone(content, sensor, wiz, render);
+      else if (wiz.step >= 3 && wiz.step <= 6) this._wizStepPose(content, sensor, wiz, render);
+      else if (wiz.step === 7)             this._wizStepDone(content, sensor, wiz, render);
     };
     render();
     body.appendChild(panel);
@@ -8598,11 +9563,23 @@ class BLEPositioningCard extends HTMLElement {
       });
       el.appendChild(list);
     }
+    // Körpergröße-Eingabe
+    const hRow=document.createElement("div");
+    hRow.style.cssText="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:6px;background:#0a1628;border-radius:6px;border:1px solid #00e5ff22";
+    const hLbl=document.createElement("span"); hLbl.style.cssText="font-size:8px;color:#94a3b8;white-space:nowrap"; hLbl.textContent="📏 Körpergröße:";
+    const hInp=document.createElement("input"); hInp.type="number"; hInp.min=120; hInp.max=220; hInp.step=1;
+    hInp.value=sensor._wizard_height||170;
+    hInp.style.cssText="width:55px;padding:2px 5px;border-radius:4px;border:1px solid #00e5ff44;background:#0d1219;color:#c8d8ec;font-size:9px;text-align:center";
+    const hUnit=document.createElement("span"); hUnit.style.cssText="font-size:8px;color:#445566"; hUnit.textContent="cm";
+    const hHint=document.createElement("span"); hHint.style.cssText="font-size:7px;color:#445566;flex:1;text-align:right"; hHint.textContent="wird für Schwellwerte genutzt";
+    hInp.addEventListener("input",()=>{ sensor._wizard_height=parseInt(hInp.value)||170; });
+    hRow.append(hLbl,hInp,hUnit,hHint); el.appendChild(hRow);
+
     const btn = document.createElement("button");
     btn.className = "btn btn-outline";
     btn.style.cssText = "width:100%;font-size:9px;padding:5px";
     btn.textContent = "🎯 Neue Kalibrierung starten";
-    btn.onclick = () => { wiz.step=1; wiz.samples={standing:[],sitting:[],lying:[]}; wiz.customName=null; render(); };
+    btn.onclick = () => { wiz.step=1; wiz.samples={standing:[],sitting:[],lying:[],floor:[]}; wiz.customName=null; render(); };
     el.appendChild(btn);
   }
 
@@ -8677,10 +9654,15 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _wizStepPose(el, sensor, wiz, render) {
+    const mountH = (sensor.mount_height_m||2.5)*1000;
+    const bodyH  = (sensor._wizard_height||170)*10; // cm→mm
     const POSES = [
       {step:3,key:"standing",icon:"🧍",label:"STEHEND", desc:"Steh aufrecht vor dem Sensor – 5 Sek. stillhalten.",color:"#22c55e"},
       {step:4,key:"sitting", icon:"🪑",label:"SITZEND",  desc:"Sitz (Stuhl/Sofa) – 5 Sek. stillhalten.",            color:"#f59e0b"},
-      {step:5,key:"lying",   icon:"🛌",label:"LIEGEND",  desc:"Leg dich hin – 5 Sek. Kann übersprungen werden.",    color:"#a78bfa"},
+      {step:5,key:"lying",   icon:"🛌",label:"LIEGEND",  desc:"Leg dich hin – 5 Sek. Kann übersprungen werden.",
+       color:"#a78bfa"},
+      {step:6,key:"floor",   icon:"🧎",label:"BODEN/STURZ", desc:"Leg dich auf den Boden (Sturz-Erkennung). Optional.",
+       color:"#ef4444"},
     ];
     const pose = POSES.find(p=>p.step===wiz.step);
     const h = document.createElement("div");
@@ -8744,12 +9726,12 @@ class BLEPositioningCard extends HTMLElement {
     const skip=document.createElement("button"); skip.className="btn btn-outline";
     skip.style.cssText="flex:1;font-size:8px;padding:4px;color:#445566;border-color:#1c2535";
     skip.textContent="Überspringen"; skip.disabled=wiz.collecting;
-    skip.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=5?6:wiz.step+1;render();};
+    skip.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=6?7:wiz.step+1;render();};
     const next=document.createElement("button"); next.className="btn";
     next.style.cssText=`flex:2;font-size:9px;padding:4px;background:${pose.color}22;border-color:${pose.color};color:${pose.color}`;
-    next.textContent=collected>0?(wiz.step<5?"Weiter →":"✓ Fertig"):"Erst aufzeichnen!";
+    next.textContent=collected>0?(wiz.step<6?"Weiter →":"✓ Fertig"):"Erst aufzeichnen!";
     next.disabled=wiz.collecting||collected===0;
-    next.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=5?6:wiz.step+1;render();};
+    next.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=6?7:wiz.step+1;render();};
     nav.append(back,skip,next); el.appendChild(nav);
   }
 
@@ -8767,16 +9749,34 @@ class BLEPositioningCard extends HTMLElement {
       const std=a=>{const m=avg(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length);};
       return {ax:Math.round(avg(xs)),ay:Math.round(avg(ys)),sx:Math.round(std(xs)),sy:Math.round(std(ys)),n:arr.length};
     };
-    const st=stat(s.standing), si=stat(s.sitting), ly=stat(s.lying);
+    const st=stat(s.standing), si=stat(s.sitting), ly=stat(s.lying), fl=stat(s.floor);
     const name=wiz.customName||(sensor.target_names||[])[wiz.personIdx]||"Person "+(wiz.personIdx+1);
     const noiseR=st?Math.round(((st.sx**2+st.sy**2)/2)*15):200000;
     const res=document.createElement("div");
     res.style.cssText="font-size:8px;color:#94a3b8;line-height:1.8;margin-bottom:8px;padding:5px 8px;background:#0d1219;border-radius:5px";
     const r=(icon,lbl,d)=>d?`${icon} <b style="color:#c8d8ec">${lbl}</b>: (${d.ax},${d.ay})mm σ=(${d.sx},${d.sy})mm n=${d.n}<br>`
       :`${icon} <span style="color:#445566">${lbl}: nicht gemessen</span><br>`;
-    res.innerHTML=`<b style="color:#00e5ff">👤 ${name}</b> – Distanz: ${wiz.measuredDist||"?"}mm<br>`
-      +r("🧍","Stehend",st)+r("🪑","Sitzend",si)+r("🛌","Liegend",ly);
+    res.innerHTML=`<b style="color:#00e5ff">👤 ${name}</b> – ${sensor._wizard_height||170}cm – Distanz: ${wiz.measuredDist||"?"}mm<br>`
+      +r("🧍","Stehend",st)+r("🪑","Sitzend",si)+r("🛌","Liegend",ly)+r("🧎","Boden",fl);
     el.appendChild(res);
+    // Vorschau der berechneten Schwellwerte
+    const mountH2=(sensor.mount_height_m||2.5)*1000;
+    const bodyH2=(sensor._wizard_height||170)*10;
+    const hStP=st?Math.round(mountH2-st.ay):null;
+    const hSiP=si?Math.round(mountH2-si.ay):null;
+    const hLyP=ly?Math.round(mountH2-ly.ay):null;
+    const hFlP=fl?Math.round(mountH2-fl.ay):null;
+    const sm_prev = (hStP&&hSiP)?Math.round((hStP+hSiP)/2+(hStP-hSiP)*0.1):Math.round(bodyH2*0.75);
+    const si_prev = (hSiP&&hLyP)?Math.round((hSiP+hLyP)/2+(hSiP-hLyP)*0.1):Math.round(bodyH2*0.42);
+    const fa_prev = hFlP?Math.round((hFlP+(hLyP||si_prev))/2):Math.round(bodyH2*0.18);
+    const preview=document.createElement("div");
+    preview.style.cssText="font-size:7.5px;padding:5px 8px;border-radius:4px;border:1px solid #22c55e33;background:#22c55e08;margin-bottom:6px;line-height:1.9";
+    preview.innerHTML=`<b style="color:#22c55e">📐 Berechnete Schwellwerte:</b><br>`
+      +`🧍 Stehen ab: <b style="color:#c8d8ec">${sm_prev}mm</b> `
+      +`🪑 Sitzen ab: <b style="color:#c8d8ec">${si_prev}mm</b> `
+      +`⚠ Sturz unter: <b style="color:#ef4444">${fa_prev}mm</b><br>`
+      +`<span style="color:#445566">Diese Werte werden beim Speichern automatisch gesetzt.</span>`;
+    el.appendChild(preview);
     if(st){
       const ni=document.createElement("div");
       ni.style.cssText="font-size:7.5px;color:#00e5ff;margin-bottom:6px;padding:3px 7px;background:#00e5ff0a;border-radius:4px";
@@ -8788,28 +9788,72 @@ class BLEPositioningCard extends HTMLElement {
     save.textContent=`💾 Profil "${name}" speichern`;
     save.onclick=()=>{
       if(!sensor.posture_profiles) sensor.posture_profiles={};
+      const mountH=(sensor.mount_height_m||2.5)*1000;
+      const bodyH=(sensor._wizard_height||170)*10;
+
+      // ── Automatische Schwellwert-Berechnung aus Messdaten ──────────────
+      // Nutze gemessene y-Werte (Sensorabstand nach unten bei Deckenmontage)
+      // personHeight = mountH - y_mm
+      const hStand = st ? Math.round(mountH - st.ay) : null;
+      const hSit   = si ? Math.round(mountH - si.ay) : null;
+      const hLie   = ly ? Math.round(mountH - ly.ay) : null;
+      const hFloor = fl ? Math.round(mountH - fl.ay) : null;
+
+      // Schwellwerte: Mitte zwischen den Höhen, mit Hysterese-Puffer
+      let stand_min, sit_min, fall_height, hysteresis=60;
+      if(hStand && hSit) {
+        // Gemessene Werte: Mitte + 10% Sicherheitsabstand zur Steh-Seite
+        stand_min = Math.round((hStand + hSit) / 2 + (hStand - hSit) * 0.1);
+      } else {
+        // Fallback: proportional zur Körpergröße
+        // Stehend ≈ 93% der Körpergröße, Sitzend ≈ 54%
+        stand_min = Math.round(bodyH * 0.75); // Mitte Stehen(93%) / Sitzen(54%) = 74%
+      }
+      if(hSit && hLie) {
+        sit_min = Math.round((hSit + hLie) / 2 + (hSit - hLie) * 0.1);
+      } else {
+        sit_min = Math.round(bodyH * 0.42); // Mitte Sitzen(54%) / Liegen(30%) = 42%
+      }
+      if(hFloor) {
+        fall_height = Math.round((hFloor + (hLie||sit_min)) / 2);
+      } else if(hLie) {
+        fall_height = Math.round(hLie * 0.6); // 60% der Liegehöhe
+      } else {
+        fall_height = Math.round(bodyH * 0.18); // ~30cm bei 170cm
+      }
+
+      // Hysterese: kleiner als halbe Lücke zwischen Stehen und Sitzen
+      if(hStand && hSit) hysteresis = Math.min(80, Math.round((hStand-hSit)*0.15));
+
+      // Schwellwerte in sensor speichern
+      sensor.posture_thresholds = {stand_min, sit_min, fall_height, hysteresis};
+
       sensor.posture_profiles[name]={
         name, dist_mm:wiz.measuredDist,
+        body_height_cm: sensor._wizard_height||170,
         noise_x:st?.sx, noise_y:st?.sy, kalman_R_still:noiseR,
-        standing_x:st?.ax, standing_y:st?.ay,
-        sitting_x:si?.ax,  sitting_y:si?.ay,
-        lying_x:ly?.ax,    lying_y:ly?.ay,
+        standing_x:st?.ax, standing_y:st?.ay, standing_height:hStand,
+        sitting_x:si?.ax,  sitting_y:si?.ay,  sitting_height:hSit,
+        lying_x:ly?.ax,    lying_y:ly?.ay,    lying_height:hLie,
+        floor_x:fl?.ax,    floor_y:fl?.ay,    floor_height:hFloor,
         threshold_y_stand_sit:(st&&si)?Math.round((st.ay+si.ay)/2):null,
         threshold_y_sit_lie:(si&&ly)?Math.round((si.ay+ly.ay)/2):null,
+        computed_stand_min:stand_min, computed_sit_min:sit_min,
+        computed_fall_height:fall_height, computed_hysteresis:hysteresis,
         calibrated_at:new Date().toISOString(),
         sensor_id:sensor.id, target_idx:wiz.personIdx,
       };
       if(!sensor.kalman_profiles) sensor.kalman_profiles={};
       sensor.kalman_profiles[wiz.personIdx]={R_still:noiseR};
       this._saveCalibProfiles(sensor);
-      this._showToast(`✅ Profil "${name}" gespeichert`);
+      this._showToast(`✅ Profil "${name}" gespeichert – Schwellwerte aktualisiert`);
       wiz.step=0; wiz.customName=null; render();
     };
     el.appendChild(save);
     const reset=document.createElement("button");
     reset.className="btn btn-outline"; reset.style.cssText="width:100%;font-size:8px;padding:3px;font-family:inherit";
     reset.textContent="← Neu starten";
-    reset.onclick=()=>{wiz.step=0;wiz.samples={standing:[],sitting:[],lying:[]};wiz.customName=null;render();};
+    reset.onclick=()=>{wiz.step=0;wiz.samples={standing:[],sitting:[],lying:[],floor:[]};wiz.customName=null;render();};
     el.appendChild(reset);
   }
 
@@ -11333,6 +12377,23 @@ draw();
     if (this._optEvtHandler) window.removeEventListener("ble_positioning_set_opt", this._optEvtHandler);
     if (this._keydownHandler) document.removeEventListener("keydown", this._keydownHandler);
     document.removeEventListener("keyup", this._keyupHandler);
+    // Screensaver cleanup
+    if (this._ssActivityHandler) {
+      ["click","touchstart","mousemove","keydown"].forEach(evt =>
+        document.removeEventListener(evt, this._ssActivityHandler)
+      );
+      this._ssActivityHandler = null;
+    }
+    clearTimeout(this._ssIdleTimer);
+    clearTimeout(this._ssClockTimer);
+    this._ssOverlay?.remove(); this._ssOverlay = null; this._ssActive = false;
+    this._stopWsUpdates();
+    if (this._swipeHandler) {
+      document.removeEventListener("touchstart", this._swipeHandler.onTouchStart);
+      document.removeEventListener("touchend",   this._swipeHandler.onTouchEnd);
+      this._swipeHandler = null;
+    }
+    if (this._ambientSensor) { try { this._ambientSensor.stop(); } catch(e) {} this._ambientSensor = null; }
     // Alle gectrackten Timeouts clearen
     (this._timeouts || []).forEach(id => clearTimeout(id));
     this._timeouts = [];
@@ -11351,6 +12412,71 @@ draw();
       };
       document.addEventListener("visibilitychange", this._visibilityHandler);
     }
+    // Swipe-Geste: Sidebar per Links/Rechts-Wischen auf/zu
+    if (!this._swipeHandler) {
+      let startX = 0, startY = 0;
+      const onTouchStart = (e) => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+      };
+      const onTouchEnd = (e) => {
+        const dx = e.changedTouches[0].clientX - startX;
+        const dy = e.changedTouches[0].clientY - startY;
+        if (Math.abs(dx) < 40 || Math.abs(dy) > Math.abs(dx)) return; // kein klarer Swipe
+        const sidebar = this.shadowRoot?.getElementById("sidebar");
+        const btn     = this.shadowRoot?.getElementById("sidebar-toggle");
+        const cwrap   = this.shadowRoot?.getElementById("cwrap");
+        if (!sidebar || !btn || !cwrap) return;
+        if (dx < -40 && !this._sidebarCollapsed) {
+          // Swipe nach links → zuklappen
+          this._applySidebarState(sidebar, btn, cwrap, true);
+          if (!this._opts) this._opts = {};
+          this._opts.sidebar_collapsed = true;
+          this._saveOptions();
+          setTimeout(() => { this._onResize(); this._markDirty(); }, 250);
+        } else if (dx > 40 && this._sidebarCollapsed) {
+          // Swipe nach rechts → aufklappen
+          this._applySidebarState(sidebar, btn, cwrap, false);
+          if (!this._opts) this._opts = {};
+          this._opts.sidebar_collapsed = false;
+          this._saveOptions();
+          setTimeout(() => { this._onResize(); this._markDirty(); }, 250);
+        }
+      };
+      this._swipeHandler = { onTouchStart, onTouchEnd };
+      document.addEventListener("touchstart", onTouchStart, {passive:true});
+      document.addEventListener("touchend",   onTouchEnd,   {passive:true});
+    }
+
+    // Battery Status API: Energiesparmodus bei niedrigem Akku
+    if (!this._batteryHandler && navigator.getBattery) {
+      navigator.getBattery().then(bat => {
+        this._batteryHandler = true;
+        const checkBat = () => {
+          const low = bat.level <= 0.2 && !bat.charging;
+          if (low !== this._lowBattery) {
+            this._lowBattery = low;
+            this._markDirty();
+            if (low) this._showToast("🔋 Akku niedrig – Energiesparmodus aktiv");
+          }
+        };
+        bat.addEventListener("levelchange", checkBat);
+        bat.addEventListener("chargingchange", checkBat);
+        checkBat();
+      }).catch(() => {});
+    }
+
+    // Screensaver: Inaktivitäts-Timer bei Nutzer-Interaktion zurücksetzen
+    if (!this._ssActivityHandler) {
+      this._ssActivityHandler = () => {
+        // Im Screensaver: Timer NICHT resetten (läuft ja bereits)
+        // Screensaver wird nur durch Tab-Klick beendet
+        if (!this._ssActive) this._resetSsTimer();
+      };
+      ["click","touchstart","mousemove","keydown"].forEach(evt =>
+        document.addEventListener(evt, this._ssActivityHandler, {passive:true})
+      );
+    }
     // Re-boot if card was previously disconnected and hass is re-supplied
     // (HA calls set hass again after connectedCallback, triggering _boot)
   }
@@ -11361,23 +12487,24 @@ draw();
     const ctx  = this._ctx;
     const c    = this._canvas;
     if (!ctx || !c) return;
-    // FIX: Throttle – nicht öfter als 60fps zeichnen
-    const now = performance.now();
-    if (now - (this._lastDrawTime||0) < 12) { // 12ms = ~83fps max
-      if (!this._drawThrottlePending) {
-        this._drawThrottlePending = true;
-        requestAnimationFrame(() => { this._drawThrottlePending = false; this._draw(); });
-      }
-      return;
+    // Throttle: _getLoopParams steuert FPS – hier kein extra-Throttle nötig
+    this._lastDrawTime = performance.now();
+    // Modul-Canvas-Rendering (nach allem anderen)
+    if (this._mode === 'view') {
+      Object.values(BLEModuleRegistry._modules).forEach(m => {
+        if (this._opts?.['module_' + m.id] && typeof m.onDraw === 'function') {
+          try { m.onDraw(this._ctx, this); } catch(e) {}
+        }
+      });
     }
-    this._lastDrawTime = now;
     // Schedule next frame if any alarm is active (for pulse animation)
     const hasActiveAlarm = (this._pendingAlarms?.length ? this._pendingAlarms : (this._data?.alarms||[])).some(al => {
       const s = this._hass?.states?.[al.entity]?.state || "";
       return ["on","true","1","triggered","motion","wet","smoke","detected"].includes(s.toLowerCase());
     });
+    // Alarm-Animation: immer aktiv (Sicherheit geht vor)
     if (hasActiveAlarm && !this._alarmAnimFrame && !document.hidden) {
-      this._alarmAnimFrame = requestAnimationFrame(() => { this._alarmAnimFrame = null; this._draw(); });
+      this._alarmAnimFrame = requestAnimationFrame(() => { this._alarmAnimFrame = null; this._markDirty(); });
     }
     // Kontinuierlicher RAF-Loop wenn animierte Deko-Elemente aktiv sind
     // (TV an, Speaker an, Waschmaschine läuft, Gartenlampe etc.)
@@ -11391,8 +12518,9 @@ draw();
       }
       return false;
     });
-    // FIX: Animationen auf 20fps drosseln + bei verstecktem Tab pausieren
-    if (hasAnimDeko && !this._dekoAnimFrame && !document.hidden) {
+    // Animationen: bei verstecktem Tab oder "Animationen pausieren" Option überspringen
+    const pauseAnim = this._opts?.pause_anim && (this._ssActive || document.hidden);
+    if (hasAnimDeko && !this._dekoAnimFrame && !document.hidden && !pauseAnim) {
       const now = performance.now();
       const elapsed = now - (this._lastDekoFrame || 0);
       if (elapsed >= 50) { // 20fps = 50ms
@@ -11425,18 +12553,28 @@ draw();
     // → kein ctx.scale(dpr) nötig (würde alles nochmal skalieren → schwarzer Rand)
     this._dpr2dScaled = false;
 
-    // ── Kompass im 3D-Modus ausblenden ────────────────────────────────────
+    // ── Modul-eigener Canvas-Modus: Modul zeichnet alles selbst ──────────────
+    // Wenn der aktive Modus einem Modul gehört → Modul zeichnet, kein Grundriss
+    const activeModuleForMode = Object.values(BLEModuleRegistry._modules).find(
+      m => this._opts?.['module_' + m.id] && (m.tabId || m.id) === this._mode
+    );
+    if (activeModuleForMode && typeof activeModuleForMode.onDraw === 'function') {
+      try { activeModuleForMode.onDraw(this._ctx, this); } catch(e) {
+        console.error('[BLE] Modul onDraw Fehler:', e);
+      }
+      return; // Kein Grundriss zeichnen
+    }
     {
       const _cw = this.shadowRoot?.getElementById("compass-wrap");
       if (_cw) {
-        const _is3DNow = this._mode === "view" && this._opts?.show3D;
+        const _is3DNow = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
         _cw.style.display = _is3DNow ? "none" : "block";
       }
     }
 
     // ── Kartenrotation (nur 2D) ───────────────────────────────────────────
     const _rot2d = this._mapRotation || 0;
-    const _is3D  = this._mode === "view" && this._opts?.show3D;
+    const _is3D  = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
     if (_rot2d !== 0 && !_is3D) {
       ctx.save();
       ctx.translate(W/2, H/2);
@@ -11446,7 +12584,7 @@ draw();
     } else { this._rotActive = false; }
 
     // ── 3D mode: skip all 2D drawing ─────────────────────────────────────
-    if ((this._mode === "view" || this._mode === "lights") && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "lights" || this._mode === "screensaver") && this._opts?.show3D) {
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
@@ -11595,6 +12733,7 @@ draw();
     // Deco elements (2D)
     if (this._mode !== 'deko') this._drawDecos(this._data?.decos || []);
     else this._drawDecos(this._pendingDecos, true);
+    this._drawMusicBubbles();
     this._drawMapLabels();
     if (this._measureMode&&this._measureP1) {
       const ctxM=this._ctx;
@@ -12423,23 +13562,41 @@ draw();
     }));
 
     // ── mmWave-Personen ──────────────────────────────────────────
-    const mmwavePersons = [];
+    const mmwaveRaw = [];
     for (const sensor of (this._pendingMmwave || this._data?.mmwave_sensors || [])) {
       const numT = sensor.targets || 3;
       for (let ti = 1; ti <= numT; ti++) {
         const t = this._getMmwaveTarget(sensor, ti);
         if (!t?.present) continue;
-        mmwavePersons.push({
+        // Distanz vom Sensor zum Target (für Fusion-Gewichtung)
+        const dx = (t.floor_mx??0) - (sensor.mx??0);
+        const dy = (t.floor_my??0) - (sensor.my??0);
+        mmwaveRaw.push({
           sensorId: sensor.id, sensorName: sensor.name||sensor.id,
           targetId: ti,
           name: (sensor.target_names||[])[ti-1] || `Person ${ti}`,
-          x: t.floor_mx ?? null, y: t.floor_my ?? null,
+          floor_mx: t.floor_mx ?? null, floor_my: t.floor_my ?? null,
+          dist_m: Math.sqrt(dx*dx+dy*dy),
           room: this._getMmwaveZoneForTarget(sensor, t)?.room || null,
           posture: this._mmwaveDetectPosture(sensor, t),
           speed: t.speed || 0,
         });
       }
     }
+    // Sensor-Fusion: nur wenn Nutzer es aktiviert hat (opts.mmw_fusion)
+    // Ohne Fusion: jeder Sensor zeigt seine Targets separat
+    const fusedTargets = this._opts?.mmw_fusion
+      ? this._fuseMmwaveTargets(mmwaveRaw)
+      : mmwaveRaw;
+    const mmwavePersons = fusedTargets.map(t => ({
+      sensorId: t.sensorId, sensorName: t.sensorName,
+      targetId: t.targetId, name: t.name,
+      x: t.floor_mx, y: t.floor_my,
+      // Raumzuweisung: aus Koordinate berechnen (unabhängig von BLE)
+      room: this._getRoomForPosition(t.floor_mx, t.floor_my) || t.room,
+      posture: t.posture, speed: t.speed,
+      fused: t.fused || 1,
+    }));
 
     // ── Lichter ──────────────────────────────────────────────────
     const lights = (this._pendingLights || this._data?.lights || []).map(l => {
@@ -13833,7 +14990,7 @@ _drawDoors() {
         const lbl = document.createElement("input");
         lbl.value = deco.label || typeInfo.label;
         lbl.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:8px;padding:2px 4px";
-        lbl.addEventListener("input", () => { this._pendingDecos[idx].label = lbl.value; this._draw(); });
+        lbl.addEventListener("input", () => { this._pendingDecos[idx].label = lbl.value; this._draw(); this._saveDecoNow(); });
         const del = document.createElement("button");
         del.textContent = "✕"; del.style.cssText = "font-size:9px;background:none;border:none;color:#ef4444;cursor:pointer;padding:0 2px";
         del.addEventListener("click", () => { this._pendingDecos.splice(idx,1); this._rebuildSidebar(); });
@@ -13849,7 +15006,7 @@ _drawDoors() {
         sizeInp.style.cssText="flex:1;accent-color:#10b981";
         const sizeVal = document.createElement("span"); sizeVal.style.cssText="font-size:7px;color:#10b981;min-width:22px";
         sizeVal.textContent = (deco.size||1.0).toFixed(1)+"×";
-        sizeInp.addEventListener("input",()=>{ this._pendingDecos[idx].size=parseFloat(sizeInp.value); sizeVal.textContent=parseFloat(sizeInp.value).toFixed(1)+"×"; this._draw(); });
+        sizeInp.addEventListener("input",()=>{ this._pendingDecos[idx].size=parseFloat(sizeInp.value); sizeVal.textContent=parseFloat(sizeInp.value).toFixed(1)+"×"; this._draw(); this._saveDecoNow(); });
         sizeRow.append(sizeLbl, sizeInp, sizeVal);
 
         // ── Indoor-Element Entitäten ─────────────────────────────────────────
@@ -13888,7 +15045,7 @@ _drawDoors() {
             efInp.value = deco[ef.key] || "";
             efInp.placeholder = ef.ph;
             efInp.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:#38bdf8;border-radius:3px;font-size:7px;padding:2px 4px;min-width:0;font-family:inherit";
-            efInp.addEventListener("input", () => { this._pendingDecos[idx][ef.key] = efInp.value.trim(); this._draw(); });
+            efInp.addEventListener("input", () => { this._pendingDecos[idx][ef.key] = efInp.value.trim(); this._draw(); this._saveDecoNow(); });
             // Live-Status Badge
             const badge = document.createElement("span");
             badge.style.cssText = "font-size:6px;white-space:nowrap";
@@ -13934,7 +15091,7 @@ _drawDoors() {
             pfInp.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:#67e8f9;border-radius:3px;font-size:7px;padding:2px 4px;min-width:0";
             pfInp.addEventListener("input", () => {
               this._pendingDecos[idx][pf.key] = pfInp.value.trim();
-              this._draw();
+              this._draw(); this._saveDecoNow();
             });
             pfRow.append(pfLbl, pfInp);
             row.appendChild(pfRow);
@@ -13952,7 +15109,7 @@ _drawDoors() {
           colorInp.style.cssText = "width:32px;height:18px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer";
           colorInp.addEventListener("input", () => {
             this._pendingDecos[idx].pool_color = colorInp.value;
-            this._draw();
+            this._draw(); this._saveDecoNow();
           });
           colorRow.append(colorLbl, colorInp);
           row.appendChild(colorRow);
@@ -14142,6 +15299,276 @@ _drawDoors() {
       ctx.fillText(deco.label || deco.type, 0, size + 9);
       ctx.restore();
     });
+  }
+
+  // ── Musik-Bubble 3D ──────────────────────────────────────────────────────
+
+  _drawMusicBubbles3D(project, unitPx) {
+    if (!this._opts?.show_music_bubble) return;
+    const ctx  = this._ctx;
+    const data = this._data;
+    const hass = this._hass;
+    if (!ctx || !data || !hass || !project) return;
+
+    const decos = this._pendingDecos?.length ? this._pendingDecos : (data.decos || []);
+
+    decos.forEach(deco => {
+      if (deco.type !== "speaker" && deco.type !== "tv") return;
+      if (!deco.entity) return;
+
+      const st = hass.states[deco.entity];
+      if (!st || st.state !== "playing") return;
+
+      const picUrl = st.attributes?.entity_picture;
+      const title  = st.attributes?.media_title  || "";
+      const artist = st.attributes?.media_artist || "";
+      if (!picUrl && !title) return;
+
+      const size = deco.size || 1.0;
+
+      // Lautsprecher-Basis in 3D-Canvas-Koordinaten
+      const spBase = project(deco.mx, deco.my, 0);
+      // Lautsprecher-Spitze (oben, z = Wandhöhe * size)
+      const spTop  = project(deco.mx, deco.my, size * 0.8);
+
+      // Bubble schwebt ÜBER den Wänden
+      const t      = (Date.now() / 2000) % (Math.PI * 2);
+      const wallH  = this._wallHeight || 2.5;
+      const floatZ = wallH + 0.3 + Math.sin(t) * 0.15;
+      const bPos   = project(deco.mx + size * 0.4, deco.my - size * 0.3, floatZ);
+
+      const bw  = 72;
+      const barH = duration > 0 ? 14 : 0;
+      const bh  = (picUrl ? 82 : 38) + barH;
+      const bx = bPos.x - bw / 2;
+      const by = bPos.y - bh;
+
+      ctx.save();
+
+      // ── Geschwungene 3D-Linie: Lautsprecher → Bubble ──────────
+      const pulse = 0.5 + Math.abs(Math.sin(Date.now() / 400)) * 0.5;
+
+      ctx.beginPath();
+      ctx.moveTo(spTop.x, spTop.y);
+      ctx.bezierCurveTo(
+        spTop.x + (bx + bw/2 - spTop.x) * 0.2, spTop.y - 30,
+        bx + bw/2 - 10,                          by + bh + 20,
+        bx + bw/2,                                by + bh - 4
+      );
+      ctx.strokeStyle = `rgba(56,189,248,${0.3 + pulse * 0.25})`;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Ankerpunkt am Lautsprecher
+      ctx.beginPath();
+      ctx.arc(spTop.x, spTop.y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(56,189,248,${0.5 + pulse * 0.3})`;
+      ctx.fill();
+
+      // ── Bubble-Hintergrund ────────────────────────────────────
+      ctx.shadowColor = "rgba(56,189,248,0.25)";
+      ctx.shadowBlur  = 12;
+      ctx.fillStyle   = "rgba(7,9,13,0.90)";
+      ctx.strokeStyle = `rgba(56,189,248,${0.45 + pulse * 0.2})`;
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // ── Album-Cover ───────────────────────────────────────────
+      let coverY = by + 5;
+      if (picUrl) {
+        const cKey = "mc_" + deco.entity;
+        if (!this._imgCache) this._imgCache = {};
+        const cached = this._imgCache[cKey];
+        if (!cached || cached.u !== picUrl) {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
+          img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
+          this._imgCache[cKey] = { img: null, u: picUrl };
+        } else if (cached.img) {
+          const cs = bw - 10;
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(bx + 5, by + 5, cs, cs, 5);
+          ctx.clip();
+          ctx.drawImage(cached.img, bx + 5, by + 5, cs, cs);
+          ctx.restore();
+          coverY = by + 5 + cs + 4;
+        }
+      }
+
+      // ── Titel + Artist ────────────────────────────────────────
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font      = "bold 7px 'JetBrains Mono',monospace";
+      ctx.fillText(title.length > 10 ? title.slice(0,10) + "\u2026" : title, bx + bw/2, coverY + 9);
+      if (artist) {
+        ctx.fillStyle = "#64748b";
+        ctx.font      = "6px 'JetBrains Mono',monospace";
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
+      }
+
+      // ── Noten-Animation ───────────────────────────────────────
+      const nt = (Date.now() / 1200) % 1;
+      ctx.fillStyle = `rgba(148,163,184,${(1-nt)*0.8})`;
+      ctx.font      = "10px serif";
+      ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
+
+      ctx.restore();
+    });
+  }
+
+  // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
+
+  _drawMusicBubbles() {
+    if (!this._opts?.show_music_bubble) return;
+    const ctx  = this._ctx;
+    const data = this._data;
+    if (!ctx || !data) return;
+
+    const decos  = this._pendingDecos?.length ? this._pendingDecos : (data.decos || []);
+    const hass   = this._hass;
+    if (!hass) return;
+
+    decos.forEach(deco => {
+      if (deco.type !== "speaker" && deco.type !== "tv") return;
+      if (!deco.entity) return;
+
+      const st = hass.states[deco.entity];
+      if (!st || st.state !== "playing") return;
+
+      const picUrl = st.attributes?.entity_picture;
+      const title  = st.attributes?.media_title  || "";
+      const artist = st.attributes?.media_artist || "";
+      const duration = st.attributes?.media_duration || 0;
+      const position = st.attributes?.media_position || 0;
+      const posTs    = st.attributes?.media_position_updated_at;
+      if (!picUrl && !title) return;
+
+      // Canvas-Position des Lautsprechers
+      const sp   = this._f2c(deco.mx, deco.my);
+      const size = (deco.size || 1.0) * 18;
+
+      // Bubble-Position: oben rechts, sanft schwebend
+      const t      = (Date.now() / 2000) % (Math.PI * 2);
+      const floatY = Math.sin(t) * 4;
+      const bx  = sp.x + size * 2.2;
+      const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
+      const by  = sp.y - wPx - size * 0.8 + floatY;
+      const bw = 72;
+      const bh = picUrl ? 82 : 38;
+
+      ctx.save();
+
+      // ── Geschwungene Linie ─────────────────────────────────────
+      const lsx = sp.x + size * 0.5;
+      const lsy = sp.y - size * 0.4;
+      const lex = bx + 8;
+      const ley = by + bh * 0.6;
+      const pulse = 0.5 + Math.abs(Math.sin(Date.now() / 400)) * 0.5;
+
+      ctx.beginPath();
+      ctx.moveTo(lsx, lsy);
+      ctx.bezierCurveTo(
+        lsx + (lex - lsx) * 0.3, lsy - 20,
+        lex - (lex - lsx) * 0.3, ley + 15,
+        lex, ley
+      );
+      ctx.strokeStyle = `rgba(56,189,248,${0.25 + pulse * 0.25})`;
+      ctx.lineWidth   = 1.2;
+      ctx.setLineDash([4, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Punkt am Lautsprecher-Ende
+      ctx.beginPath();
+      ctx.arc(lsx, lsy, 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(56,189,248,${0.4 + pulse * 0.3})`;
+      ctx.fill();
+
+      // ── Bubble-Hintergrund ────────────────────────────────────
+      ctx.shadowColor = "rgba(56,189,248,0.2)";
+      ctx.shadowBlur  = 10;
+      ctx.fillStyle   = "rgba(7,9,13,0.88)";
+      ctx.strokeStyle = `rgba(56,189,248,${0.4 + pulse * 0.2})`;
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, bw, bh, 8);
+      ctx.fill();
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // ── Album-Cover gecacht ───────────────────────────────────
+      let coverY = by + 5;
+      if (picUrl) {
+        const cKey = "mc_" + deco.entity;
+        if (!this._imgCache) this._imgCache = {};
+        const cached = this._imgCache[cKey];
+        if (!cached || cached.u !== picUrl) {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
+          img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
+          this._imgCache[cKey] = { img: null, u: picUrl };
+        } else if (cached.img) {
+          const cs = bw - 10;
+          ctx.save();
+          ctx.beginPath();
+          ctx.roundRect(bx + 5, by + 5, cs, cs, 5);
+          ctx.clip();
+          ctx.drawImage(cached.img, bx + 5, by + 5, cs, cs);
+          ctx.restore();
+          coverY = by + 5 + cs + 4;
+        }
+      }
+
+      // ── Titel + Artist ────────────────────────────────────────
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font      = "bold 7px 'JetBrains Mono',monospace";
+      const mc = 10;
+      ctx.fillText(title.length > mc ? title.slice(0,mc) + "\u2026" : title, bx + bw/2, coverY + 9);
+      if (artist) {
+        ctx.fillStyle = "#64748b";
+        ctx.font      = "6px 'JetBrains Mono',monospace";
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
+      }
+
+      // ── Noten-Animation ───────────────────────────────────────
+      const nt = (Date.now() / 1200) % 1;
+      ctx.fillStyle = `rgba(148,163,184,${(1-nt)*0.8})`;
+      ctx.font      = "10px serif";
+      ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
+
+      // ── Zeitbalken ────────────────────────────────────────────
+      if (duration > 0 && barH > 0) {
+        const elapsed = posTs ? (Date.now() - new Date(posTs).getTime()) / 1000 : 0;
+        const curPos  = Math.min(position + elapsed, duration);
+        const prog    = Math.max(0, Math.min(1, curPos / duration));
+        const barY    = by + bh - barH + 2;
+        const barW2   = bw - 10;
+        ctx.fillStyle = '#1c2535';
+        ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2, 4, 2); ctx.fill();
+        ctx.fillStyle = '#38bdf8';
+        ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2*prog, 4, 2); ctx.fill();
+        const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+        ctx.font = "5.5px 'JetBrains Mono',monospace";
+        ctx.fillStyle = '#445566';
+        ctx.textAlign = 'left';  ctx.fillText(fmt(curPos),  bx+5,     barY+11);
+        ctx.textAlign = 'right'; ctx.fillText(fmt(duration), bx+bw-5, barY+11);
+        ctx.textAlign = 'center';
+      }
+
+      ctx.restore();
+    });
+    this._musicClickZonesFrame = [...(this._musicClickZones||[])];
+    this._musicClickZones = [];
   }
 
   _drawDecoSymbol2D(ctx, type, s, selected=false) {
@@ -16604,6 +18031,7 @@ _drawDoors() {
       { key:"showSleep",       emoji:"🌙", label:"Schlaf-Monitoring",    desc:"Schlafdauer + Schlafqualität schätzen" },
       { key:"mmwavePersonID",  emoji:"🔍", label:"Personen-Wiedererkennung",desc:"Person via Tageszeit-Muster identifizieren" },
       { key:"showEmergencyBtn",emoji:"🆘", label:"Notfall-Button",       desc:"SOS-Button mit HA-Event" },
+      { key:"show_music_bubble",emoji:"🎵", label:"Musik-Bubble",          desc:"Album-Cover schwebt beim Lautsprecher (nur bei playing)" },
       { key:"ptzTracking",    emoji:"📹", label:"PTZ Auto-Tracking",    desc:"PTZ Kameras folgen Personen automatisch" },
       { key:"showPresence",    emoji:"👁",  label:"Präsenz-Erkennung",      desc:"Grüner Glow wenn Gerät im Raum" },
       { key:"showGeofence",    emoji:"🔔",  label:"Geofence-Alarm",          desc:"Toast bei Raum-Betreten/-Verlassen" },
@@ -16647,6 +18075,222 @@ _drawDoors() {
 
       wrap.appendChild(row);
     });
+
+    // ── Module (v4.4: separate Dateien, Versions-Anzeige, Hot-Reload) ──────
+    const modBox = this._sbBox("📦 Module");
+
+    // Card-Hauptversion
+    const cardVerRow = document.createElement("div");
+    cardVerRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:4px 0;margin-bottom:6px;border-bottom:1px solid #1c2535";
+    cardVerRow.innerHTML = `<span style="font-size:8px;color:#445566">BLE Positioning Card</span><span style="font-size:8px;font-weight:700;color:#38bdf8">v${CARD_VERSION}</span>`;
+    modBox.appendChild(cardVerRow);
+
+    const modHdr = document.createElement("div");
+    modHdr.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:6px;line-height:1.5";
+    modHdr.innerHTML = "Optionale Module – nur aktive werden geladen.<br>" +
+      "Deaktivierte Module: <b style='color:#22c55e'>0 RAM, 0 CPU</b>.";
+    modBox.appendChild(modHdr);
+
+    // Bekannte Module
+    const knownModules = [
+      { id:"elektro", name:"Elektro-Management",  icon:"🔌", desc:"Solar-Fluss, Baukasten, Forecast" },
+      { id:"energie", name:"Energie-Management",   icon:"⚡", desc:"Solar, Verbrauch, Power-Routing" },
+      { id:"pool",    name:"Pool & Garten",         icon:"🏊", desc:"Pumpen, Bewässerung, Irrigation" },
+    ];
+    Object.values(BLEModuleRegistry._modules).forEach(m => {
+      if (!knownModules.find(k => k.id === m.id))
+        knownModules.push({ id:m.id, name:m.name, icon:m.icon||"🧩", desc:m.description||"" });
+    });
+
+    knownModules.forEach(({id, name, icon, desc}) => {
+      const isActive  = !!this._opts?.['module_' + id];
+      const mod       = BLEModuleRegistry._modules[id];
+      const status    = BLEModuleRegistry.status(id);
+      const loadTime  = BLEModuleRegistry._loadTimes[id];
+      const hasUpdate = BLEModuleRegistry._updateAvail[id];
+      const hasError  = BLEModuleRegistry._errors[id];
+
+      const row = document.createElement("div");
+      row.style.cssText = `display:flex;flex-direction:column;gap:3px;padding:7px 8px;background:var(--surf2);border-radius:6px;margin-bottom:5px;border:1px solid ${hasUpdate?"#f59e0b66":hasError?"#ef444466":isActive?"#22c55e33":"#1c2535"}`;
+
+      // Zeile 1: Checkbox + Name + Status-Badge
+      const row1 = document.createElement("div");
+      row1.style.cssText = "display:flex;align-items:center;gap:8px";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = isActive;
+      cb.style.cssText = "accent-color:#22c55e;width:14px;height:14px;flex-shrink:0;cursor:pointer";
+      cb.addEventListener("change", () => this._toggleModule(id, cb.checked));
+
+      const nameEl = document.createElement("div");
+      nameEl.style.cssText = "font-size:9px;font-weight:700;color:var(--text);flex:1";
+      nameEl.textContent = `${icon} ${name}`;
+
+      // Status-Badge
+      const badge = document.createElement("span");
+      let badgeText, badgeStyle;
+      if (hasError)   { badgeText = "❌ Fehler";  badgeStyle = "background:#ef444422;color:#ef4444;border:1px solid #ef444444"; }
+      else if (hasUpdate) { badgeText = "⟳ Update"; badgeStyle = "background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44"; }
+      else if (status === 'loaded')  { badgeText = `✅ v${mod?.version||"?"}${loadTime?` · ${loadTime}ms`:""}`;  badgeStyle = "background:#22c55e22;color:#22c55e;border:1px solid #22c55e44"; }
+      else if (status === 'loading') { badgeText = "⟳ Lädt..."; badgeStyle = "background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844"; }
+      else { badgeText = "○ inaktiv";  badgeStyle = "background:#1c253522;color:#445566;border:1px solid #1c2535"; }
+      badge.style.cssText = `font-size:7px;padding:2px 6px;border-radius:8px;flex-shrink:0;white-space:nowrap;${badgeStyle}`;
+      badge.textContent = badgeText;
+
+      row1.append(cb, nameEl, badge);
+      row.appendChild(row1);
+
+      // Zeile 2: Beschreibung
+      const descEl = document.createElement("div");
+      descEl.style.cssText = "font-size:7px;color:#334155;padding-left:22px";
+      descEl.textContent = desc;
+      row.appendChild(descEl);
+
+      // Zeile 3: Update-Button / Fehler-Info
+      if (hasUpdate && isActive) {
+        const updateRow = document.createElement("div");
+        updateRow.style.cssText = "display:flex;align-items:center;gap:6px;padding-left:22px";
+        const updateBtn = document.createElement("button");
+        updateBtn.style.cssText = "padding:2px 10px;border-radius:4px;border:1px solid #f59e0b;background:#f59e0b22;color:#f59e0b;font-size:7.5px;cursor:pointer";
+        updateBtn.textContent = "⟳ Jetzt neu laden (kein HA-Neustart)";
+        updateBtn.addEventListener("click", () => {
+          updateBtn.textContent = "⟳ Lädt..."; updateBtn.disabled = true;
+          BLEModuleRegistry.reload(id, this).then(() => this._rebuildSidebar?.());
+        });
+        updateRow.appendChild(updateBtn);
+        row.appendChild(updateRow);
+      }
+      if (hasError) {
+        const errEl = document.createElement("div");
+        errEl.style.cssText = "font-size:7px;color:#ef4444;padding-left:22px;font-family:monospace";
+        errEl.textContent = BLEModuleRegistry._errors[id];
+        row.appendChild(errEl);
+      }
+
+      modBox.appendChild(row);
+    });
+
+    // Info-Zeile
+    const infoNote = document.createElement("div");
+    infoNote.style.cssText = "font-size:7px;color:#334155;margin-top:2px;padding:4px 6px;background:#38bdf811;border-radius:4px;border:1px solid #38bdf822";
+    infoNote.textContent = "📁 Module: /config/www/ble_positioning/modules/ · Datei ersetzen → Update-Badge erscheint";
+    modBox.appendChild(infoNote);
+    wrap.appendChild(modBox);
+
+    // ── Modul-Konfiguration (wenn aktiviert) ─────────────────────────────────
+    Object.values(BLEModuleRegistry._modules).forEach(mod => {
+      if (!this._opts?.["module_" + mod.id]) return; // nur wenn aktiv
+      if (typeof mod.buildConfig !== "function") return;
+      const cfgBox = this._sbBox(`${mod.icon} ${mod.name} – Einstellungen`);
+      try { cfgBox.appendChild(mod.buildConfig(this)); } catch(e) {}
+      wrap.appendChild(cfgBox);
+    });
+
+    // Dummy um doppeltes wrap.appendChild(modBox) zu verhindern
+    const _dummyModBox = null; void _dummyModBox;
+    // wrap.appendChild(modBox) → bereits oben im Modul-Config Block
+
+    // ── Energie & Performance ─────────────────────────────────────────────────
+    const perfBox = this._sbBox("⚡ Energie & Performance");
+
+    // FPS Ziel
+    const fpsRow = document.createElement("div");
+    fpsRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:6px";
+    const fpsLbl = document.createElement("span");
+    fpsLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+    fpsLbl.textContent = "FPS Ziel (Normal-Modus)";
+    const fpsSel = document.createElement("select");
+    fpsSel.style.cssText = "padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    const curFps = parseInt(this._opts?.target_fps || 30);
+    [{v:60,l:"60 fps (flüssig)"},{v:30,l:"30 fps (empfohlen)"},{v:15,l:"15 fps (sparsam)"},
+     {v:10,l:"10 fps (sehr sparsam)"},{v:5,l:"5 fps (minimal)"}].forEach(({v,l}) => {
+      const o = document.createElement("option"); o.value=v; o.textContent=l;
+      if(v===curFps) o.selected=true;
+      fpsSel.appendChild(o);
+    });
+    fpsSel.addEventListener("change", () => {
+      if (!this._opts) this._opts={};
+      this._opts.target_fps = parseInt(fpsSel.value);
+      this._saveOptions();
+      this._showToast(`FPS: ${fpsSel.value}`);
+    });
+    fpsRow.append(fpsLbl, fpsSel);
+    perfBox.appendChild(fpsRow);
+
+    // Poll-Intervall
+    const pollRow = document.createElement("div");
+    pollRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:6px";
+    const pollLbl = document.createElement("span");
+    pollLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+    pollLbl.textContent = "HA Daten-Update";
+    const pollSel = document.createElement("select");
+    pollSel.style.cssText = "padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    const curPoll = parseInt(this._opts?.poll_interval_ms || 1000);
+    [{v:500,l:"0.5s (live)"},{v:1000,l:"1s (normal)"},{v:2000,l:"2s (sparsam)"},
+     {v:5000,l:"5s (sehr sparsam)"},{v:10000,l:"10s (minimal)"}].forEach(({v,l}) => {
+      const o = document.createElement("option"); o.value=v; o.textContent=l;
+      if(v===curPoll) o.selected=true;
+      pollSel.appendChild(o);
+    });
+    pollSel.addEventListener("change", () => {
+      if (!this._opts) this._opts={};
+      this._opts.poll_interval_ms = parseInt(pollSel.value);
+      this._saveOptions();
+      this._showToast(`Update: ${parseInt(pollSel.value)/1000}s`);
+    });
+    pollRow.append(pollLbl, pollSel);
+    perfBox.appendChild(pollRow);
+
+    // Info-Zeile: Screensaver und Nacht automatisch sparsamer
+    // Energie-Spar Toggles
+    const energyToggles = [
+      { key:"dirty_render",        emoji:"🖼",  label:"Dirty Rendering",            desc:"Nur neu zeichnen wenn Daten sich geändert haben (empfohlen)" },
+      { key:"adaptive_resolution", emoji:"📐",  label:"Adaptive Auflösung",          desc:"Canvas-Auflösung im Energiesparmodus reduzieren (50-75%)" },
+      { key:"pause_anim",          emoji:"⏸",  label:"Animationen pausieren",       desc:"Deko-Animationen im Screensaver/Hintergrund deaktivieren" },
+      { key:"ss_low_res",          emoji:"💤",  label:"Screensaver Niedrig-Auflösung",desc:"Canvas auf 50% im Screensaver-Modus" },
+      { key:"ws_updates",          emoji:"⚡",  label:"WebSocket Live-Updates",      desc:"Sofortige Updates statt Polling (modernste Methode)" },
+      { key:"ambient_light",       emoji:"💡",  label:"Umgebungslicht-Sensor",       desc:"Helligkeit automatisch anpassen (nur Chrome/HTTPS)" },
+      { key:"ambient_auto_night",  emoji:"🌙",  label:"  └ Auto Nacht-Modus",        desc:"Nacht-Modus automatisch bei Dunkelheit aktivieren" },
+    ];
+    energyToggles.forEach(({key, emoji, label, desc}) => {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933";
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.checked = !!this._opts?.[key];
+      cb.style.cssText = "accent-color:#f59e0b;width:13px;height:13px;flex-shrink:0";
+      cb.addEventListener("change", () => {
+        if (!this._opts) this._opts = {};
+        this._opts[key] = cb.checked;
+        this._saveOptions();
+        // Sofort aktivieren wenn möglich
+        if (key === "ws_updates") {
+          if (cb.checked) this._startWsUpdates();
+          else this._stopWsUpdates();
+        }
+        if (key === "ambient_light" && cb.checked) this._initAmbientLight();
+        this._showToast(`${emoji} ${label}: ${cb.checked ? "an" : "aus"}`);
+      });
+      const textWrap = document.createElement("div");
+      const lbl = document.createElement("div");
+      lbl.style.cssText = "font-size:8px;color:var(--text)";
+      lbl.textContent = `${emoji} ${label}`;
+      const dsc = document.createElement("div");
+      dsc.style.cssText = "font-size:7px;color:#445566";
+      dsc.textContent = desc;
+      textWrap.append(lbl, dsc);
+      row.append(cb, textWrap);
+      perfBox.appendChild(row);
+    });
+
+    const perfHint = document.createElement("div");
+    perfHint.style.cssText = "font-size:7.5px;color:#445566;margin-top:5px;line-height:1.6";
+    perfHint.innerHTML =
+      "💤 Screensaver: auto 1fps / 5s Poll<br>" +
+      "🌑 Tab versteckt: 0fps / 30s Poll<br>" +
+      "🌙 Nacht (22-6h) + Nacht-Modus: 5fps / 3s Poll<br>" +
+      "🔋 Akku &lt;20%: auto 10fps / 2s Poll";
+    perfBox.appendChild(perfHint);
+
+    wrap.appendChild(perfBox);
 
     // ── Gast-Modus: Geräte-Auswahl ──────────────────────────────────────────
     if (this._opts?.guestMode) {
@@ -17294,6 +18938,629 @@ _drawDoors() {
     this._showToast("✓ Alle Einstellungen gespeichert!");
   }
 
+  // ── Screensaver Konfiguration ────────────────────────────────────────────
+  _sidebarScreensaver() {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "padding:8px;display:flex;flex-direction:column;gap:8px";
+
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:1px";
+    hdr.textContent = "💤 SCREENSAVER";
+    wrap.appendChild(hdr);
+
+    // ── Inaktivitäts-Timer ────────────────────────────────────────
+    const timerBox = this._sbBox("Automatische Aktivierung");
+    const timerRow = document.createElement("div");
+    timerRow.style.cssText = "display:flex;align-items:center;gap:8px";
+    const timerLbl = document.createElement("span");
+    timerLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+    timerLbl.textContent = "Inaktivität nach";
+    const timerSel = document.createElement("select");
+    timerSel.style.cssText = "padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    const ssTimeout = this._opts?.ss_timeout ?? 0;
+    [{v:0,l:"Aus"},{v:60,l:"1 min"},{v:120,l:"2 min"},{v:300,l:"5 min"},
+     {v:600,l:"10 min"},{v:1800,l:"30 min"}].forEach(({v,l}) => {
+      const o = document.createElement("option");
+      o.value = v; o.textContent = l;
+      if (v == ssTimeout) o.selected = true;
+      timerSel.appendChild(o);
+    });
+    timerSel.addEventListener("change", () => {
+      if (!this._opts) this._opts = {};
+      this._opts.ss_timeout = parseInt(timerSel.value);
+      this._saveOptions();
+      this._resetSsTimer();
+      this._showToast(parseInt(timerSel.value) ? "💤 Screensaver-Timer gesetzt" : "Screensaver-Timer aus");
+    });
+    timerRow.append(timerLbl, timerSel);
+    timerBox.appendChild(timerRow);
+
+    // Direkt aktivieren
+    const activBtn = document.createElement("button");
+    activBtn.className = "btn btn-outline";
+    activBtn.style.cssText = "width:100%;margin-top:6px;font-size:9px";
+    activBtn.textContent = "▶ Screensaver jetzt starten";
+    activBtn.addEventListener("click", () => this._startScreensaver());
+    timerBox.appendChild(activBtn);
+    wrap.appendChild(timerBox);
+
+    // ── Kiosk-Modus Einstellungen ──────────────────────────────────
+    const kioskBox = this._sbBox("🖥 Kiosk-Modus");
+    const save = (k,v) => { if(!this._opts)this._opts={}; this._opts[k]=v; this._saveOptions(); };
+
+    // HA-Chrome ausblenden
+    const hideRow = document.createElement("div");
+    hideRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:5px";
+    const hideLbl = document.createElement("span");
+    hideLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+    hideLbl.textContent = "HA-Seitenleiste + Tabs ausblenden";
+    const hideSel = document.createElement("select");
+    hideSel.style.cssText = "padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    const curHide = this._opts?.kiosk_hide_mode || "none";
+    [{v:"none",l:"Nie"},{v:"screensaver",l:"Nur im Screensaver"},{v:"always",l:"Immer (Panel-Modus)"}]
+      .forEach(({v,l}) => { const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===curHide)o.selected=true; hideSel.appendChild(o); });
+    hideSel.addEventListener("change", () => { save("kiosk_hide_mode", hideSel.value); this._applyKioskMode(hideSel.value==="always"); });
+    hideRow.append(hideLbl, hideSel); kioskBox.appendChild(hideRow);
+
+    // Shortbar Position
+    const barRow = document.createElement("div");
+    barRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:5px";
+    const barLbl = document.createElement("span");
+    barLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
+    barLbl.textContent = "Schnellzugriff-Leiste Position";
+    const barSel = document.createElement("select");
+    barSel.style.cssText = "padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    const curPos = this._opts?.kiosk_bar_pos || "none";
+    [{v:"none",l:"Ausgeblendet"},{v:"bottom",l:"Unten (Taskbar)"},{v:"right",l:"Rechts (Spalte)"},
+     {v:"slide-right",l:"Rechts ausfahrbar"},{v:"overlay",l:"Über Screensaver"}]
+      .forEach(({v,l}) => { const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===curPos)o.selected=true; barSel.appendChild(o); });
+    barSel.addEventListener("change", () => save("kiosk_bar_pos", barSel.value));
+    barRow.append(barLbl, barSel); kioskBox.appendChild(barRow);
+
+    // Shortbar auch dauerhaft zeigen (nicht nur im Screensaver)
+    const alwaysRow = document.createElement("div");
+    alwaysRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:8px";
+    const alwaysCb = document.createElement("input");
+    alwaysCb.type="checkbox"; alwaysCb.checked=!!this._opts?.kiosk_bar_always;
+    alwaysCb.style.cssText="accent-color:#00e5ff;width:13px;height:13px";
+    alwaysCb.addEventListener("change", () => save("kiosk_bar_always", alwaysCb.checked));
+    const alwaysLbl = document.createElement("span");
+    alwaysLbl.style.cssText="font-size:8px;color:#94a3b8";
+    alwaysLbl.textContent="Shortbar auch außerhalb des Screensavers anzeigen";
+    alwaysRow.append(alwaysCb, alwaysLbl); kioskBox.appendChild(alwaysRow);
+
+    // Wetter Entity
+    const weatherRow = document.createElement("div");
+    weatherRow.style.cssText = "margin-bottom:6px";
+    const weatherLbl = document.createElement("div");
+    weatherLbl.style.cssText = "font-size:7px;color:#445566;margin-bottom:2px";
+    weatherLbl.textContent = "Wetter Entity (z.B. weather.home)";
+    const weatherInp = document.createElement("input");
+    weatherInp.type="text"; weatherInp.value=this._opts?.ss_weather_entity||"";
+    weatherInp.placeholder="weather.home";
+    weatherInp.style.cssText="width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+    weatherInp.addEventListener("input", () => save("ss_weather_entity", weatherInp.value.trim()));
+    weatherRow.append(weatherLbl, weatherInp); kioskBox.appendChild(weatherRow);
+
+    // Shortbar Items Editor
+    const itemsLbl = document.createElement("div");
+    itemsLbl.style.cssText = "font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:4px";
+    itemsLbl.textContent = "Schnellzugriff-Buttons:";
+    kioskBox.appendChild(itemsLbl);
+    const itemsHint = document.createElement("div");
+    itemsHint.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:5px";
+    itemsHint.textContent = "F\u00fcr Service-Calls: service = 'light.turn_off' oder URL = '/lovelace/0'";
+    kioskBox.appendChild(itemsHint);
+
+    const items = this._opts?.kiosk_items || [];
+    const saveItems = () => { save("kiosk_items", items); };
+    const renderItems = () => {
+      kioskBox.querySelectorAll(".ki-row").forEach(r => r.remove());
+      items.forEach((item, idx) => {
+        const row = document.createElement("div");
+        row.className = "ki-row";
+        row.style.cssText = "display:grid;grid-template-columns:32px 1fr 1fr;gap:3px;margin-bottom:3px;align-items:center";
+        const eInp = document.createElement("input"); eInp.type="text"; eInp.value=item.emoji||""; eInp.placeholder="🏠";
+        eInp.style.cssText="padding:2px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;text-align:center";
+        eInp.addEventListener("input",()=>{items[idx].emoji=eInp.value.trim();saveItems();});
+        const lInp = document.createElement("input"); lInp.type="text"; lInp.value=item.label||""; lInp.placeholder="Lichter aus";
+        lInp.style.cssText="padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        lInp.addEventListener("input",()=>{items[idx].label=lInp.value.trim();saveItems();});
+        const aInp = document.createElement("input"); aInp.type="text"; aInp.value=item.service||item.url||""; aInp.placeholder="light.turn_off oder /lovelace/0";
+        aInp.style.cssText="padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        aInp.addEventListener("input",()=>{
+          const v=aInp.value.trim();
+          if(v.includes(".")&&!v.startsWith("/")) { items[idx].service=v; delete items[idx].url; }
+          else { items[idx].url=v; delete items[idx].service; }
+          saveItems();
+        });
+        const del = document.createElement("button");
+        del.textContent="✕"; del.style.cssText="padding:2px 5px;border-radius:3px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;grid-column:span 1";
+        del.addEventListener("click",()=>{ items.splice(idx,1); saveItems(); renderItems(); });
+        row.append(eInp,lInp,aInp,del);
+        kioskBox.appendChild(row);
+      });
+    };
+    renderItems();
+    const addItemBtn = document.createElement("button");
+    addItemBtn.style.cssText="width:100%;padding:4px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer;margin-top:3px";
+    addItemBtn.textContent="+ Button hinzufügen";
+    addItemBtn.addEventListener("click",()=>{ items.push({emoji:"⚡",label:"Neu",service:""}); saveItems(); renderItems(); });
+    kioskBox.appendChild(addItemBtn);
+    wrap.appendChild(kioskBox);
+
+    // ── Quick-Links ────────────────────────────────────────────────
+    const linksBox = this._sbBox("Quick-Links");
+    const hint = document.createElement("div");
+    hint.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:6px";
+    hint.textContent = "Buttons die im Screensaver erscheinen – z.B. zum Home-Dashboard, Musik, Kalender …";
+    linksBox.appendChild(hint);
+
+    const links = this._opts?.ss_links || [];
+
+    // Bestehende Links anzeigen und editieren
+    const renderLinks = () => {
+      // Bestehende Link-Rows entfernen
+      linksBox.querySelectorAll(".ss-link-row").forEach(r => r.remove());
+      links.forEach((lnk, idx) => {
+        const row = document.createElement("div");
+        row.className = "ss-link-row";
+        row.style.cssText = "display:flex;gap:4px;align-items:center;margin-bottom:4px";
+
+        const emojiInp = document.createElement("input");
+        emojiInp.type = "text"; emojiInp.value = lnk.emoji || "";
+        emojiInp.placeholder = "🏠";
+        emojiInp.style.cssText = "width:32px;padding:3px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px;text-align:center";
+        emojiInp.addEventListener("input", () => { links[idx].emoji = emojiInp.value.trim(); this._saveOptions(); });
+
+        const labelInp = document.createElement("input");
+        labelInp.type = "text"; labelInp.value = lnk.label || "";
+        labelInp.placeholder = "Home";
+        labelInp.style.cssText = "flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        labelInp.addEventListener("input", () => { links[idx].label = labelInp.value.trim(); this._saveOptions(); });
+
+        const urlInp = document.createElement("input");
+        urlInp.type = "text"; urlInp.value = lnk.url || "";
+        urlInp.placeholder = "/lovelace/0";
+        urlInp.style.cssText = "flex:2;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+        urlInp.addEventListener("input", () => { links[idx].url = urlInp.value.trim(); this._saveOptions(); });
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "✕";
+        delBtn.style.cssText = "padding:2px 5px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:9px;cursor:pointer";
+        delBtn.addEventListener("click", () => {
+          links.splice(idx, 1);
+          if (!this._opts) this._opts = {};
+          this._opts.ss_links = links;
+          this._saveOptions();
+          renderLinks();
+        });
+
+        row.append(emojiInp, labelInp, urlInp, delBtn);
+        linksBox.appendChild(row);
+      });
+    };
+    renderLinks();
+
+    // Neuen Link hinzufügen
+    const addBtn = document.createElement("button");
+    addBtn.className = "btn btn-outline";
+    addBtn.style.cssText = "width:100%;font-size:9px;margin-top:4px";
+    addBtn.textContent = "+ Link hinzufügen";
+    addBtn.addEventListener("click", () => {
+      links.push({emoji:"🏠", label:"Home", url:"/lovelace/0"});
+      if (!this._opts) this._opts = {};
+      this._opts.ss_links = links;
+      this._saveOptions();
+      renderLinks();
+    });
+    linksBox.appendChild(addBtn);
+
+    // Spalten-Header
+    const colHdr = document.createElement("div");
+    colHdr.style.cssText = "display:flex;gap:4px;font-size:7px;color:#445566;margin-top:2px";
+    colHdr.innerHTML = '<span style="width:32px">Icon</span><span style="flex:1">Label</span><span style="flex:2">URL / Pfad</span><span style="width:24px"></span>';
+    linksBox.insertBefore(colHdr, addBtn);
+    wrap.appendChild(linksBox);
+
+    // ── Vorschau ───────────────────────────────────────────────────
+    const prevBox = this._sbBox("Vorschau");
+    const prevNote = document.createElement("div");
+    prevNote.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:5px";
+    prevNote.textContent = "Uhrzeit + Datum + deine Links werden im Screensaver angezeigt.";
+    const mockClock = document.createElement("div");
+    mockClock.style.cssText = "text-align:center;padding:10px;background:#0d1219;border-radius:6px;border:1px solid #1c2535";
+    mockClock.innerHTML = `<div style="font-size:22px;font-weight:200;color:#e2e8f0;font-family:monospace">${new Date().toLocaleTimeString('de-DE',{hour:'2-digit',minute:'2-digit'})}</div>
+      <div style="font-size:9px;color:#64748b;margin-top:2px">${new Date().toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long'})}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:8px">
+        ${(this._opts?.ss_links||[]).map(l=>`<span style="padding:3px 8px;border:1px solid #334155;border-radius:5px;font-size:9px;color:#94a3b8">${l.emoji||''} ${l.label||''}</span>`).join('')}
+      </div>`;
+    prevBox.append(prevNote, mockClock);
+    wrap.appendChild(prevBox);
+
+    return wrap;
+  }
+
+  // ── Sidebar Toggle ───────────────────────────────────────────────────────
+  _initSidebarToggle() {
+    const sidebar = this.shadowRoot?.getElementById("sidebar");
+    const btn     = this.shadowRoot?.getElementById("sidebar-toggle");
+    const cwrap   = this.shadowRoot?.getElementById("cwrap");
+    if (!sidebar || !btn || !cwrap) return;
+
+    // Gespeicherten State wiederherstellen
+    const collapsed = this._opts?.sidebar_collapsed ?? false;
+    this._sidebarCollapsed = collapsed;
+    this._applySidebarState(sidebar, btn, cwrap, collapsed);
+
+    btn.addEventListener("click", () => {
+      this._sidebarCollapsed = !this._sidebarCollapsed;
+      this._applySidebarState(sidebar, btn, cwrap, this._sidebarCollapsed);
+      // State persistieren
+      if (!this._opts) this._opts = {};
+      this._opts.sidebar_collapsed = this._sidebarCollapsed;
+      this._saveOptions();
+      // Canvas neu dimensionieren nach Transition
+      setTimeout(() => { this._onResize(); this._markDirty(); }, 250);
+    });
+  }
+
+  _applySidebarState(sidebar, btn, cwrap, collapsed) {
+    if (collapsed) {
+      sidebar.classList.add("collapsed");
+      btn.textContent = "›";
+      btn.title = "Seitenleiste einblenden";
+      btn.style.left = "0px";
+    } else {
+      sidebar.classList.remove("collapsed");
+      btn.textContent = "‹";
+      btn.title = "Seitenleiste ausblenden";
+      // Button sitzt direkt am Sidebar-Rand
+      btn.style.left = "0px";
+    }
+    this._sidebarCollapsed = collapsed;
+  }
+
+  // ── Modul-System ─────────────────────────────────────────────────────────
+
+  async _initModules() {
+    // Alle aktivierten Module laden
+    const activeIds = Object.keys(this._opts || {})
+      .filter(k => k.startsWith('module_') && this._opts[k] === true)
+      .map(k => k.replace('module_', ''));
+    for (const id of activeIds) {
+      await BLEModuleRegistry.load(id, this);
+    }
+    // Modul-Tabs in Tab-Leiste einfügen
+    this._renderModuleTabs();
+  }
+
+  // Modul aktivieren/deaktivieren
+  async _toggleModule(id, active) {
+    if (!this._opts) this._opts = {};
+    this._opts['module_' + id] = active;
+    await this._saveOptions();
+    if (active) {
+      await BLEModuleRegistry.load(id, this);
+      this._showToast(`✅ Modul '${BLEModuleRegistry._modules[id]?.name || id}' aktiviert`);
+    } else {
+      BLEModuleRegistry.unload(id);
+      // Wenn aktuell im Modul-Tab → zurück zu view
+      if (this._mode === id) this._setMode('view');
+      this._showToast(`Modul '${id}' deaktiviert`);
+    }
+    this._renderModuleTabs();
+    this._rebuildSidebar();
+  }
+
+  // Modul-Tabs dynamisch in Tab-Leiste einfügen
+  _renderModuleTabs() {
+    const tabsEl = this.shadowRoot?.getElementById('modetabs');
+    if (!tabsEl) return;
+    // Alte Modul-Tabs entfernen
+    tabsEl.querySelectorAll('.mode-tab[data-module]').forEach(b => b.remove());
+    // Aktive Module als Tabs hinzufügen
+    const activeModules = Object.values(BLEModuleRegistry._modules)
+      .filter(m => this._opts?.['module_' + m.id] === true);
+    activeModules.forEach(m => {
+      const btn = document.createElement('button');
+      btn.className = `mode-tab ${m.id}`;
+      btn.dataset.mode = m.tabId || m.id;
+      btn.dataset.module = m.id;
+      btn.textContent = `${m.icon} ${m.name.toUpperCase().substring(0,6)}`;
+      btn.addEventListener('click', () => this._setMode(m.tabId || m.id));
+      tabsEl.appendChild(btn);
+    });
+  }
+
+  // ── Kiosk-Modus Engine ───────────────────────────────────────────────────
+
+  _applyKioskMode(active) {
+    const opts = this._opts || {};
+    const hideMode = opts.kiosk_hide_mode || "none"; // none | screensaver | always
+
+    if (hideMode === "none") return;
+    if (hideMode === "screensaver" && !active) {
+      // Beim Beenden wiederherstellen
+      this._restoreHaChrome();
+      return;
+    }
+    if (hideMode === "always") {
+      // Einmalig beim Start – danach nicht mehr aufrufen
+      if (!this._kioskAlwaysApplied) {
+        this._kioskAlwaysApplied = true;
+        this._hideHaChrome();
+      }
+      return;
+    }
+    // screensaver-Modus: bei Aktivierung ausblenden, bei Stop wiederherstellen
+    if (active) this._hideHaChrome();
+    else this._restoreHaChrome();
+  }
+
+  _hideHaChrome() {
+    // HA Seitenleiste ausblenden
+    const haApp = document.querySelector("home-assistant");
+    const drawer = haApp?.shadowRoot?.querySelector("ha-drawer") ||
+                   haApp?.shadowRoot?.querySelector("partial-panel-resolver");
+    const appLayout = haApp?.shadowRoot?.querySelector("ha-panel-lovelace")?.shadowRoot
+                      ?.querySelector("hui-root")?.shadowRoot?.querySelector(".header");
+    // Methode 1: CSS-Klasse auf host setzen
+    this.classList.add("kiosk-mode");
+    // Methode 2: HA-Seitenleiste per CSS verstecken
+    if (!this._kioskStyle) {
+      this._kioskStyle = document.createElement("style");
+      this._kioskStyle.id = "ble-kiosk-style";
+      this._kioskStyle.textContent = `
+        ha-sidebar { display: none !important; }
+        .mdc-drawer-app-content { margin-left: 0 !important; }
+        app-drawer-layout > * { --app-drawer-width: 0px !important; }
+      `;
+      document.head.appendChild(this._kioskStyle);
+    }
+  }
+
+  _restoreHaChrome() {
+    this.classList.remove("kiosk-mode");
+    this._kioskStyle?.remove();
+    this._kioskStyle = null;
+  }
+
+  _buildKioskBar(posClass) {
+    const items = this._opts?.kiosk_items || [];
+    if (!items.length) return null;
+
+    const bar = document.createElement("div");
+    bar.className = `kiosk-bar ${posClass}`;
+
+    items.forEach(item => {
+      if (!item.label && !item.emoji) return;
+      const btn = document.createElement("a");
+      btn.className = "kiosk-btn";
+      btn.href = item.url || "#";
+      btn.innerHTML = `<span class="kb-icon">${item.emoji||"⚡"}</span><span class="kb-label">${item.label||""}</span>`;
+
+      if (item.service) {
+        // HA-Service direkt aufrufen
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          const [domain, svc] = item.service.split(".");
+          if (domain && svc) {
+            this._hass?.callService(domain, svc,
+              item.service_data ? JSON.parse(item.service_data) : {}
+            ).catch(()=>{});
+          }
+          this._showToast(`${item.emoji||""} ${item.label||item.service}`);
+        });
+      } else if (item.url?.startsWith("/")) {
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          this._stopScreensaver();
+          history.pushState(null, "", item.url);
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        });
+      } else if (item.url && item.url !== "#") {
+        btn.target = "_blank"; btn.rel = "noopener";
+      } else {
+        btn.addEventListener("click", (e) => e.preventDefault());
+      }
+      bar.appendChild(btn);
+    });
+
+    // Slide-Modus: Touch-Handle zum Einfahren
+    if (posClass === "pos-slide-right") {
+      const handle = document.createElement("div");
+      handle.style.cssText = "position:absolute;left:0;top:50%;transform:translateY(-50%);width:14px;height:40px;background:var(--surf2);border-radius:4px 0 0 4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted)";
+      handle.textContent = "‹";
+      handle.addEventListener("click", () => bar.classList.toggle("open"));
+      bar.appendChild(handle);
+    }
+
+    return bar;
+  }
+
+  // ── Screensaver Engine ───────────────────────────────────────────────────
+
+  _startScreensaver() {
+    if (this._ssActive) return;
+    this._ssActive = true;
+
+    // ── Kiosk-Modus: HA-Seitenleiste + Tabs ausblenden ──────────
+    this._applyKioskMode(true);
+
+    // ── Overlay aufbauen + einsetzen ─────────────────────────────
+    this._ssOverlay = this._buildSsOverlay();
+    const wrap = this.shadowRoot?.querySelector("#cwrap") ||
+                 this.shadowRoot?.querySelector(".canvas-wrap") ||
+                 this.shadowRoot?.querySelector("#c")?.parentElement;
+    if (wrap) wrap.appendChild(this._ssOverlay);
+
+    // ── Kiosk-Shortbar einsetzen (außer Overlay-Modus) ───────────
+    const pos = this._opts?.kiosk_bar_pos || "none";
+    if (pos !== "none" && pos !== "overlay") {
+      const bar = this._buildKioskBar("pos-" + pos);
+      if (bar && wrap) wrap.appendChild(bar);
+      this._kioskBar = bar;
+    }
+
+    this._ssClock();
+    this._setMode("screensaver");
+  }
+
+  _stopScreensaver() {
+    if (!this._ssActive) return;
+    this._ssActive = false;
+    clearTimeout(this._ssClockTimer);
+    this._ssOverlay?.remove();
+    this._ssOverlay = null;
+    this._kioskBar?.remove();
+    this._kioskBar = null;
+    this._applyKioskMode(false);
+    this._setMode("view");
+    this._resetSsTimer();
+  }
+
+  _resetSsTimer() {
+    clearTimeout(this._ssIdleTimer);
+    const sec = parseInt(this._opts?.ss_timeout || 0);
+    if (!sec || this._ssActive) return;
+    this._ssIdleTimer = setTimeout(() => this._startScreensaver(), sec * 1000);
+  }
+
+  _ssClock() {
+    if (!this._ssActive || !this._ssOverlay) return;
+    const cl = this._ssOverlay.querySelector(".ss-clock");
+    const dt = this._ssOverlay.querySelector(".ss-date");
+    const now = new Date();
+    if (cl) cl.textContent = now.toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"});
+    if (dt) dt.textContent = now.toLocaleDateString("de-DE", {weekday:"long", day:"numeric", month:"long"});
+    this._ssClockTimer = setTimeout(() => this._ssClock(), 1000);
+  }
+
+  _buildSsOverlay() {
+    const ov = document.createElement("div");
+    ov.className = "ss-overlay";
+
+    // ── Oben links: Uhrzeit + Datum + Wetter ────────────────────
+    const infoBlock = document.createElement("div");
+    infoBlock.className = "ss-info-block";
+
+    const clock = document.createElement("div");
+    clock.className = "ss-clock";
+    clock.textContent = new Date().toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"});
+
+    const date = document.createElement("div");
+    date.className = "ss-date";
+    date.textContent = new Date().toLocaleDateString("de-DE", {weekday:"long", day:"numeric", month:"long"});
+
+    infoBlock.append(clock, date);
+
+    // Wetter (wenn konfiguriert)
+    const weatherEntity = this._opts?.ss_weather_entity;
+    if (weatherEntity && this._hass?.states?.[weatherEntity]) {
+      const ws = this._hass.states[weatherEntity];
+      const weatherDiv = document.createElement("div");
+      weatherDiv.className = "ss-weather";
+      const iconMap = {
+        "sunny":"☀","partlycloudy":"⛅","cloudy":"☁","rainy":"🌧",
+        "pouring":"⛈","snowy":"❄","fog":"🌫","windy":"💨",
+        "lightning":"⚡","lightning-rainy":"⛈","clear-night":"🌙",
+        "hail":"🌨","exceptional":"🌡"
+      };
+      const icon = iconMap[ws.state] || "🌡";
+      const temp = ws.attributes?.temperature;
+      const rain = ws.attributes?.precipitation_probability;
+      weatherDiv.innerHTML =
+        `<span class="ss-weather-icon">${icon}</span>` +
+        `<div><div class="ss-weather-temp">${temp != null ? temp + "°C" : ws.state}</div>` +
+        (rain != null ? `<div class="ss-weather-detail">🌧 ${rain}% Regen</div>` : "") +
+        `</div>`;
+      infoBlock.appendChild(weatherDiv);
+    }
+
+    ov.appendChild(infoBlock);
+
+    // ── Mitte: Platzhalter (Karte bleibt sichtbar + interaktiv) ──
+    const spacer = document.createElement("div");
+    spacer.style.cssText = "flex:1;pointer-events:none";
+    ov.appendChild(spacer);
+
+    // ── Unten: Kiosk-Shortbar ODER Quick-Links ───────────────────
+    const bottomRow = document.createElement("div");
+    bottomRow.style.cssText = "display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:100%";
+
+    // Kiosk-Shortbar im Overlay-Modus
+    const kioskPos = this._opts?.kiosk_bar_pos || "none";
+    if (kioskPos === "overlay") {
+      const bar = this._buildKioskBar("pos-overlay");
+      if (bar) bottomRow.appendChild(bar);
+    }
+
+    // Quick-Links
+    const links = this._opts?.ss_links || [];
+    if (links.length) {
+      const btnWrap = document.createElement("div");
+      btnWrap.className = "ss-btns";
+      links.forEach(lnk => {
+        if (!lnk.url) return;
+        const btn = document.createElement("a");
+        btn.className = "ss-btn"; btn.href = lnk.url;
+        if (lnk.url.startsWith("/")) {
+          btn.addEventListener("click", (e) => {
+            e.preventDefault(); this._stopScreensaver();
+            history.pushState(null, "", lnk.url);
+            window.dispatchEvent(new PopStateEvent("popstate"));
+          });
+        } else {
+          btn.target = "_blank"; btn.rel = "noopener";
+          btn.addEventListener("click", () => this._stopScreensaver());
+        }
+        btn.innerHTML = `<span>${lnk.emoji||""}</span><span>${lnk.label||lnk.url}</span>`;
+        btnWrap.appendChild(btn);
+      });
+      bottomRow.appendChild(btnWrap);
+    }
+
+    const hint = document.createElement("div");
+    hint.className = "ss-hint";
+    hint.textContent = "Karte interaktiv · Tab antippen zum Beenden";
+    bottomRow.appendChild(hint);
+    ov.appendChild(bottomRow);
+
+    return ov;
+  }
+
+  // ── Ambient Light Sensor ────────────────────────────────────────────────
+  _initAmbientLight() {
+    if (!this._opts?.ambient_light) return;
+    if (!window.AmbientLightSensor) {
+      console.info("BLE Positioning: AmbientLightSensor nicht verfügbar (nur HTTPS + Chrome)");
+      return;
+    }
+    try {
+      const sensor = new AmbientLightSensor({ frequency: 0.1 }); // 0.1 Hz = alle 10s
+      sensor.addEventListener("reading", () => {
+        // lux: 0-1 = sehr dunkel, 100+ = hell
+        const lux = sensor.illuminance;
+        const wasDark = this._ambientDark;
+        this._ambientDark = lux < 10; // unter 10 lux = dunkel
+        if (wasDark !== this._ambientDark) {
+          this._markDirty();
+          // Optional: Nacht-Modus automatisch aktivieren
+          if (this._opts?.ambient_auto_night) {
+            if (!this._opts) this._opts = {};
+            this._opts.nightMode = this._ambientDark;
+            this._saveOptions();
+            this._showToast(this._ambientDark ? "🌙 Dunkel erkannt – Nacht-Modus" : "☀ Hell erkannt – Normal-Modus");
+          }
+        }
+      });
+      sensor.addEventListener("error", () => {});
+      sensor.start();
+      this._ambientSensor = sensor;
+    } catch(e) {}
+  }
+
   _saveOpts() { return this._saveOptions(); }  // Alias
 
   async _saveOptions() {
@@ -17521,7 +19788,7 @@ _drawDoors() {
 
   _onWheel(e) {
     // ── 3D zoom ─────────────────────────────────────────────────────────────
-    if (this._mode === "view" && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.12 : 0.89;
       this._3dZoom = Math.max(0.3, Math.min(5, (this._3dZoom||1) * factor));
@@ -17556,7 +19823,7 @@ _drawDoors() {
     const rect = this._canvas.getBoundingClientRect();
     const mx = ((t0.clientX+t1.clientX)/2) - rect.left;
     const my = ((t0.clientY+t1.clientY)/2) - rect.top;
-    if (this._mode === "view" && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       // 3D: store for zoom + pan (midpoint) — orbit is single-finger
       this._pinchZoom3d = this._3dZoom || 1;
       this._pinch3dMidX = mx - rect.width  / 2;
@@ -17584,7 +19851,7 @@ _drawDoors() {
     const rect = this._canvas.getBoundingClientRect();
     const mx = ((t0.clientX+t1.clientX)/2) - rect.left;
     const my = ((t0.clientY+t1.clientY)/2) - rect.top;
-    if (this._mode === "view" && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       // 3D: pinch = zoom, midpoint movement = pan (no orbit with 2 fingers)
       this._3dZoom = Math.max(0.3, Math.min(5, (this._pinchZoom3d||1) * (dist / this._pinchDist)));
       // Pan: translate by midpoint delta
@@ -18000,6 +20267,7 @@ _drawDoors() {
         { icon:"💡", label:"Licht bei Betreten",    trigger:"auto_light" },
         { icon:"🌡", label:"Heizung nach Person",   trigger:"heat_zone"  },
         { icon:"🔒", label:"Abwesenheits-Check",    trigger:"absence"    },
+        { icon:"💤", label:"Screensaver-Automation",  trigger:"screensaver" },
       ];
 
       templates.forEach(tmpl => {
@@ -18022,23 +20290,149 @@ _drawDoors() {
       stepHdr.style.cssText = "font-size:9px;font-weight:700;color:#a855f7;margin-bottom:6px";
 
       if (wiz.step === 1) {
-        stepHdr.textContent = "Schritt 1: Person / Gerät wählen";
-        const devices = this._data?.devices || [];
-        devices.forEach(dev => {
-          const btn = this._autoWizBtn(dev.device_name || dev.device_id, wiz.data.device === dev.device_id);
-          btn.addEventListener("click", () => {
-            wiz.data.device = dev.device_id;
-            wiz.data.device_name = dev.device_name || dev.device_id;
-            wiz.step = 2;
-            this._rebuildSidebar();
+        // Screensaver-Automation: eigener Mini-Wizard
+        if (wiz.trigger === "screensaver") {
+          stepHdr.textContent = "💤 Screensaver-Automation";
+
+          // ── Zeit-Einstellung ──────────────────────────────────
+          const timeBox = document.createElement("div");
+          timeBox.style.cssText = "margin-bottom:8px";
+          const timeLbl = document.createElement("div");
+          timeLbl.style.cssText = "font-size:8px;color:#94a3b8;margin-bottom:4px";
+          timeLbl.textContent = "Screensaver aktivieren nach Inaktivität:";
+          const timeRow = document.createElement("div");
+          timeRow.style.cssText = "display:flex;align-items:center;gap:6px";
+          const timeInp = document.createElement("input");
+          timeInp.type = "number"; timeInp.min = 1; timeInp.max = 120;
+          timeInp.value = wiz.data.ss_minutes ?? 5;
+          timeInp.style.cssText = "width:55px;padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;text-align:center";
+          timeInp.addEventListener("input", () => wiz.data.ss_minutes = parseInt(timeInp.value)||5);
+          const timeUnit = document.createElement("select");
+          timeUnit.style.cssText = "padding:4px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+          [{v:"min",l:"Minuten"},{v:"sec",l:"Sekunden"}].forEach(({v,l}) => {
+            const o = document.createElement("option"); o.value=v; o.textContent=l;
+            if(v===(wiz.data.ss_unit||"min")) o.selected=true;
+            timeUnit.appendChild(o);
           });
-          stepBox.appendChild(btn);
-        });
-        if (!devices.length) {
-          const hint = document.createElement("div");
-          hint.style.cssText = "font-size:8px;color:var(--muted)";
-          hint.textContent = "Keine Geräte gefunden. Zuerst im LIVE-Tab Geräte hinzufügen.";
-          stepBox.appendChild(hint);
+          timeUnit.addEventListener("change", () => wiz.data.ss_unit = timeUnit.value);
+          timeRow.append(timeInp, timeUnit);
+          timeBox.append(timeLbl, timeRow);
+          stepBox.appendChild(timeBox);
+
+          // ── Filter: Auf Geräte/Personen beschränken ───────────
+          const filterBox = document.createElement("div");
+          filterBox.style.cssText = "margin-bottom:8px";
+          const filterLbl = document.createElement("div");
+          filterLbl.style.cssText = "font-size:8px;color:#94a3b8;margin-bottom:4px";
+          filterLbl.textContent = "Nur aktivieren wenn diese Geräte/Personen zu Hause sind:";
+          filterBox.appendChild(filterLbl);
+          const filterHint = document.createElement("div");
+          filterHint.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:5px";
+          filterHint.textContent = "Leer lassen = immer aktivieren";
+          filterBox.appendChild(filterHint);
+
+          wiz.data.ss_filter = wiz.data.ss_filter || [];
+          const allDevices = this._data?.devices || [];
+          allDevices.forEach(dev => {
+            const devRow = document.createElement("div");
+            devRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 0";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = wiz.data.ss_filter.includes(dev.device_id);
+            cb.style.cssText = "accent-color:#a855f7;width:13px;height:13px";
+            cb.addEventListener("change", () => {
+              if (cb.checked) { if(!wiz.data.ss_filter.includes(dev.device_id)) wiz.data.ss_filter.push(dev.device_id); }
+              else wiz.data.ss_filter = wiz.data.ss_filter.filter(id=>id!==dev.device_id);
+            });
+            const devLbl = document.createElement("span");
+            devLbl.style.cssText = "font-size:8px;color:var(--text)";
+            const typeIcon = {phone:"📱",wearable:"⌚",stationary:"🖥"}[dev.device_type||"phone"]||"📱";
+            devLbl.textContent = `${typeIcon} ${dev.device_name||dev.device_id}`;
+            devRow.append(cb, devLbl);
+            filterBox.appendChild(devRow);
+          });
+          if (!allDevices.length) {
+            const nd = document.createElement("div");
+            nd.style.cssText = "font-size:7.5px;color:#445566";
+            nd.textContent = "Keine Geräte konfiguriert – Automation läuft immer";
+            filterBox.appendChild(nd);
+          }
+          stepBox.appendChild(filterBox);
+
+          // ── Energie-Sparmodus ─────────────────────────────────
+          const energyBox = document.createElement("div");
+          energyBox.style.cssText = "margin-bottom:8px;padding:6px 8px;background:var(--surf2);border-radius:5px;border:1px solid #1c2535";
+          const energyLbl = document.createElement("div");
+          energyLbl.style.cssText = "font-size:8px;font-weight:700;color:#f59e0b;margin-bottom:5px";
+          energyLbl.textContent = "⚡ Energie-Sparmodus";
+          energyBox.appendChild(energyLbl);
+
+          // Bildschirm-Helligkeit reduzieren
+          [{key:"ss_dim",    label:"🔅 Bildschirm dimmen (per Automation)", title:"Brightness auf 20% setzen"},
+           {key:"ss_dark",   label:"🌑 Display ausschalten (per Automation)", title:"Screen Off via Fully Kiosk / Browser Mod"},
+           {key:"ss_notrack",label:"📡 BLE/mmWave Polling pausieren", title:"Kein Live-Update im Screensaver → spart Energie"},
+          ].forEach(({key,label,title}) => {
+            const row = document.createElement("div");
+            row.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:3px";
+            const cb = document.createElement("input");
+            cb.type="checkbox"; cb.checked=!!wiz.data[key];
+            cb.style.cssText="accent-color:#f59e0b;width:13px;height:13px";
+            cb.title=title;
+            cb.addEventListener("change",()=>wiz.data[key]=cb.checked);
+            const lbl2=document.createElement("span");
+            lbl2.style.cssText="font-size:8px;color:#94a3b8";
+            lbl2.textContent=label; lbl2.title=title;
+            row.append(cb,lbl2);
+            energyBox.appendChild(row);
+          });
+          stepBox.appendChild(energyBox);
+
+          // ── Automations-Name ──────────────────────────────────
+          const nameRow = document.createElement("div");
+          nameRow.style.cssText = "margin-bottom:8px";
+          const nameLbl = document.createElement("div");
+          nameLbl.style.cssText = "font-size:7px;color:var(--muted);margin-bottom:2px";
+          nameLbl.textContent = "Automations-Name";
+          const nameInp = document.createElement("input");
+          nameInp.value = wiz.data.auto_name || "BLE Screensaver Aktivierung";
+          nameInp.style.cssText = "width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+          nameInp.addEventListener("input", () => wiz.data.auto_name = nameInp.value);
+          nameRow.append(nameLbl, nameInp);
+          stepBox.appendChild(nameRow);
+
+          // ── YAML Vorschau ─────────────────────────────────────
+          const yaml = this._generateAutomationYAML(wiz);
+          const pre = document.createElement("pre");
+          pre.style.cssText = "background:rgba(0,0,0,0.4);border-radius:4px;padding:6px;font-size:7px;color:#a5f3fc;overflow-x:auto;max-height:140px;margin-bottom:8px";
+          pre.textContent = yaml;
+          stepBox.appendChild(pre);
+
+          const createBtn = document.createElement("button");
+          createBtn.className = "btn";
+          createBtn.style.cssText = "width:100%;background:#a855f7;color:#fff;border:none;padding:8px;font-size:9px;border-radius:5px;cursor:pointer;font-weight:700";
+          createBtn.textContent = "🤖 Automation in HA erstellen";
+          createBtn.addEventListener("click", () => this._createAutomation(wiz));
+          stepBox.appendChild(createBtn);
+
+        } else {
+          stepHdr.textContent = "Schritt 1: Person / Gerät wählen";
+          const devices = this._data?.devices || [];
+          devices.forEach(dev => {
+            const btn = this._autoWizBtn(dev.device_name || dev.device_id, wiz.data.device === dev.device_id);
+            btn.addEventListener("click", () => {
+              wiz.data.device = dev.device_id;
+              wiz.data.device_name = dev.device_name || dev.device_id;
+              wiz.step = 2;
+              this._rebuildSidebar();
+            });
+            stepBox.appendChild(btn);
+          });
+          if (!devices.length) {
+            const hint = document.createElement("div");
+            hint.style.cssText = "font-size:8px;color:var(--muted)";
+            hint.textContent = "Keine Geräte gefunden. Zuerst im LIVE-Tab Geräte hinzufügen.";
+            stepBox.appendChild(hint);
+          }
         }
 
       } else if (wiz.step === 2) {
@@ -18216,6 +20610,76 @@ _drawDoors() {
     else if (d.action === "media") action = `action:\n  - service: media_player.play_media\n    entity_id: ${d.action_detail||"media_player.ENTITY"}\n    data:\n      media_content_type: music`;
     else action = `action:\n  - service: ${d.action_detail||"domain.action"}`;
 
+    // Screensaver-Automation
+    if (wiz.trigger === "screensaver") {
+      const d = wiz.data;
+      const sec = (d.ss_unit === "sec") ? (d.ss_minutes||5) : (d.ss_minutes||5) * 60;
+      const name = d.auto_name || "BLE Screensaver Aktivierung";
+      const filterDevs = d.ss_filter || [];
+
+      // Trigger: Inaktivitäts-Sensor des BLE-Positioning (state_changed → for X sec)
+      let yaml = `alias: "${name}"
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: sensor.ble_positioning_activity
+    to: "inactive"
+    for:
+      seconds: ${sec}
+
+`;
+      // Condition: Gerät/Person-Filter
+      if (filterDevs.length) {
+        yaml += `condition:
+  - condition: or
+    conditions:
+`;
+        filterDevs.forEach(devId => {
+          yaml += `      - condition: not
+        conditions:
+          - condition: state
+            entity_id: device_tracker.${devId.replace(/[^a-z0-9_]/gi,"_").toLowerCase()}
+            state: "not_home"
+`;
+        });
+        yaml += "\n";
+
+      }
+
+      // Aktion: Screensaver aktivieren + optionale Energie-Spar-Aktionen
+      yaml += `action:
+  - event: ble_positioning_screensaver
+    event_data:
+      action: activate
+`;
+
+      if (d.ss_dim) {
+        yaml += `  # Bildschirm dimmen (anpassen: media_player, light oder Fully Kiosk entity)
+  - service: light.turn_on
+    target:
+      entity_id: light.display_backlight   # ← entity_id anpassen
+    data:
+      brightness_pct: 20
+`;
+      }
+      if (d.ss_dark) {
+        yaml += `  # Display ausschalten (Fully Kiosk / Browser Mod)
+  # - service: fully_kiosk.screen_off
+  #   target:
+  #     device_id: YOUR_FULLY_KIOSK_DEVICE   # ← anpassen
+`;
+      }
+      if (d.ss_notrack) {
+        yaml += `  # Polling pausieren → HA Input Boolean setzen
+  - service: input_boolean.turn_off
+    entity_id: input_boolean.ble_tracking_active   # ← ggf. anlegen
+`;
+      }
+
+      return yaml.trim();
+    }
+
     return `alias: "${name}"\nmode: single\n\n${trigger}\n\n${condition ? condition+"\n\n" : ""}${action}`;
   }
 
@@ -18255,12 +20719,31 @@ _drawDoors() {
       return [{ platform:"time", at:"07:00:00" }, { platform:"state", entity_id: entityId, to: d.room }];
     } else if (wiz.trigger === "absence") {
       return [{ platform:"state", entity_id: entityId, for:{ minutes:30 } }];
+    } else if (wiz.trigger === "screensaver") {
+      const d = wiz.data;
+      const sec = (d.ss_unit === "sec") ? (d.ss_minutes||5) : (d.ss_minutes||5) * 60;
+      return [{ platform:"state", entity_id:"sensor.ble_positioning_activity", to:"inactive", for:{seconds:sec} }];
     }
     return [];
   }
 
   _parseAutoCondition(wiz) {
     const d = wiz.data;
+    if (wiz.trigger === "screensaver") {
+      const filterDevs = d.ss_filter || [];
+      if (!filterDevs.length) return [];
+      return [{
+        condition: "or",
+        conditions: filterDevs.map(devId => ({
+          condition: "not",
+          conditions: [{
+            condition: "state",
+            entity_id: `device_tracker.${devId.replace(/[^a-z0-9_]/gi,"_").toLowerCase()}`,
+            state: "not_home"
+          }]
+        }))
+      }];
+    }
     const entityId = `sensor.ble_position_${(d.device||"").replace(/[-:]/g,"_")}`;
     if (["zone_enter","auto_light","heat_zone","time_zone"].includes(wiz.trigger)) {
       return [{ condition:"state", entity_id: entityId, state: d.room }];
@@ -18270,6 +20753,13 @@ _drawDoors() {
 
   _parseAutoAction(wiz) {
     const d = wiz.data;
+    if (wiz.trigger === "screensaver") {
+      const actions = [{ event:"ble_positioning_screensaver", event_data:{action:"activate"} }];
+      if (d.ss_dim)     actions.push({ service:"light.turn_on",  target:{entity_id:"light.display_backlight"}, data:{brightness_pct:20} });
+      if (d.ss_dark)    actions.push({ service:"fully_kiosk.screen_off" });
+      if (d.ss_notrack) actions.push({ service:"input_boolean.turn_off", entity_id:"input_boolean.ble_tracking_active" });
+      return actions;
+    }
     if (d.action === "light_on")   return [{ service:"light.turn_on",   entity_id: d.action_detail }];
     if (d.action === "light_off")  return [{ service:"light.turn_off",  entity_id: d.action_detail }];
     if (d.action === "notify")     return [{ service:"notify.notify",   data:{ message: d.action_detail||"" } }];
@@ -18812,6 +21302,41 @@ _drawDoors() {
     };
     resetBtn?.addEventListener("click", doReset);
     svg.addEventListener("dblclick", doReset);
+
+    // ── 3D Preset-Buttons ─────────────────────────────────────────
+    // Füge Preset-Buttons über dem elevation-wrap ein
+    const presets = [
+      { label:"⊙", title:"Draufsicht (90°)",  deg: 89 },
+      { label:"◈", title:"Isometrie (45°)",    deg: 45 },
+      { label:"◫", title:"Frontal (15°)",      deg: 15 },
+    ];
+    const presetWrap = document.createElement("div");
+    presetWrap.id = "elevation-presets";
+    presetWrap.style.cssText = "position:absolute;bottom:108px;right:90px;display:none;flex-direction:column;gap:3px;z-index:10";
+    presets.forEach(p => {
+      const btn = document.createElement("button");
+      btn.title = p.title;
+      btn.textContent = p.label;
+      btn.style.cssText = "width:28px;height:22px;border-radius:4px;border:1px solid #1c2535;background:#0d1219;color:#445566;font-size:10px;cursor:pointer;padding:0;line-height:1";
+      btn.addEventListener("mouseenter", () => btn.style.color = "#00e5ff");
+      btn.addEventListener("mouseleave", () => btn.style.color = "#445566");
+      btn.addEventListener("click", () => {
+        this._3dElevation = p.deg;
+        if (this._opts) this._opts.elevation3d = p.deg;
+        updateElevation(); this._draw(); this._saveOptions();
+      });
+      presetWrap.appendChild(btn);
+    });
+    // Füge in Shadow DOM ein (neben elevation-wrap)
+    const canvas = this.shadowRoot?.getElementById("ble-canvas");
+    if (canvas?.parentElement) canvas.parentElement.appendChild(presetWrap);
+    // Sichtbarkeit synchron mit elevation-wrap
+    const origUpdateVis = this._updateCompassVisibility?.bind(this);
+    this._updateCompassVisibility = () => {
+      origUpdateVis?.();
+      const is3D = this._mode === "view" && (this._opts?.theme === "iso3d" || this._opts?.theme3d);
+      presetWrap.style.display = is3D ? "flex" : "none";
+    };
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -19437,8 +21962,8 @@ _drawDoors() {
         ctx.font = `italic ${fs}px Georgia, serif`;
         ctx.fillStyle = TH.label(rr,gg,bb);
         ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.translate(fc.x,fc.y); ctx.rotate((Math.random()-0.5)*0.06); ctx.translate(-fc.x,-fc.y);
-        ctx.fillText(name||"", fc.x, fc.y);
+        ctx.save(); ctx.translate(fc.x,fc.y); ctx.rotate((Math.random()-0.5)*0.06); ctx.translate(-fc.x,-fc.y);
+        ctx.fillText(name||"", fc.x, fc.y); ctx.restore();
       } else {
         ctx.font = `bold ${fs}px 'JetBrains Mono',monospace`;
         if (TH.id === "arch" && TH.accentColors) {
@@ -19985,7 +22510,11 @@ _drawDoors() {
     });
 
     // ── Deco elements in 3D ─────────────────────────────────────────────────
+    // project() für _drawMusicBubbles3D verfügbar machen
+    this._project3d = project;
+    this._unitPx3d  = unitPx;
     this._drawDecos3D(ctx, project, unitPx, this._data?.decos || []);
+    this._drawMusicBubbles3D(project, unitPx);
 
     // ── Alarms: floor fill + inner wall highlight ──────────────────────────
     const alarms3d = this._pendingAlarms?.length ? this._pendingAlarms : (this._data?.alarms || []);
@@ -20541,6 +23070,9 @@ _drawDoors() {
 }
 
 // ── Register ──────────────────────────────────────────────────────────────
+// Inline-Module registrieren (Registry + Klassen jetzt vollständig)
+_registerInlineModules();
+
 if (!customElements.get("ble-positioning-card")) {
   customElements.define("ble-positioning-card", BLEPositioningCard);
 }

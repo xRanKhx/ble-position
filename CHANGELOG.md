@@ -1,108 +1,106 @@
 # Changelog
 
-## [2.11.30] – 2026-03-15
+## v4.1.0 (2026-03-18)
+### ⚡ Elektro-Modul: Vollständiger Baukasten
+- **Drag & Drop** – alle Elemente frei positionierbar
+- **Größen-Anpassung** – Resize-Handle (Ecke ziehen)
+- **Leitungen ziehen** – Verbindungsmodus: Knoten antippen → zweiten antippen
+- **Schalter-Nodes** – zeigen Entity-Zustand (AN/AUS) + Messwert
+- **Power-Skala** – Überschuss oben, dynamische Segmentierung
+- **Automations-Simulator** – Testmodus mit Zeitraffer, kein HA-Zugriff
+- **Multi-System** – jedes System hat eigene Elemente & Konfiguration
+- **HACS-ready** – direkt via GitHub installierbar
 
-### Fixed
-- **Posture detection: always "sitting"** – `stand_min` threshold raised from 1300mm to
-  1500mm and `sit_min` from 650mm to 900mm (matching real body heights). Wall-mounted
-  sensors without tilt angle now use speed-only heuristic and never report "lying"
-  (no height information available at tilt ≈ 0°).
-- **False fall alarm when lying in bed** – completely rewrote fall detection state machine:
-  - Fall signature now requires prior movement (`prevSpeed > 0.3 m/s`) to distinguish
-    a real fall from slowly lying down in bed
-  - Removed independent "motionless" alarm that fired after `delay × 1.5 s` – this caused
-    sleep to be reported as a fall emergency
-  - `canDetectLying` guard: fall detection only activates when sensor can actually detect
-    the lying posture (ceiling mount or wall mount with tilt ≥ 15°)
-  - `stillSince` tracking removed from the normal phase
+## v4.0.0 (2026-03-18)
+- ElektroModul v4: Power-Fluss, Abzweigungen, KI-Analyse, Saison-Modus
 
-All notable changes to BLE Indoor Positioning are documented here.
+## v3.6.0
+- ElektroModul v3: HA-Import, Entity-Picker, Multi-System, Log, dynamische KI
 
-## [2.11.29] – 2026-03-15
+## v4.1.1 (2026-03-18)
+### Bugfixes
+- **Elektro Drag & Drop**: `onDragStart/Move/End` wurden nie aufgerufen → Canvas-Events jetzt korrekt an Modul delegiert
+- **Elektro Resize**: Resize-Handle jetzt funktional (Ecke des selektierten Elements ziehen)
+- **Elektro Leitungen ziehen**: `onTap` in `_onCanvasClick` eingehängt → Verbindungsmodus funktioniert
+- **Deko Entity speichert nicht**: `_saveDecoNow()` nach jeder Entity-/Label-/Größen-Änderung aufgerufen
+- **Deko Position nach Drag**: `_saveDecoNow()` beim Drag-Ende → Position bleibt nach Neustart
+- **Canvas-Rotation**: `ctx.rotate()` im Aquarell-Modus ohne `save()/restore()` rotierte den gesamten Canvas → gefixt
 
-### 🔴 Critical Fix
-- **Lovelace Resources: NEVER delete/create on startup** – previous versions called
-  `async_delete_item` / `async_create_item` during `async_setup_entry`, which destroyed
-  other custom dashboard cards (advanced-camera-card, bubble-card, etc.) due to a
-  HACS race condition on startup and HA's live-iterator behaviour in `async_items()`.
-  Resource management is now **read-only**: the integration only checks if its own
-  URLs are present and logs a warning if not – it never touches any other resources.
+## v4.2.0 (2026-03-18)
+### Solar-Forecast & Wetter
+- **Forecast-Panel**: Frei positionierbares, resize-bares Panel über dem Canvas
+  - Vordergrund/Hintergrund wählbar per Klick auf Badge
+  - Drag via obere Leiste, Resize via untere-rechte Ecke
+  - Balkendiagramm mit Stunden-Prognose, Spitzenzeit-Marker
+- **Wetter-Hintergrund-Canvas**: Sonne (mit Strahlen + Pulsringen), Mond + Sterne, Wolken, Regen, Nebel
+  - Sonnenstand-Bogen zeigt Tagesverlauf
+  - Temperaturanzeige oben rechts
+- **Forecast-Bedingungen** für Automationen:
+  - `forecast_today_gt/lt`: Wenn heute > X kWh erwartet
+  - `forecast_tomorrow_gt`: Morgen > X kWh
+  - `forecast_peak_before`: Spitzenstunde vor HH:MM
+  - `weather_is`: Wetterbedingung (sunny, cloudy, rainy...)
+- **KI-Analyse**: Forecast-basierte Insights (Sonnentag, schlechter Tag, morgen besser)
 
-### Fixed
-- Version badge in card always showed `2.11.21` (sed used wrong quote style)
-- SVG export button invisible when a floor plan background image was loaded
-  (button was inside the `else` block, now always visible when rooms exist)
+### Leitungen
+- **Automatischer Wert**: Entity am Quell-Node → automatisch auf Leitung angezeigt
+- **Dicke proportional zu Watt**: je mehr Leistung, desto dicker und leuchtender
+- **Überschreibbar**: sensorKey auf Leitung hat Vorrang
 
----
+## v4.3.0 (2026-03-18)
+### Forecast-Panel komplett neu
+- **Mehrere Panels**: Unbegrenzt viele Forecast-Panels, frei positioniert (auch nebeneinander, untereinander, überall)
+- **Mehrere Anlagen pro Panel**: Ost/West/Süd-Anlage als eigene Quelle mit eigener Farbe + Entities
+- **Sidebar-Editor**: Kein Canvas-Grab nötig – alles per Sidebar (Name, Entities, Farbe, Sichtbarkeit)
+- **Canvas-Interaktion**: Panel im Canvas antippen → selektiert; Drag-Handle (obere Leiste) zum Verschieben; Resize-Handle (Ecke unten rechts) für Größe
+- **Diagramm-Inhalt**:
+  - Gelbe Linie = Sonnenstandbogen (animiert, zeigt aktuelle Position ★)
+  - Graue Gauss-Kurve = Forecast-Ertragsprofil (aus today-kWh + Spitzenzeit)
+  - Goldene Balken = Solar-Prognose stündlich (vergangen = transparent, jetzt = hell)
+  - Grüner Schichtbalken = Akku laden (aus battery_w Entity)
+  - Roter Schichtbalken = Akku entladen (negativer battery_w)
+  - Blauer Balken nach unten = Verbrauch (load_w Entity)
+  - Spitzenstunde-Marker ★ mit Uhrzeit
+- **Wetter-Hintergrund**: Vollständig überarbeitete Wetter-Animation über das gesamte Canvas
 
-## [2.11.28] – 2026-03-15
+## v4.3.1 (2026-03-18)
+### Forecast-Panel: Panorama + Ost/West
+- **Panorama** (1 Anlage): Stündlicher Wetter-Hintergrund – jede Stunde hat eigenes Sky-Bild
+  (Morgenrot, Tagblau, Wolken, Regen, Nacht+Mond+Sterne). Sonne steigt und sinkt sichtbar.
+  Solar-Balken wachsen aus der Dunkelzone. Grüner Ist-Punkt zeigt aktuellen Ertrag.
+- **Ost/West** (mehrere Anlagen): gleicher Wetter-Hintergrund, aber jede Anlage hat
+  eigene farbige Balken-Gruppe + Kurve + Peak-Marker. Man sieht sofort warum
+  Ost morgens und West abends liefert. Gesamtertrag rechts unten.
+- Automatische Umschaltung: 1 Quelle → Panorama, 2+ Quellen → Ost/West
+- Stündliche Forecast-Daten werden über weather.get_forecasts (HA 2023.9+) geladen
 
-### Added
-- **Journey / Time-lapse** now captures full home state every 10 s:
-  BLE devices, mmWave persons (with posture), lights (brightness + colour),
-  doors/windows (open/closed state via HA entity), triggered alarms
-- Journey sidebar shows snapshot summary and colour legend
-- Timestamp overlay on every journey frame
+## v4.3.2 (2026-03-22)
+### Bugfix: Wetter wird angezeigt
+- weather.get_forecasts via WebSocket (hass.callWS) statt callService → funktioniert korrekt
+- _refreshData ist jetzt async + wird mit await aufgerufen
+- Fallback auf attributes.forecast für ältere HA-Versionen
+- Warn-Log wenn Weather-Entity nicht gefunden (zeigt verfügbare Entities)
 
-### Fixed
-- Multiple old JS versions loaded simultaneously (v2.11.18/20/23 all active at once)
-  causing newest version to be ignored by `customElements.define()`
+## v4.4.0 (2026-03-22)
+### Modul-System – separate Dateien
+- **Module als separate .js Dateien** in /modules/ Ordner
+  - elektro.js, energie.js, pool.js
+  - Werden per fetch() lazy geladen statt per eval() aus eingebettetem String
+  - Card: 1.25 MB → 1.09 MB (166 KB Module ausgelagert)
+- **Versions-Anzeige in Sidebar (⚙ OPT → Module)**
+  - Card-Hauptversion oben
+  - Pro Modul: Version, Ladezeit, Status (✅/❌/⟳)
+- **Auto-Update-Erkennung** (alle 5 Minuten)
+  - HEAD-Request prüft Last-Modified Header
+  - Badge "⟳ Update verfügbar" erscheint automatisch
+- **Hot-Reload** per Klick – kein HA-Neustart nötig
+- **RAM/CPU-Ersparnis**: inaktive Module = 0 KB, 0 CPU, kein onPoll
 
----
+### Installation
+Samba: /config/www/ble_positioning/ ersetzen
+- ble-positioning-card.js (Haupt-Card)
+- modules/elektro.js
+- modules/energie.js
+- modules/pool.js
 
-## [2.11.27] – 2026-03-14
-
-### Added
-- Journey snapshots extended to capture: mmWave persons, lights, doors, windows, alarms
-- Ghost trails for mmWave persons in journey playback
-
----
-
-## [2.11.26] – 2026-03-13
-
-### Added
-- **SVG Export** – export floor plan (rooms, zones, doors, windows) as Inkscape-compatible SVG
-
-### Fixed
-- Dashboard cards deleted on integration start (partial fix – completed in 2.11.29)
-- SVG import: SweetHome3D files (embedded PNG) and pure vector SVGs now handled
-
----
-
-## [2.11.25] – 2026-03-12
-
-### Fixed
-- `_options_listener` no longer calls `async_reload` (caused full HA Lovelace reload)
-- Lovelace resource registration improved (only removes outdated versioned URLs)
-
----
-
-## [2.11.24] – 2026-03-11
-
-### Improved
-- Posture detection completely rewritten for wall-mounted sensors
-- Confidence weighting based on tilt angle
-- Fallback posture is now "sitting" instead of "lying"
-
----
-
-## [2.11.23] – 2026-03-10
-
-### Added
-- Mobile / iPhone 3D view optimised (portrait aspect ratio, reset button)
-- Mobile HUD hint for touch gestures
-
----
-
-## [2.11.22] – 2026-03-09
-
-### Added
-- Mount settings (wall/ceiling, height, tilt angle) directly in sensor editor
-
----
-
-## [2.11.21] – 2026-03-08
-
-### Fixed
-- Zone display: zones now correctly looked up from `room.zones` with absolute coordinates
-  (both frontend `_getMmwaveZoneForTarget` and backend `sensor.py _zone_for_point`)
+HACS: automatisch per GitHub Release

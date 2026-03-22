@@ -2,7 +2,7 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/hacs/integration)
 [![HA Version](https://img.shields.io/badge/Home%20Assistant-2024.1%2B-blue.svg)](https://www.home-assistant.io)
-[![Version](https://img.shields.io/github/v/release/yourusername/ha-ble-positioning)](https://github.com/yourusername/ha-ble-positioning/releases)
+[![Version](https://img.shields.io/github/v/release/xRanKhx/ble-position)](https://github.com/xRanKhx/ble-position/releases)
 
 Indoor positioning for Home Assistant using BLE RSSI fingerprinting and mmWave radar sensors.  
 Includes a full-featured Lovelace card with 2D/3D floor plan, person detection, zones, lights, alarms and a journey time-lapse.
@@ -26,13 +26,13 @@ Includes a full-featured Lovelace card with 2D/3D floor plan, person detection, 
 ### Method 1 – HACS Custom Repository (recommended)
 
 1. Open **HACS → Integrations → ⋮ → Custom repositories**
-2. Add `https://github.com/yourusername/ha-ble-positioning` as **Integration**
+2. Add `https://github.com/xRanKhx/ble-position` as **Integration**
 3. Search for **BLE Indoor Positioning** and install
 4. Restart Home Assistant
 
 ### Method 2 – Manual
 
-1. Download the latest `ble_positioning.zip` from [Releases](https://github.com/yourusername/ha-ble-positioning/releases)
+1. Download the latest `ble_positioning.zip` from [Releases](https://github.com/xRanKhx/ble-position/releases)
 2. Unpack into `/config/custom_components/ble_positioning/`
 3. Restart Home Assistant
 

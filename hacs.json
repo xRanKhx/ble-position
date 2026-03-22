@@ -1,6 +1,6 @@
 {
   "name": "BLE Indoor Positioning",
-  "description": "mmWave radar & BLE device positioning – interactive floor plan, person detection, journey time-lapse",
+  "description": "BLE/mmWave indoor positioning with interactive floor plan, energy management, automation builder and simulator",
   "render_readme": true,
   "domains": ["ble_positioning"],
   "content_in_root": false,
