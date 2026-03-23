@@ -1,8 +1,5 @@
 {
   "name": "BLE Indoor Positioning",
-  "description": "BLE/mmWave indoor positioning with interactive floor plan, energy management, automation builder and simulator",
   "render_readme": true,
-  "domains": ["ble_positioning"],
-  "content_in_root": false,
   "homeassistant": "2024.1.0"
 }
