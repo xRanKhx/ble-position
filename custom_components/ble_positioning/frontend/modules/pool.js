@@ -6,6 +6,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 const PoolModul = {
+  ...(window.BLEModuleBase || {}),
   id:"pool", name:"Pool & Garten", icon:"\uD83C\uDFCA", tabId:"pool",
   version: "2.1.0", description:"Baukasten \u00B7 Pumpen \u00B7 Bewässerung \u00B7 Sensoren \u00B7 Automationen",
   _card:null,
@@ -98,48 +99,10 @@ const PoolModul = {
     return isNaN(num) ? st : num;
   },
 
-  _getSimState(eid, card){
-    if(!eid) return undefined;
-    if(this._simActive && eid in this._simStates) return this._simStates[eid];
-    return card?._hass?.states?.[eid]?.state;
-  },
 
-  _runSimActions(actions, card){
-    const cfg=card?._opts?.pool_cfg||{};
-    const res=s=>s?.replace(/\{\{(\w+)\}\}/g,(_,k)=>cfg[k]||s);
-    actions.forEach(a=>{
-      const eid=res(a.entity); if(!eid)return;
-      switch(a.type){
-        case"switch_on":     this._simStates[eid]="on";  break;
-        case"switch_off":    this._simStates[eid]="off"; break;
-        case"switch_toggle": this._simStates[eid]=(this._getSimState(eid,card)==="on")?"off":"on"; break;
-        case"notify": card?._showToast?.(`\uD83D\uDD14 [SIM] ${a.message||"Benachrichtigung"}`); break;
-      }
-    });
-  },
 
-  _runSimCycle(card){
-    if(!this._simActive||!card) return;
-    const vals=this._getPoolVals(card);
-    const cfg=card?._opts?.pool_cfg||{};
-    this._autos.forEach(auto=>{
-      if(auto.enabled===false)return;
-      const met=this._evalAuto(auto, vals, card);
-      const now=Date.now(), last=this._lastAutoRun[auto.id]||0;
-      if(met && now-last>3000){
-        this._runSimActions(auto.actions||[], card);
-        this._lastAutoRun[auto.id]=now; auto._lastState=true;
-        this._log.unshift({ts:now, name:auto.name, sim:true});
-        if(this._log.length>100)this._log.pop();
-        card._showToast?.(`\u25C6 ${auto.name} [SIM]`);
-      } else if(!met && auto._lastState){
-        if((auto.actions_else||[]).length) this._runSimActions(auto.actions_else, card);
-        auto._lastState=false;
-      }
-    });
-    card._markDirty?.();
-  },
 
+  _getValsForSim(card){ return this._getPoolVals(card); },
   _getPoolVals(card){
     if(this._simActive){
       const s=this._simVals;
@@ -205,11 +168,6 @@ const PoolModul = {
   },
 
   // ── Automations-Logik ─────────────────────────────────────────────────────
-  _evalAuto(auto, vals, card){
-    if(!auto?.conditions?.length)return false;
-    const r=auto.conditions.map(c=>this._evalCond(c, vals, card));
-    return auto.operator==="OR"?r.some(Boolean):r.every(Boolean);
-  },
 
   _evalCond(c, vals, card){
     const v=parseFloat(c.threshold||0);
@@ -568,13 +526,6 @@ const PoolModul = {
     this._dragNode=null; this._resizeNode=null;
   },
 
-  _hitNode(x,y,W,H,dpr){
-    return this._nodes.slice().reverse().find(node=>{
-      const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;
-      const r=(Math.min(node.w||nt.defaultW,node.h||nt.defaultH)/2+6)*dpr;
-      return Math.hypot(x-node.x*W,y-node.y*H)<r;
-    })||null;
-  },
 
   // ── SIDEBAR ───────────────────────────────────────────────────────────────
   buildSidebar(card){
@@ -970,40 +921,7 @@ const PoolModul = {
     sBox.appendChild(mRow); wrap.appendChild(sBox);
   },
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
-  _mkField(label,value,onChange){
-    const row=document.createElement("div");
-    const lbl=document.createElement("div"); lbl.style.cssText="font-size:7px;color:#445566;margin-bottom:2px"; lbl.textContent=label;
-    const inp=document.createElement("input"); inp.type="text"; inp.value=value||"";
-    inp.style.cssText="width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-    inp.addEventListener("input",()=>onChange(inp.value));
-    row.append(lbl,inp); return row;
-  },
 
-  _mkEntityPicker(label,value,domains,onChange,card){
-    const wrap=document.createElement("div");
-    const lbl=document.createElement("div"); lbl.style.cssText="font-size:7px;color:#445566;margin-bottom:2px"; lbl.textContent=label;
-    const row=document.createElement("div"); row.style.cssText="display:flex;gap:3px";
-    const inp=document.createElement("input"); inp.type="text"; inp.value=value||""; inp.placeholder=`${(domains||[]).join("/")} Entity`;
-    inp.style.cssText="flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px";
-    inp.addEventListener("input",()=>onChange(inp.value.trim()));
-    const pb=document.createElement("button"); pb.style.cssText="padding:3px 6px;border-radius:4px;border:1px solid #0ea5e9;background:transparent;color:#0ea5e9;font-size:8px;cursor:pointer"; pb.textContent="\uD83D\uDD0D";
-    pb.addEventListener("click",()=>{
-      const entities=Object.entries(card._hass?.states||{})
-        .filter(([k])=>!domains||domains.some(d=>k.startsWith(d+".")))
-        .map(([k,s])=>({id:k,name:s.attributes?.friendly_name||k,state:s.state}));
-      const dl=document.createElement("div"); dl.style.cssText="position:fixed;z-index:9999;background:#0d1219;border:1px solid #334155;border-radius:6px;max-height:180px;overflow-y:auto;width:240px;box-shadow:0 4px 12px #000a";
-      const si=document.createElement("input"); si.type="text"; si.placeholder="Suchen…"; si.style.cssText="width:100%;padding:4px 6px;border:none;border-bottom:1px solid #334155;background:transparent;color:var(--text);font-size:8px;box-sizing:border-box";
-      dl.appendChild(si);
-      const rl=f=>{dl.querySelectorAll(".pi").forEach(e=>e.remove());entities.filter(e=>!f||e.id.includes(f)||e.name.toLowerCase().includes(f.toLowerCase())).slice(0,40).forEach(e=>{const item=document.createElement("div");item.className="pi";item.style.cssText="padding:4px 8px;cursor:pointer;font-size:7.5px;border-bottom:1px solid #0d121966;display:flex;gap:6px";item.innerHTML=`<span style="color:#445566;font-size:6.5px;flex:1">${e.id}</span><span style="color:${e.state==="on"?"#22c55e":"#445566"};font-size:6.5px">${e.state}</span>`;item.addEventListener("click",()=>{inp.value=e.id;onChange(e.id);dl.remove();});dl.appendChild(item);});};
-      si.addEventListener("input",()=>rl(si.value)); rl("");
-      document.body.appendChild(dl);
-      const rect=pb.getBoundingClientRect(); dl.style.top=(rect.bottom+4)+"px"; dl.style.left=Math.max(4,rect.left-80)+"px";
-      const close=e=>{if(!dl.contains(e.target)&&e.target!==pb){dl.remove();document.removeEventListener("click",close);}};
-      setTimeout(()=>document.addEventListener("click",close),100);
-    });
-    row.append(inp,pb); wrap.append(lbl,row); return wrap;
-  },
 };
 
 if(typeof BLEModuleRegistry!=="undefined"){

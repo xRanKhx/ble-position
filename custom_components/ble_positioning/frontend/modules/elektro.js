@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ElektroModul = {
-  id:"elektro", name:"Elektro", icon:"\uD83D\uDD0C", tabId:"elektro", version: "4.4.5",
+  id:"elektro", name:"Elektro", icon:"\uD83D\uDD0C", tabId:"elektro", version: "4.4.9",
   description:"Baukasten \u00B7 Multi-Forecast \u00B7 Wetter \u00B7 Drag&Drop",
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ const ElektroModul = {
     return {
       id:"fp_"+Date.now(),
       name:"Solar Forecast",
-      x:0.02,y:0.02,w:0.96,h:0.20,
+      x:0.02,y:0.02,w:0.96,h:0.15,
       visible:true,
       sources:[
         {id:"src_1",name:"Haupt-Anlage",color:"#fbbf24",
@@ -117,11 +117,11 @@ const ElektroModul = {
 
   _createDefaultLayout(){
     this._nodes=[
-      {id:"solar1",type:"solar",   x:0.35,y:0.28,w:60,h:60,label:"Solar",   entity:"",sensorKey:"solar_power"},
-      {id:"mppt1", type:"mppt",    x:0.35,y:0.48,w:52,h:52,label:"MPPT",    entity:"",sensorKey:""},
-      {id:"batt1", type:"battery", x:0.18,y:0.70,w:70,h:46,label:"Batterie",entity:"",sensorKey:""},
-      {id:"inv1",  type:"inverter",x:0.52,y:0.70,w:52,h:52,label:"WR",      entity:"",sensorKey:""},
-      {id:"house1",type:"house",   x:0.72,y:0.70,w:65,h:65,label:"Haus",    entity:"",sensorKey:""},
+      {id:"solar1",type:"solar",   x:0.25,y:0.35,w:52,h:52,label:"Solar",   entity:"",sensorKey:"solar_power"},
+      {id:"mppt1", type:"mppt",    x:0.25,y:0.58,w:46,h:46,label:"MPPT",    entity:"",sensorKey:""},
+      {id:"batt1", type:"battery", x:0.12,y:0.78,w:58,h:38,label:"Batterie",entity:"",sensorKey:""},
+      {id:"inv1",  type:"inverter",x:0.45,y:0.78,w:46,h:46,label:"WR",      entity:"",sensorKey:""},
+      {id:"house1",type:"house",   x:0.68,y:0.72,w:52,h:52,label:"Haus",    entity:"",sensorKey:""},
     ];
     this._wires=[
       {id:"w1",from:"solar1",to:"mppt1", sensorKey:"",label:""},
@@ -335,7 +335,13 @@ const ElektroModul = {
     }
 
     // Forecast-Panels (Hintergrund-Layer zuerst)
-    this._fPanels.filter(p=>p.visible).forEach(p=>this._drawForecastPanel(ctx,p,W,H,dpr,t,card));
+    // Forecast-Panels: auf kleinen Screens (Handy) automatisch kompakter
+    const _isSmallScreen=(W/dpr)<600||(H/dpr)<400;
+    this._fPanels.filter(p=>p.visible).forEach(p=>{
+      // Auf kleinen Screens Panel auf max 15% Höhe begrenzen
+      const adjustedPanel=_isSmallScreen&&p.h>0.15?{...p,h:0.15}:p;
+      this._drawForecastPanel(ctx,adjustedPanel,W,H,dpr,t,card);
+    });
 
     // Power-Skala
     this._drawPowerScale(ctx,vals,W,H,dpr);
@@ -358,7 +364,8 @@ const ElektroModul = {
     // Status-Bar
     const runCount=this._autos.filter(a=>a.enabled!==false&&this._evalAuto(a,vals,card._hass,card._opts?.elektro_v4_cfg||{})).length;
     ctx.fillStyle="rgba(7,10,16,0.92)"; ctx.fillRect(0,0,W,20*dpr);
-    ctx.font=`${6.5*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle="#445566"; ctx.textAlign="left";
+    const _fs=Math.min(6.5,(W/dpr)/100)*dpr;
+    ctx.font=`${_fs}px 'JetBrains Mono',monospace`; ctx.fillStyle="#445566"; ctx.textAlign="left";
     ctx.fillText(`\u2600${vals.solarW.toFixed(0)}W  \uD83D\uDD0B${vals.battPct.toFixed(0)}%  \u26A1+${vals.surplus.toFixed(0)}W  \u25C6${runCount}/${this._autos.length}  \uD83C\uDFE0${this._haAutos.filter(a=>a.state==="on").length}/${this._haAutos.length} HA`,10*dpr,13*dpr);
   },
 
@@ -1027,30 +1034,62 @@ _parsePeakHour(val){
 },
 
   _drawPowerScale(ctx,vals,W,H,dpr){
-    const sx=8*dpr,sy=28*dpr,sw=22*dpr,sh=H-48*dpr;
-    ctx.fillStyle="#0d1219";ctx.strokeStyle="#1c2535";ctx.lineWidth=1;
-    ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,4);ctx.fill();ctx.stroke();
+    // Breite skaliert mit Canvas-Breite (mobil schmaler, Desktop breiter)
+    const minW=32*dpr, maxW=52*dpr;
+    const sw=Math.max(minW,Math.min(maxW,W*0.055));
+    const sx=6*dpr, sy=32*dpr, sh=H-54*dpr;
+
+    // Hintergrund
+    ctx.fillStyle="#0a1018"; ctx.strokeStyle="#1c2535"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(sx,sy,sw,sh,5); ctx.fill(); ctx.stroke();
+
     const total=Math.max(vals.solarW,1);
     const segs=[
-      {label:"Ubers.",w:vals.surplus,color:"#fbbf24"},
-      {label:"Akku",  w:Math.max(0,vals.battW),color:"#22c55e"},
-      {label:"Last",  w:Math.max(0,vals.loadW-vals.surplus),color:"#38bdf8"},
-      {label:"Rest",  w:Math.max(0,total-vals.surplus-Math.max(0,vals.battW)-Math.max(0,vals.loadW)),color:"#334155"},
+      {label:"Überschuss", short:"Übers.", w:vals.surplus,           color:"#fbbf24"},
+      {label:"Akku laden", short:"Akku",   w:Math.max(0,vals.battW), color:"#22c55e"},
+      {label:"Verbrauch",  short:"Last",   w:Math.max(0,vals.loadW-vals.surplus), color:"#38bdf8"},
+      {label:"Rest",       short:"Rest",   w:Math.max(0,total-vals.surplus-Math.max(0,vals.battW)-Math.max(0,vals.loadW)), color:"#334155"},
     ].filter(s=>s.w>0);
+
     let yOff=0;
     segs.forEach(seg=>{
-      const frac=Math.min(1,seg.w/total),segH=frac*sh;
-      ctx.fillStyle=seg.color+"bb";ctx.beginPath();ctx.roundRect(sx+1,sy+yOff+1,sw-2,Math.max(2,segH-2),2);ctx.fill();
-      if(segH>14*dpr){ctx.font=`${5.5*dpr}px monospace`;ctx.fillStyle=seg.color;ctx.textAlign="center";ctx.fillText(seg.label,sx+sw/2,sy+yOff+segH/2+2*dpr);if(segH>22*dpr){ctx.font=`bold ${5.5*dpr}px monospace`;ctx.fillText(`${seg.w.toFixed(0)}W`,sx+sw/2,sy+yOff+segH/2+10*dpr);}}
+      const frac=Math.min(1,seg.w/total), segH=frac*sh;
+      // Segment-Füllung mit Gradient-Effekt
+      const g=ctx.createLinearGradient(sx,0,sx+sw,0);
+      g.addColorStop(0,seg.color+"99"); g.addColorStop(1,seg.color+"dd");
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.roundRect(sx+1,sy+yOff+1,sw-2,Math.max(2,segH-2),3); ctx.fill();
+      // Label: kurz wenn wenig Platz
+      if(segH>14*dpr){
+        const lbl=segH>28*dpr?seg.label:seg.short;
+        ctx.font=`bold ${Math.max(5,Math.min(7,sw*0.18))*dpr}px monospace`;
+        ctx.fillStyle=seg.color; ctx.textAlign="center";
+        ctx.fillText(lbl,sx+sw/2,sy+yOff+segH/2+(segH>22*dpr?-3:2)*dpr);
+        if(segH>24*dpr){
+          ctx.font=`${Math.max(5,Math.min(6.5,sw*0.16))*dpr}px monospace`;
+          const wStr=seg.w>=1000?`${(seg.w/1000).toFixed(1)}kW`:`${seg.w.toFixed(0)}W`;
+          ctx.fillText(wStr,sx+sw/2,sy+yOff+segH/2+9*dpr);
+        }
+      }
       yOff+=segH;
     });
-    ctx.font=`${6*dpr}px monospace`;ctx.fillStyle="#f59e0b";ctx.textAlign="center";ctx.fillText(`${total.toFixed(0)}W`,sx+sw/2,sy-5*dpr);
+
+    // Gesamt-Wert oben
+    ctx.font=`bold ${Math.max(6,Math.min(8,sw*0.2))*dpr}px monospace`;
+    ctx.fillStyle="#f59e0b"; ctx.textAlign="center";
+    const totalStr=total>=1000?`${(total/1000).toFixed(1)}kW`:`${total.toFixed(0)}W`;
+    ctx.fillText(totalStr,sx+sw/2,sy-7*dpr);
+    // "Solar"-Label ganz oben
+    ctx.font=`${Math.max(5,Math.min(6,sw*0.15))*dpr}px monospace`;
+    ctx.fillStyle="#445566"; ctx.fillText("Solar",sx+sw/2,sy-16*dpr);
   },
 
   // ── Node zeichnen ─────────────────────────────────────────────────────────
   _drawNode(ctx,node,vals,card,W,H,dpr,t){
     const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;
-    const nx=node.x*W,ny=node.y*H,nw=(node.w||nt.defaultW)*dpr,nh=(node.h||nt.defaultH)*dpr;
+    const nx=node.x*W,ny=node.y*H;
+    const _scale=Math.min(1,Math.min(W/dpr,H/dpr)/500);
+    const nw=(node.w||nt.defaultW)*dpr*_scale,nh=(node.h||nt.defaultH)*dpr*_scale;
     const sel=this._selNode===node||this._connectFrom===node.id;
     const cv=this._getNodeVal(node,vals,card);
     const hass=card?._hass;
@@ -1245,7 +1284,7 @@ _parsePeakHour(val){
     if(this._resizeNode){this._saveSystem(card);this._resizeNode=null;}
   },
 
-  _hitNode(x,y,W,H,dpr){return this._nodes.slice().reverse().find(node=>{const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;const r=(Math.min(node.w||nt.defaultW,node.h||nt.defaultH)/2+4)*dpr;return Math.hypot(x-node.x*W,y-node.y*H)<r;})||null;},
+  _hitNode(x,y,W,H,dpr){const _scale=Math.min(1,Math.min(W/dpr,H/dpr)/500);return this._nodes.slice().reverse().find(node=>{const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;const r=(Math.min(node.w||nt.defaultW,node.h||nt.defaultH)/2+4)*dpr*_scale;return Math.hypot(x-node.x*W,y-node.y*H)<r;})||null;},
   _hitWire(x,y,W,H,dpr){for(const wire of this._wires){const nA=this._nodes.find(n=>n.id===wire.from),nB=this._nodes.find(n=>n.id===wire.to);if(!nA||!nB)continue;const ax=nA.x*W,ay=nA.y*H,bx=nB.x*W,by=nB.y*H;const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy);if(len<1)continue;const tt=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(len*len)));if(Math.hypot(x-(ax+tt*dx),y-(ay+tt*dy))<10*dpr)return wire;}return null;},
 
   _getSun(){const h=new Date().getHours()+new Date().getMinutes()/60;const rise=6,set=20.5;if(h<rise||h>set)return{up:false,frac:0,alt:0};const frac=(h-rise)/(set-rise);return{up:true,frac,alt:Math.sin(frac*Math.PI)};},
