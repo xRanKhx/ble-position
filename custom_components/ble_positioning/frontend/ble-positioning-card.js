@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.5.8";
+const CARD_VERSION = "4.5.9";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -5315,14 +5315,10 @@ class BLEPositioningCard extends HTMLElement {
     // Abonniere HA state_changed Events für BLE-Positioning Entities
     this._hass.connection.subscribeEvents((event) => {
       const eid = event.data?.entity_id || "";
-      // BLE-Positioning Entities + Deko-relevante Entities (Media Player, Lights, Switches, Covers)
-      // → Damit Canvas neu gezeichnet wird, wenn TV/Speaker/Lights den Status ändern
-      const isRelevant = eid.includes("ble_position") || eid.includes("mmwave_sensor") ||
-                        eid.includes("media_player") || eid.includes("light") || 
-                        eid.includes("switch") || eid.includes("cover") ||
-                        eid.includes("climate") || eid.includes("sensor");
-      if (!isRelevant) return;
-      // Status geändert → dirty markieren + sofort poll
+      // Nur BLE-Positioning relevante Entities
+      // (Deko/Licht/Media werden bereits über den hass-Setter neu gezeichnet)
+      if (!eid.includes("ble_position") && !eid.includes("mmwave_sensor")) return;
+      // Position geändert → dirty markieren + sofort poll
       this._markDirty();
       // Sofort Daten holen (kein Warten auf nächsten Poll-Zyklus)
       this._pollPositions();
@@ -5380,7 +5376,7 @@ class BLEPositioningCard extends HTMLElement {
     let lastFrame = 0;
     this._dirty = true; // Erstes Frame immer zeichnen
     const loop = (ts) => {
-      const { fps, pollMs } = this._getLoopParams();
+      const { fps, pollMs, scale } = this._getLoopParams();
 
       // FPS-Drosselung: nur zeichnen wenn genug Zeit vergangen
       const minFrameMs = fps > 0 ? 1000 / fps : Infinity;
@@ -12481,6 +12477,7 @@ _drawDoors() {
       const picUrl = st.attributes?.entity_picture;
       const title  = st.attributes?.media_title  || "";
       const artist = st.attributes?.media_artist || "";
+      const duration = st.attributes?.media_duration || 0;
       if (!picUrl && !title) return;
 
       const size = deco.size || 1.0;
@@ -12621,7 +12618,8 @@ _drawDoors() {
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
       const by  = sp.y - wPx - size * 0.8 + floatY;
       const bw = 72;
-      const bh = picUrl ? 82 : 38;
+      const barH = duration > 0 ? 14 : 0;
+      const bh = (picUrl ? 82 : 38) + barH;
 
       ctx.save();
 
@@ -12778,7 +12776,7 @@ _drawDoors() {
         }
         // Montageschienen
         ctx.strokeStyle="#64748b"; ctx.lineWidth=1;
-        ctx.beginPath(); ctx.moveTo(-hs+ox,my=-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-hs+ox,-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
         break;
       }
       case "inverter": {
