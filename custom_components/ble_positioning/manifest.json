@@ -1,7 +1,7 @@
 {
   "domain": "ble_positioning",
   "name": "BLE Indoor Positioning",
-  "version": "4.5.10",
+  "version": "4.6.0",
   "documentation": "https://github.com/xRanKhx/ble-position",
   "issue_tracker": "https://github.com/xRanKhx/ble-position/issues",
   "requirements": [],

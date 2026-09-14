@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.5.10";
+const CARD_VERSION = "4.6.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -5402,7 +5402,14 @@ class BLEPositioningCard extends HTMLElement {
           (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
             this._hass?.states?.[d.entity]?.state==="playing");
         const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasElektroAnim) {
+        const hasWeatherAnim = this._opts?.show_weather && this._opts?.weather_animate !== false
+          && !!this._weatherState();
+        const hasCoverAnim = this._opts?.cover_motion !== false &&
+          (this._data?.windows||[]).some(w => w.cover_entity &&
+            ["opening","closing"].includes(
+              String(this._hass?.states?.[w.cover_entity]?.state||"").toLowerCase()));
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim
+            || hasElektroAnim || hasWeatherAnim || hasCoverAnim) {
           lastFrame = ts;
           this._dirty = false;
           // Canvas-Auflösung anpassen (optional)
@@ -9834,6 +9841,7 @@ draw();
     this._checkNightMode();
     // Im Räume-Modus: Reißbrett als Hintergrund ZUERST
     if (mode === "rooms") this._drawGrid();
+    this._drawWeatherLayer(rooms);
     this._drawRooms(rooms);
     if (mode !== "rooms") this._drawGrid();
     this._drawScanners(scanners);
@@ -11369,6 +11377,24 @@ draw();
             ctx.moveTo(-len/2, ly); ctx.lineTo(len/2, ly);
             ctx.stroke();
           }
+          // ── Fährt gerade? Wandernde Pfeile + pulsierende Kante ──────
+          const _mot = this._opts?.cover_motion !== false
+            ? this._coverMotion(w.cover_entity) : null;
+          if (_mot) {
+            const _acc = _mot.dir > 0 ? "#f59e0b" : "#38bdf8";
+            // Pfeile laufen quer über die Lamellen in Fahrtrichtung
+            this._drawMotionChevrons(ctx, 0, -shutterDepth, 0, 0, _mot.dir, _acc);
+            // Unterkante pulsiert mit
+            const _p = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
+            ctx.save();
+            ctx.strokeStyle = _acc;
+            ctx.globalAlpha = _p;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(-len/2, -shutterDepth); ctx.lineTo(len/2, -shutterDepth);
+            ctx.stroke();
+            ctx.restore();
+          }
           // Position label
           ctx.restore();
           ctx.font = "bold 8px 'JetBrains Mono',monospace";
@@ -12352,6 +12378,15 @@ _drawDoors() {
         ctx._entityVal = null;
         ctx._entityWatt= null;
         ctx._entitySet = null;
+        // Lautstärke-Kranz für spielende Medien (hinter dem Symbol)
+        if (this._opts?.show_volume_ring !== false && deco.entity &&
+            (deco.type === "speaker" || deco.type === "tv")) {
+          const _ms = hassStates[deco.entity];
+          if (_ms && _ms.state === "playing") {
+            this._drawVolumeRing(ctx, 0, 0, size * 0.62, "rgba(56,189,248,1)",
+              _ms.attributes?.volume_level, !!_ms.attributes?.is_volume_muted);
+          }
+        }
         if (deco.entity && this._hass) {
           const st = hassStates[deco.entity];
           if (st) {
@@ -12437,7 +12472,8 @@ _drawDoors() {
           // Zusatzinfo je Typ
           if (deco.type==="tv"||deco.type==="speaker") {
             if (st.attributes?.media_title) rows.push({ text: (st.attributes.media_title||"").substring(0,12), color:"#94a3b8" });
-            if (st.attributes?.volume_level!=null) rows.push({ text:"🔊 "+(st.attributes.volume_level*100|0)+"%", color:"#445566" });
+            if (st.attributes?.is_volume_muted) rows.push({ text:"\u{1F507} stumm", color:"#64748b" });
+            else if (st.attributes?.volume_level!=null) rows.push({ text:"\u{1F50A} "+(st.attributes.volume_level*100|0)+"%", color:"#38bdf8" });
           }
           if (deco.type==="thermostat") {
             if (st.attributes?.temperature!=null) rows.push({ text:"🎯 "+st.attributes.temperature+"°", color:"#f59e0b" });
@@ -12506,9 +12542,14 @@ _drawDoors() {
       const floatZ = wallH + 0.3 + Math.sin(t) * 0.15;
       const bPos   = project(deco.mx + size * 0.4, deco.my - size * 0.3, floatZ);
 
+      const volume = st.attributes?.volume_level;
+      const muted  = !!st.attributes?.is_volume_muted;
+      const hasVol = volume != null || muted;
       const bw  = 72;
-      const barH = duration > 0 ? 14 : 0;
-      const bh  = (picUrl ? 82 : 38) + barH;
+      // In 3D wird kein Zeitbalken gezeichnet – daher keine Höhe dafür
+      const barH = 0;
+      const volH = hasVol ? 12 : 0;
+      const bh  = (picUrl ? 82 : 38) + barH + volH;
       const bx = bPos.x - bw / 2;
       const by = bPos.y - bh;
 
@@ -12589,11 +12630,415 @@ _drawDoors() {
       ctx.font      = "10px serif";
       ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
 
+      // ── Lautstärke ────────────────────────────────────────────
+      if (hasVol) {
+        this._drawVolumeBar(ctx, bx + 5, by + bh - volH / 2 - 1, bw - 10,
+                            volume, muted, "#38bdf8");
+      }
+
+      // ── Lautstärke-Kranz am Gerät ─────────────────────────────
+      if (this._opts?.show_volume_ring !== false) {
+        this._drawVolumeRing(ctx, spTop.x, spTop.y, 7 * size,
+                             "rgba(56,189,248,1)", volume, muted);
+      }
+
       ctx.restore();
     });
   }
 
   // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Portiert aus dem HA Floorplan Editor (Hovi).
+  // Hovi rendert in SVG mit <animate>; hier alles neu für Canvas 2D,
+  // zeitgesteuert über Date.now() statt deklarativer SMIL-Animation.
+  // ══════════════════════════════════════════════════════════════════════
+
+  /* Deterministischer Pseudo-Zufall – gleicher Index liefert immer denselben
+     Wert. Ersatz für Hovis pseudoRandom(); ohne das würden Tropfen und Sterne
+     bei jedem Frame neu gewürfelt und flackern. */
+  _fpRand(i, seed) {
+    const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
+    return x - Math.floor(x);
+  }
+
+  /* HA-Wetterzustand auf internen Effekt-Schlüssel abbilden (wie Hovi) */
+  _weatherFx(cond) {
+    return {
+      sunny: "sun", "clear-night": "night", partlycloudy: "clouds",
+      cloudy: "clouds", fog: "fog", rainy: "rain", pouring: "pour",
+      "snowy-rainy": "sleet", snowy: "snow", hail: "hail",
+      lightning: "storm", "lightning-rainy": "storm",
+      windy: "wind", "windy-variant": "wind", exceptional: "clouds"
+    }[cond] || "clouds";
+  }
+
+  _weatherState() {
+    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
+    if (!eid) return null;
+    const st = this._hass?.states?.[eid];
+    if (!st) return null;
+    return { condition: st.state, temp: st.attributes?.temperature ?? null };
+  }
+
+  /* Wetter-Kulisse. Wie bei Hovi nur außerhalb der Räume sichtbar – dort per
+     SVG <mask>, hier über eine evenodd-Clip-Region: Vollfläche minus Räume. */
+  _drawWeatherLayer(rooms) {
+    if (!this._opts?.show_weather) return;
+    const w = this._weatherState();
+    if (!w) return;
+    const ctx = this._ctx;
+    const W = this._canvasCssW || 0;
+    const H = this._canvasCssH || 0;
+    if (!W || !H) return;
+
+    const fx      = this._weatherFx(w.condition);
+    const night   = w.condition === "clear-night";
+    const animate = this._opts?.weather_animate !== false;
+    const T       = Date.now() / 1000;
+
+    ctx.save();
+
+    // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);
+    (rooms || []).forEach(r => {
+      if (r.x1 == null || r.x2 == null) return;
+      const a = this._f2c(r.x1, r.y1);
+      const b = this._f2c(r.x2, r.y2);
+      ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
+               Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+    });
+    ctx.clip("evenodd");
+
+    // ── Himmel ────────────────────────────────────────────────────────
+    const sky = {
+      sun:   ["#cfe8ff", "#eaf5ff"], night: ["#2b3550", "#3d4a6b"],
+      clouds:["#dbe3ec", "#eef2f7"], fog:   ["#dfe3e8", "#f0f2f4"],
+      rain:  ["#c6d3e2", "#e3eaf2"], pour:  ["#b3c3d6", "#d6e0ec"],
+      snow:  ["#dde6f0", "#f2f6fb"], sleet: ["#d2dce8", "#eaf0f7"],
+      hail:  ["#c8d4e2", "#e6ecf4"], storm: ["#9fb0c6", "#cfd9e6"],
+      wind:  ["#d8e2ec", "#eef3f8"]
+    }[fx] || ["#dde5ee", "#eff3f8"];
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, sky[0]);
+    grad.addColorStop(1, sky[1]);
+    ctx.globalAlpha = night ? 0.55 : 0.5;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
+
+    const tint = night ? "#c7d2ea" : "#7f93ad";
+
+    // ── Sonne / Mond mit Sternen ──────────────────────────────────────
+    if (fx === "sun" || fx === "night") {
+      const cx = W - 52, cy = 52, r = 17;
+      if (night) {
+        // Mond mit weichem Schein
+        const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
+        halo.addColorStop(0, "rgba(238,242,255,0.35)");
+        halo.addColorStop(1, "rgba(238,242,255,0)");
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(cx, cy, r * 3, 0, Math.PI * 2); ctx.fill();
+        // Sichel: Vollkreis, dann versetzt ausstanzen
+        ctx.save();
+        ctx.fillStyle = "#eef2ff";
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.beginPath(); ctx.arc(cx + r * 0.42, cy - r * 0.24, r * 0.92, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // Sterne, langsam pulsierend
+        for (let s = 0; s < 18; s++) {
+          const sx = 20 + this._fpRand(s, 3) * (W - 40);
+          const sy = 16 + this._fpRand(s, 4) * (H * 0.45);
+          const per = 2 + this._fpRand(s, 5) * 3;
+          const ph  = this._fpRand(s, 6) * per;
+          const op  = animate
+            ? 0.2 + 0.7 * (0.5 + 0.5 * Math.sin(((T + ph) / per) * Math.PI * 2))
+            : 0.7;
+          ctx.globalAlpha = op;
+          ctx.fillStyle = "#fff";
+          ctx.beginPath(); ctx.arc(sx, sy, 1.2, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      } else {
+        // Sonne mit warmem Schein und langsam rotierenden Strahlen
+        const halo = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 3.4);
+        halo.addColorStop(0, "rgba(255,210,94,0.40)");
+        halo.addColorStop(1, "rgba(255,210,94,0)");
+        ctx.fillStyle = halo;
+        ctx.beginPath(); ctx.arc(cx, cy, r * 3.4, 0, Math.PI * 2); ctx.fill();
+
+        const rot = animate ? (T / 60) * Math.PI * 2 : 0;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(rot);
+        ctx.strokeStyle = "#ffc93c";
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = "round";
+        ctx.globalAlpha = 0.85;
+        for (let i = 0; i < 12; i++) {
+          const a = i * Math.PI / 6;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(a) * (r + 5), Math.sin(a) * (r + 5));
+          ctx.lineTo(Math.cos(a) * (r + 12), Math.sin(a) * (r + 12));
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "#ffd25e";
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // ── Wolken ────────────────────────────────────────────────────────
+    if (["clouds","rain","pour","snow","sleet","hail","storm","wind"].includes(fx)) {
+      const count = fx === "clouds" ? 3 : 4;
+      ctx.globalAlpha = fx === "storm" ? 0.55 : 0.4;
+      ctx.fillStyle = tint;
+      for (let c = 0; c < count; c++) {
+        const cw  = 60 + this._fpRand(c, 1) * 70;
+        const cy2 = 24 + this._fpRand(c, 2) * (H * 0.3);
+        const dur = 50 + c * 17;
+        const base = this._fpRand(c, 7) * W;
+        // Von links nach rechts driften und weich umbrechen
+        const prog = animate ? ((T + c * 13) % dur) / dur : 0.5;
+        const cx2  = base - W * 0.3 + prog * (W * 0.9 + cw);
+        const sc   = cw / 40;
+        ctx.save();
+        ctx.translate(cx2 - cw, cy2);
+        ctx.scale(sc, sc);
+        // Wolkenkontur (Hovis Pfad als Bezier-Kette)
+        ctx.beginPath();
+        ctx.moveTo(0, 18);
+        ctx.bezierCurveTo(-4.4, 18, -8, 14.4, -8, 10, );
+        ctx.bezierCurveTo(-8, 5.6, -4.4, 2, 0, 2);
+        ctx.bezierCurveTo(1.8, -4.4, 8.4, -8.4, 15, -6.6);
+        ctx.bezierCurveTo(18.6, -5.6, 21, -2.6, 21, -1);
+        ctx.bezierCurveTo(25.1, -1, 28.5, 2.4, 28.5, 6.5);
+        ctx.bezierCurveTo(28.5, 12.9, 26.4, 18, 22, 18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── Niederschlag ──────────────────────────────────────────────────
+    const drops = { rain: 46, pour: 90, snow: 44, sleet: 44, hail: 40, storm: 70 }[fx];
+    if (drops) {
+      const snowy = fx === "snow";
+      for (let d = 0; d < drops; d++) {
+        const x0  = this._fpRand(d, 8) * W;
+        const dur = snowy ? 5 + this._fpRand(d, 9) * 4
+                          : (fx === "pour" ? 0.7 : 1.1) + this._fpRand(d, 9) * 0.5;
+        const ph   = this._fpRand(d, 10) * dur;
+        const prog = animate ? ((T + ph) % dur) / dur : this._fpRand(d, 10);
+        const dx   = (snowy ? 8 : -14) * prog;
+        const dy   = (H + 20) * prog - 6;
+        // Schnee zusätzlich seitlich pendeln lassen
+        const sway = snowy && animate ? Math.sin((T + ph) * 1.4) * 4 : 0;
+        const x = x0 + dx + sway;
+        if (snowy || (fx === "sleet" && d % 2 === 0)) {
+          ctx.globalAlpha = 0.85;
+          ctx.fillStyle = "#fff";
+          ctx.beginPath(); ctx.arc(x, dy, 1.8, 0, Math.PI * 2); ctx.fill();
+        } else if (fx === "hail") {
+          ctx.globalAlpha = 0.9;
+          ctx.fillStyle = "#eaf2ff";
+          ctx.strokeStyle = "#b9c9dd"; ctx.lineWidth = 0.6;
+          ctx.beginPath(); ctx.arc(x, dy, 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        } else {
+          ctx.globalAlpha = 0.75;
+          ctx.strokeStyle = "#7fa6cc";
+          ctx.lineWidth = fx === "pour" ? 1.6 : 1.2;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(x, dy - 4); ctx.lineTo(x - 2, dy + 6);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── Nebelbänder ───────────────────────────────────────────────────
+    if (fx === "fog") {
+      for (let f = 0; f < 5; f++) {
+        const fy  = 30 + f * (H / 6);
+        const bh  = 10 + this._fpRand(f, 11) * 12;
+        const dur = 26 + f * 9;
+        const prog = animate ? ((T + f * 7) % dur) / dur : 0;
+        const bx = -W + prog * W;
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "#ffffff";
+        ctx.beginPath();
+        ctx.roundRect(bx, fy, W * 3, bh, 8);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── Windstriche ───────────────────────────────────────────────────
+    if (fx === "wind") {
+      ctx.strokeStyle = tint; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      for (let i = 0; i < 14; i++) {
+        const wy  = 20 + this._fpRand(i, 12) * H;
+        const len = 30 + this._fpRand(i, 13) * 60;
+        const dur = 2.2 + this._fpRand(i, 14) * 2;
+        const ph  = this._fpRand(i, 15) * 3;
+        const prog = animate ? ((T + ph) % dur) / dur : 0.5;
+        const x = -len + prog * (W + len * 2);
+        ctx.globalAlpha = 0.45;
+        ctx.beginPath(); ctx.moveTo(x - len, wy); ctx.lineTo(x, wy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    // ── Blitz ─────────────────────────────────────────────────────────
+    if (fx === "storm" && animate) {
+      const c = (T % 7) / 7;
+      // zwei kurze Schläge pro Zyklus
+      let flash = 0;
+      if (c > 0.20 && c < 0.26) flash = 0.75 * (1 - Math.abs(c - 0.23) / 0.03);
+      if (c > 0.34 && c < 0.38) flash = 0.50 * (1 - Math.abs(c - 0.36) / 0.02);
+      if (flash > 0) {
+        ctx.globalAlpha = flash;
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    ctx.restore();
+  }
+
+  /* Animierter Lautstärke-Kranz um ein spielendes Gerät.
+     Hovi begründet das so: HA liefert keine Audiodaten, ein echter Ausschlag
+     zum Takt ist unmöglich. Stattdessen läuft eine gleichmäßige Bewegung,
+     deren Höhe sich nach der Lautstärke richtet. Stumm = flach. */
+  _drawVolumeRing(ctx, cx, cy, r, color, volume, muted) {
+    const laut = muted ? 0 : (volume == null ? 0.6 : Math.max(0, Math.min(1, volume)));
+    const amp  = 0.18 + 0.82 * laut;
+    const maxLen = r * 0.85 * amp;
+    const innen  = r + 2.5;
+    const n = 44;
+    const T = Date.now() / 1000;
+    const animate = this._opts?.weather_animate !== false;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Weicher Schein, der mit der Lautstärke atmet
+    const breathe = animate ? 0.5 + 0.5 * Math.sin((T / 2.2) * Math.PI * 2) : 0.5;
+    const glowR = innen + maxLen * 0.7;
+    const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, glowR);
+    glow.addColorStop(0, color.replace(/[\d.]+\)$/, (0.05 + 0.12 * amp * breathe) + ")"));
+    glow.addColorStop(1, color.replace(/[\d.]+\)$/, "0)"));
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.globalAlpha = muted ? 0.35 : 0.75;
+
+    for (let i = 0; i < n; i++) {
+      // Grundlänge streut, damit der Kranz nicht wie ein Zahnrad wirkt
+      const f1 = 0.25 + this._fpRand(i, 21) * 0.75;
+      const f2 = 0.25 + this._fpRand(i, 22) * 0.75;
+      const dur = 0.7 + this._fpRand(i, 24) * 0.8;
+      const ph  = this._fpRand(i, 25) * dur;
+      // weiches Hin und Her zwischen f1 und f2
+      const k = animate
+        ? 0.5 + 0.5 * Math.sin(((T + ph) / dur) * Math.PI * 2)
+        : 0.5;
+      const f = f1 + (f2 - f1) * k;
+      const len = maxLen * f;
+      const a = (Math.PI * 2 / n) * i - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * innen, Math.sin(a) * innen);
+      ctx.lineTo(Math.cos(a) * (innen + len), Math.sin(a) * (innen + len));
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* Moderne Lautstärke-Zeile: Icon, gerundeter Balken, Prozent. */
+  _drawVolumeBar(ctx, x, y, w, volume, muted, color) {
+    const v = muted ? 0 : Math.max(0, Math.min(1, volume ?? 0));
+    const barX = x + 13, barW = w - 13 - 24;
+    ctx.save();
+    ctx.font = "8px 'JetBrains Mono',monospace";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = muted ? "#64748b" : color;
+    ctx.fillText(muted ? "\u{1F507}" : "\u{1F50A}", x, y);
+    // Spur
+    ctx.strokeStyle = "rgba(148,163,184,0.35)";
+    ctx.lineWidth = 3; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW, y); ctx.stroke();
+    // Füllung
+    if (v > 0) {
+      ctx.strokeStyle = color;
+      ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW * v, y); ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(barX + barW * v, y, 2.4, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = muted ? "#64748b" : "#94a3b8";
+    ctx.textAlign = "right";
+    ctx.fillText(muted ? "stumm" : Math.round(v * 100) + "%", x + w, y);
+    ctx.textAlign = "left";
+    ctx.restore();
+  }
+
+  /* Fährt der Rollladen gerade? HA meldet das über die States
+     'opening' und 'closing' – die wertete die Card bisher nirgends aus. */
+  _coverMotion(entity) {
+    if (!entity || !this._hass?.states) return null;
+    const st = this._hass.states[entity];
+    if (!st) return null;
+    const s = String(st.state).toLowerCase();
+    if (s === "opening") return { dir: -1, label: "auf" };
+    if (s === "closing") return { dir: 1, label: "zu" };
+    return null;
+  }
+
+  /* Laufanzeige: wandernde Pfeile entlang einer Strecke plus pulsierende
+     Kante. Richtung folgt dir (1 = schließt, -1 = öffnet). */
+  _drawMotionChevrons(ctx, x1, y1, x2, y2, dir, color) {
+    const T = Date.now() / 1000;
+    const dx = x2 - x1, dy = y2 - y1;
+    const L  = Math.hypot(dx, dy);
+    if (L < 4) return;
+    const ux = dx / L, uy = dy / L;
+    const nx = -uy, ny = ux;
+    const n = Math.max(2, Math.round(L / 14));
+    const prog = (T * 0.9) % 1;
+
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 0; i < n; i++) {
+      let t = (i / n + (dir > 0 ? prog : 1 - prog)) % 1;
+      // an den Enden aus- und einblenden
+      const fade = Math.sin(t * Math.PI);
+      if (fade <= 0.05) continue;
+      const px = x1 + ux * L * t, py = y1 + uy * L * t;
+      const s = 3.2;
+      ctx.globalAlpha = 0.25 + fade * 0.65;
+      ctx.beginPath();
+      ctx.moveTo(px - ux * s * dir - nx * s, py - uy * s * dir - ny * s);
+      ctx.lineTo(px + ux * s * dir, py + uy * s * dir);
+      ctx.lineTo(px - ux * s * dir + nx * s, py - uy * s * dir + ny * s);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
 
   _drawMusicBubbles() {
     if (!this._opts?.show_music_bubble) return;
@@ -12630,9 +13075,13 @@ _drawDoors() {
       const bx  = sp.x + size * 2.2;
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
       const by  = sp.y - wPx - size * 0.8 + floatY;
+      const volume  = st.attributes?.volume_level;
+      const muted   = !!st.attributes?.is_volume_muted;
+      const hasVol  = volume != null || muted;
       const bw = 72;
       const barH = duration > 0 ? 14 : 0;
-      const bh = (picUrl ? 82 : 38) + barH;
+      const volH = hasVol ? 12 : 0;
+      const bh = (picUrl ? 82 : 38) + barH + volH;
 
       ctx.save();
 
@@ -12733,6 +13182,12 @@ _drawDoors() {
         ctx.textAlign = 'left';  ctx.fillText(fmt(curPos),  bx+5,     barY+11);
         ctx.textAlign = 'right'; ctx.fillText(fmt(duration), bx+bw-5, barY+11);
         ctx.textAlign = 'center';
+      }
+
+      // ── Lautstärke ────────────────────────────────────────────
+      if (hasVol) {
+        this._drawVolumeBar(ctx, bx + 5, by + bh - volH / 2 - 1, bw - 10,
+                            volume, muted, "#38bdf8");
       }
 
       ctx.restore();
@@ -15423,12 +15878,19 @@ _drawDoors() {
       { key:"ws_updates",          emoji:"⚡",  label:"WebSocket Live-Updates",      desc:"Sofortige Updates statt Polling (modernste Methode)" },
       { key:"ambient_light",       emoji:"💡",  label:"Umgebungslicht-Sensor",       desc:"Helligkeit automatisch anpassen (nur Chrome/HTTPS)" },
       { key:"ambient_auto_night",  emoji:"🌙",  label:"  └ Auto Nacht-Modus",        desc:"Nacht-Modus automatisch bei Dunkelheit aktivieren" },
+      { key:"show_weather",        emoji:"🌦",  label:"Wetter-Kulisse",              desc:"Animiertes Wetter außerhalb der Räume (Sonne, Wolken, Regen, Schnee, Nebel, Blitz)" },
+      { key:"weather_animate",     emoji:"🎞",  label:"  └ Wetter animieren",        desc:"Bewegung aus, wenn nur das Standbild gewünscht ist", def:true },
+      { key:"show_volume_ring",    emoji:"🔊",  label:"Lautstärke-Kranz",            desc:"Animierter Kranz um spielende Lautsprecher, Ausschlag nach Lautstärke", def:true },
+      { key:"cover_motion",        emoji:"🪟",  label:"Rollladen-Laufanzeige",       desc:"Zeigt mit laufenden Pfeilen an, dass ein Rollladen gerade fährt", def:true },
     ];
-    energyToggles.forEach(({key, emoji, label, desc}) => {
+    energyToggles.forEach(({key, emoji, label, desc, def}) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933";
       const cb = document.createElement("input");
-      cb.type = "checkbox"; cb.checked = !!this._opts?.[key];
+      // def: Toggles, die ohne gesetzte Option aktiv sind, müssen auch
+      // angehakt erscheinen – sonst zeigt die Box "aus", während es läuft
+      cb.type = "checkbox";
+      cb.checked = this._opts?.[key] !== undefined ? !!this._opts[key] : !!def;
       cb.style.cssText = "accent-color:#f59e0b;width:13px;height:13px;flex-shrink:0";
       cb.addEventListener("change", () => {
         if (!this._opts) this._opts = {};
@@ -19137,6 +19599,21 @@ trigger:
         // Bottom rail highlight
         ctx.strokeStyle="rgba(180,180,200,0.8)"; ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
+        // ── Fährt gerade? Pfeile laufen die Bahn entlang ──────────
+        const _mot3 = this._opts?.cover_motion !== false
+          ? this._coverMotion(win.cover_entity) : null;
+        if (_mot3) {
+          const _acc3 = _mot3.dir > 0 ? "#f59e0b" : "#38bdf8";
+          const _mt = project(wmx, wmy, zTop);
+          const _mb = project(wmx, wmy, rolloZ);
+          this._drawMotionChevrons(ctx, _mt.x, _mt.y, _mb.x, _mb.y, _mot3.dir, _acc3);
+          // Laufende Kante hervorheben
+          const _p3 = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
+          ctx.save();
+          ctx.strokeStyle = _acc3; ctx.globalAlpha = _p3; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
+          ctx.restore();
+        }
       }
 
       // ── Label ──
