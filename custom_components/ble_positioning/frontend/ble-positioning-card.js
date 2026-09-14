@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.6.0";
+const CARD_VERSION = "4.7.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -897,6 +897,7 @@ class BLEPositioningCard extends HTMLElement {
     } else {
       // Update live entity values in sidebar
       this._updateSidebarLive();
+      this._updateWeatherStatus();
       if (!this._scannerHistory) this._scannerHistory = {};
     const _sh_now = Date.now();
     (this._data?.scanners||[]).forEach(s => {
@@ -12383,8 +12384,9 @@ _drawDoors() {
             (deco.type === "speaker" || deco.type === "tv")) {
           const _ms = hassStates[deco.entity];
           if (_ms && _ms.state === "playing") {
-            this._drawVolumeRing(ctx, 0, 0, size * 0.62, "rgba(56,189,248,1)",
-              _ms.attributes?.volume_level, !!_ms.attributes?.is_volume_muted);
+            this._drawSpectrumRing(ctx, 0, 0, size * 0.62,
+              _ms.attributes?.volume_level, !!_ms.attributes?.is_volume_muted,
+              { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
           }
         }
         if (deco.entity && this._hass) {
@@ -12545,11 +12547,14 @@ _drawDoors() {
       const volume = st.attributes?.volume_level;
       const muted  = !!st.attributes?.is_volume_muted;
       const hasVol = volume != null || muted;
-      const bw  = 72;
+      const vinyl    = this._opts?.media_vinyl !== false;
+      const vinylR   = 24;
+      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
+      const bw  = vinyl ? vinylBox + 16 : 72;
       // In 3D wird kein Zeitbalken gezeichnet – daher keine Höhe dafür
       const barH = 0;
       const volH = hasVol ? 12 : 0;
-      const bh  = (picUrl ? 82 : 38) + barH + volH;
+      const bh  = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH;
       const bx = bPos.x - bw / 2;
       const by = bPos.y - bh;
 
@@ -12601,7 +12606,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img) {
+        } else if (cached.img && !vinyl) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -12611,6 +12616,17 @@ _drawDoors() {
           ctx.restore();
           coverY = by + 5 + cs + 4;
         }
+      }
+      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
+      if (vinyl) {
+        const vcx = bx + bw / 2;
+        const vcy = by + 8 + vinylBox / 2;
+        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
+        if (this._opts?.show_volume_ring !== false) {
+          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
+        }
+        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
+        coverY = by + 8 + vinylBox + 2;
       }
 
       // ── Titel + Artist ────────────────────────────────────────
@@ -12638,8 +12654,8 @@ _drawDoors() {
 
       // ── Lautstärke-Kranz am Gerät ─────────────────────────────
       if (this._opts?.show_volume_ring !== false) {
-        this._drawVolumeRing(ctx, spTop.x, spTop.y, 7 * size,
-                             "rgba(56,189,248,1)", volume, muted);
+        this._drawSpectrumRing(ctx, spTop.x, spTop.y, 7 * size, volume, muted,
+                               { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
       }
 
       ctx.restore();
@@ -12914,58 +12930,6 @@ _drawDoors() {
     ctx.restore();
   }
 
-  /* Animierter Lautstärke-Kranz um ein spielendes Gerät.
-     Hovi begründet das so: HA liefert keine Audiodaten, ein echter Ausschlag
-     zum Takt ist unmöglich. Stattdessen läuft eine gleichmäßige Bewegung,
-     deren Höhe sich nach der Lautstärke richtet. Stumm = flach. */
-  _drawVolumeRing(ctx, cx, cy, r, color, volume, muted) {
-    const laut = muted ? 0 : (volume == null ? 0.6 : Math.max(0, Math.min(1, volume)));
-    const amp  = 0.18 + 0.82 * laut;
-    const maxLen = r * 0.85 * amp;
-    const innen  = r + 2.5;
-    const n = 44;
-    const T = Date.now() / 1000;
-    const animate = this._opts?.weather_animate !== false;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Weicher Schein, der mit der Lautstärke atmet
-    const breathe = animate ? 0.5 + 0.5 * Math.sin((T / 2.2) * Math.PI * 2) : 0.5;
-    const glowR = innen + maxLen * 0.7;
-    const glow = ctx.createRadialGradient(0, 0, r * 0.5, 0, 0, glowR);
-    glow.addColorStop(0, color.replace(/[\d.]+\)$/, (0.05 + 0.12 * amp * breathe) + ")"));
-    glow.addColorStop(1, color.replace(/[\d.]+\)$/, "0)"));
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(0, 0, glowR, 0, Math.PI * 2); ctx.fill();
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.lineCap = "round";
-    ctx.globalAlpha = muted ? 0.35 : 0.75;
-
-    for (let i = 0; i < n; i++) {
-      // Grundlänge streut, damit der Kranz nicht wie ein Zahnrad wirkt
-      const f1 = 0.25 + this._fpRand(i, 21) * 0.75;
-      const f2 = 0.25 + this._fpRand(i, 22) * 0.75;
-      const dur = 0.7 + this._fpRand(i, 24) * 0.8;
-      const ph  = this._fpRand(i, 25) * dur;
-      // weiches Hin und Her zwischen f1 und f2
-      const k = animate
-        ? 0.5 + 0.5 * Math.sin(((T + ph) / dur) * Math.PI * 2)
-        : 0.5;
-      const f = f1 + (f2 - f1) * k;
-      const len = maxLen * f;
-      const a = (Math.PI * 2 / n) * i - Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(a) * innen, Math.sin(a) * innen);
-      ctx.lineTo(Math.cos(a) * (innen + len), Math.sin(a) * (innen + len));
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
   /* Moderne Lautstärke-Zeile: Icon, gerundeter Balken, Prozent. */
   _drawVolumeBar(ctx, x, y, w, volume, muted, color) {
     const v = muted ? 0 : Math.max(0, Math.min(1, volume ?? 0));
@@ -13040,6 +13004,177 @@ _drawDoors() {
     ctx.restore();
   }
 
+  /* Farbverlauf des Spektrums: innen Cyan, Mitte Violett, außen Magenta.
+     t läuft von 0 (Innenkante) bis 1 (äußerstes Segment). */
+  _specColor(t, alpha) {
+    const stops = [[34,211,238], [139,92,246], [236,72,153]];
+    const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
+    const i = Math.min(stops.length - 2, Math.floor(x));
+    const f = x - i;
+    const c = [0,1,2].map(k => Math.round(stops[i][k] + (stops[i+1][k] - stops[i][k]) * f));
+    return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+  }
+
+  /* Segmentierter Spektrum-Kranz. Die Balken bestehen aus einzelnen
+     Kacheln statt durchgehender Linien – daher der Rasterlook.
+     HA liefert keine Audiodaten, der Ausschlag kann also nicht dem Takt
+     folgen; die Lautstärke steuert stattdessen, wie weit die Balken reichen. */
+  _drawSpectrumRing(ctx, cx, cy, r, volume, muted, opts = {}) {
+    const laut = muted ? 0 : (volume == null ? 0.6 : Math.max(0, Math.min(1, volume)));
+    // Deutliche Spreizung: leise bleibt flach, laut ragt weit hinaus
+    const amp  = 0.12 + 0.88 * Math.pow(laut, 0.85);
+    const bars = opts.bars || 72;
+    const segH = opts.segH || 2.6;
+    const gap  = opts.gap  || 1.6;
+    const maxLen = r * (opts.reach || 1.15) * amp;
+    const inner  = r + (opts.inset || 4);
+    const T = Date.now() / 1000;
+    const animate = this._opts?.weather_animate !== false;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Schein, der mit der Lautstärke atmet
+    const breathe = animate ? 0.5 + 0.5 * Math.sin((T / 2.2) * Math.PI * 2) : 0.5;
+    const glowR = inner + maxLen;
+    const glow = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, Math.max(glowR, r + 1));
+    glow.addColorStop(0, `rgba(139,92,246,${(0.04 + 0.14 * amp * breathe).toFixed(3)})`);
+    glow.addColorStop(1, "rgba(139,92,246,0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath(); ctx.arc(0, 0, Math.max(glowR, r + 1), 0, Math.PI * 2); ctx.fill();
+
+    // Innerer Ring aus feinen Kacheln – die helle Kante aus der Vorlage
+    const ringN = Math.round(bars * 2.2);
+    ctx.globalAlpha = muted ? 0.3 : 0.9;
+    for (let i = 0; i < ringN; i++) {
+      const a = (Math.PI * 2 / ringN) * i;
+      const x1 = Math.cos(a) * (inner - 3.2), y1 = Math.sin(a) * (inner - 3.2);
+      const x2 = Math.cos(a) * (inner - 0.8), y2 = Math.sin(a) * (inner - 0.8);
+      ctx.strokeStyle = this._specColor(0, 0.95);
+      ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+
+    // Radiale Balken aus gestapelten Segmenten
+    ctx.lineCap = "butt";
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < bars; i++) {
+      // Grundlänge streut, sonst wirkt der Kranz wie ein Zahnrad
+      const f1 = 0.22 + this._fpRand(i, 21) * 0.78;
+      const f2 = 0.22 + this._fpRand(i, 22) * 0.78;
+      const dur = 0.7 + this._fpRand(i, 24) * 0.8;
+      const ph  = this._fpRand(i, 25) * dur;
+      const k = animate ? 0.5 + 0.5 * Math.sin(((T + ph) / dur) * Math.PI * 2) : 0.5;
+      const len = maxLen * (f1 + (f2 - f1) * k);
+      if (len < segH) continue;
+      const a  = (Math.PI * 2 / bars) * i - Math.PI / 2;
+      const ux = Math.cos(a), uy = Math.sin(a);
+      const nSeg = Math.floor(len / (segH + gap));
+      for (let sIdx = 0; sIdx < nSeg; sIdx++) {
+        const d0 = inner + sIdx * (segH + gap);
+        const t  = nSeg > 1 ? sIdx / (nSeg - 1) : 0;
+        // Äußere Segmente blassen leicht aus
+        const al = (muted ? 0.3 : 1) * (0.95 - 0.25 * t);
+        ctx.strokeStyle = this._specColor(t, al);
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(ux * d0, uy * d0);
+        ctx.lineTo(ux * (d0 + segH), uy * (d0 + segH));
+        ctx.stroke();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  /* Album-Cover als rotierende Schallplatte.
+     Rillen und Glanz bleiben stehen, nur Label und Reflex drehen sich –
+     sonst wäre die Drehung auf einer symmetrischen Scheibe unsichtbar. */
+  _drawVinyl(ctx, cx, cy, R, img, spinning) {
+    const T = Date.now() / 1000;
+    const animate = this._opts?.weather_animate !== false;
+    // Eine Umdrehung pro 4 s – ruhiger als echte 33⅓ U/min
+    const ang = (spinning && animate) ? (T / 4) * Math.PI * 2 : 0;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+
+    // Scheibe
+    const disc = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.1, 0, 0, R);
+    disc.addColorStop(0, "#2a2f3a");
+    disc.addColorStop(0.6, "#12151c");
+    disc.addColorStop(1, "#05070a");
+    ctx.fillStyle = disc;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+
+    // Rillen
+    ctx.strokeStyle = "rgba(148,163,184,0.10)";
+    ctx.lineWidth = 0.5;
+    for (let gr = R * 0.46; gr < R * 0.97; gr += Math.max(1.6, R * 0.055)) {
+      ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Wandernder Lichtreflex über die Rillen
+    ctx.save();
+    ctx.rotate(ang * 0.5);
+    const sheen = ctx.createLinearGradient(-R, -R, R, R);
+    sheen.addColorStop(0,    "rgba(255,255,255,0)");
+    sheen.addColorStop(0.45, "rgba(255,255,255,0.05)");
+    sheen.addColorStop(0.5,  "rgba(255,255,255,0.13)");
+    sheen.addColorStop(0.55, "rgba(255,255,255,0.05)");
+    sheen.addColorStop(1,    "rgba(255,255,255,0)");
+    ctx.fillStyle = sheen;
+    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // Label aus dem Cover, dreht mit
+    const lr = R * 0.44;
+    ctx.save();
+    ctx.rotate(ang);
+    if (img) {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.clip();
+      ctx.drawImage(img, -lr, -lr, lr * 2, lr * 2);
+      ctx.restore();
+    } else {
+      ctx.fillStyle = "#1e293b";
+      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.fill();
+    }
+    // Kleine Marke, damit die Drehung auch bei ruhigem Cover erkennbar ist
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.beginPath(); ctx.arc(0, -lr * 0.72, 1.1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+
+    // Labelkante und Spindelloch
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = "#05070a";
+    ctx.beginPath(); ctx.arc(0, 0, Math.max(1.4, R * 0.055), 0, Math.PI * 2); ctx.fill();
+
+    ctx.restore();
+  }
+
+  /* Live-Anzeige des Wetter-Entities im Options-Reiter */
+  _updateWeatherStatus() {
+    const el = this.shadowRoot?.getElementById("weather-live");
+    if (!el) return;
+    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
+    if (!eid) { el.textContent = "keine Entity gesetzt"; el.style.color = "#445566"; return; }
+    const st = this._hass?.states?.[eid];
+    if (!st) { el.textContent = `\u26a0 ${eid} nicht gefunden`; el.style.color = "#ef4444"; return; }
+    const map = {
+      "sunny":"\u2600 sonnig","clear-night":"\u{1F319} klar","partlycloudy":"\u26c5 teils bewölkt",
+      "cloudy":"\u2601 bewölkt","fog":"\u{1F32B} Nebel","rainy":"\u{1F327} Regen",
+      "pouring":"\u26c8 Starkregen","snowy":"\u2744 Schnee","snowy-rainy":"\u{1F328} Schneeregen",
+      "hail":"\u{1F328} Hagel","lightning":"\u26a1 Gewitter","lightning-rainy":"\u26c8 Gewitter",
+      "windy":"\u{1F4A8} windig","windy-variant":"\u{1F4A8} windig","exceptional":"\u{1F321} besonders"
+    };
+    const temp = st.attributes?.temperature;
+    el.textContent = (map[st.state] || st.state) + (temp != null ? ` \u00b7 ${temp}\u00b0` : "");
+    el.style.color = "#22c55e";
+  }
+
   _drawMusicBubbles() {
     if (!this._opts?.show_music_bubble) return;
     const ctx  = this._ctx;
@@ -13078,10 +13213,14 @@ _drawDoors() {
       const volume  = st.attributes?.volume_level;
       const muted   = !!st.attributes?.is_volume_muted;
       const hasVol  = volume != null || muted;
-      const bw = 72;
+      // Schallplatte: der Kranz ragt über die Scheibe hinaus, daher breiter
+      const vinyl    = this._opts?.media_vinyl !== false;
+      const vinylR   = 26;
+      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
+      const bw   = vinyl ? vinylBox + 16 : 72;
       const barH = duration > 0 ? 14 : 0;
       const volH = hasVol ? 12 : 0;
-      const bh = (picUrl ? 82 : 38) + barH + volH;
+      const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH;
 
       ctx.save();
 
@@ -13135,7 +13274,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img) {
+        } else if (cached.img && !vinyl) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -13145,6 +13284,17 @@ _drawDoors() {
           ctx.restore();
           coverY = by + 5 + cs + 4;
         }
+      }
+      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
+      if (vinyl) {
+        const vcx = bx + bw / 2;
+        const vcy = by + 8 + vinylBox / 2;
+        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
+        if (this._opts?.show_volume_ring !== false) {
+          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
+        }
+        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
+        coverY = by + 8 + vinylBox + 2;
       }
 
       // ── Titel + Artist ────────────────────────────────────────
@@ -15882,6 +16032,7 @@ _drawDoors() {
       { key:"weather_animate",     emoji:"🎞",  label:"  └ Wetter animieren",        desc:"Bewegung aus, wenn nur das Standbild gewünscht ist", def:true },
       { key:"show_volume_ring",    emoji:"🔊",  label:"Lautstärke-Kranz",            desc:"Animierter Kranz um spielende Lautsprecher, Ausschlag nach Lautstärke", def:true },
       { key:"cover_motion",        emoji:"🪟",  label:"Rollladen-Laufanzeige",       desc:"Zeigt mit laufenden Pfeilen an, dass ein Rollladen gerade fährt", def:true },
+      { key:"media_vinyl",         emoji:"💿",  label:"Medien als Schallplatte",     desc:"Album-Cover als drehende Platte mit Spektrum-Kranz statt Kachel", def:true },
     ];
     energyToggles.forEach(({key, emoji, label, desc, def}) => {
       const row = document.createElement("div");
@@ -15916,6 +16067,34 @@ _drawDoors() {
       perfBox.appendChild(row);
     });
 
+    // ── Wetter-Entity mit Live-Status ────────────────────────────────
+    {
+      const wRow = document.createElement("div");
+      wRow.style.cssText = "padding:6px 0 2px 0";
+      const wLbl = document.createElement("div");
+      wLbl.style.cssText = "font-size:7px;color:#445566;margin-bottom:2px";
+      wLbl.textContent = "\u{1F326} Wetter-Entity (z.B. weather.home)";
+      const wInp = document.createElement("input");
+      wInp.type = "text";
+      wInp.placeholder = "weather.home";
+      // Fällt auf das alte Screensaver-Feld zurück, damit nichts doppelt gepflegt wird
+      wInp.value = this._opts?.weather_entity || this._opts?.ss_weather_entity || "";
+      wInp.style.cssText = "width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+      const wLive = document.createElement("div");
+      wLive.id = "weather-live";
+      wLive.style.cssText = "font-size:7px;color:#445566;margin-top:3px;font-family:'JetBrains Mono',monospace";
+      wInp.addEventListener("input", () => {
+        if (!this._opts) this._opts = {};
+        this._opts.weather_entity = wInp.value.trim();
+        this._saveOptions();
+        this._updateWeatherStatus();
+        this._markDirty();
+      });
+      wRow.append(wLbl, wInp, wLive);
+      perfBox.appendChild(wRow);
+      // Direkt beim Öffnen befüllen, nicht erst beim nächsten hass-Update
+      setTimeout(() => this._updateWeatherStatus(), 0);
+    }
     const perfHint = document.createElement("div");
     perfHint.style.cssText = "font-size:7.5px;color:#445566;margin-top:5px;line-height:1.6";
     perfHint.innerHTML =
