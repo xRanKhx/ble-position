@@ -728,10 +728,8 @@ class BLEUpdateDekoView(_Base):
         if not self._check(entry_id): return self.json_message("Not found", 404)
         try: d = await request.json()
         except Exception: return self.json_message("Invalid body", 400)
-        self._c.decos = d.get("decos", [])
-        await self._c.async_save_floor_store()
+        await self._c.async_update_decos(d.get("decos", []))
         return self.json({"status": "ok"})
-
 
 class BLEUpdateEnergyView(_Base):
     url  = "/api/ble_positioning/{entry_id}/energy"

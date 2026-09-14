@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.5.9";
+const CARD_VERSION = "4.5.10";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -5277,6 +5277,19 @@ class BLEPositioningCard extends HTMLElement {
     // Sync pendingDecos → data.decos → opts
     if (this._data) this._data.decos = this._pendingDecos ? [...this._pendingDecos] : [];
     this._saveOptions();
+  }
+
+  _errText(e) {
+    if (!e) return "Unbekannter Fehler";
+    if (typeof e === "string") return e;
+    const b = e.body;
+    if (typeof b === "string" && b) return b;
+    if (b && typeof b === "object" && b.message) return b.message;
+    if (e.message) return e.message;
+    if (e.error) return String(e.error);
+    const code = e.status_code || e.status;
+    if (code) return `HTTP ${code}`;
+    try { return JSON.stringify(e); } catch { return String(e); }
   }
 
   _showToast(msg) {
@@ -11996,7 +12009,7 @@ _drawDoors() {
         { energy_lines: this._pendingEnergyLines, batteries: this._pendingBatteries });
       await this._loadData();
       this._showToast("✓ Energie gespeichert");
-    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
+    } catch(e) { this._showToast("✗ " + this._errText(e)); }
     this._rebuildSidebar();
   }
 
@@ -12292,7 +12305,7 @@ _drawDoors() {
         { decos: this._pendingDecos });
       if (this._data) this._data.decos = structuredClone(this._pendingDecos);
       this._showToast("✓ Deko gespeichert");
-    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
+    } catch(e) { this._showToast("✗ " + this._errText(e)); }
     this._rebuildSidebar();
   }
 
@@ -19747,7 +19760,7 @@ trigger:
       await this._loadData();
       this._showToast("✓ Info-Sensoren gespeichert");
     } catch(e) {
-      this._showToast("✗ " + (e?.body?.message || e?.message || e));
+      this._showToast("✗ " + this._errText(e));
     }
     this._rebuildSidebar();
   }
