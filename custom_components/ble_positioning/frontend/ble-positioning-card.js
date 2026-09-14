@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.7.0";
+const CARD_VERSION = "4.7.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -12704,9 +12704,14 @@ _drawDoors() {
     const w = this._weatherState();
     if (!w) return;
     const ctx = this._ctx;
-    const W = this._canvasCssW || 0;
-    const H = this._canvasCssH || 0;
+    // _f2c() und _floorScale() rechnen in PHYSISCHEN Canvas-Pixeln, der
+    // Kontext wird in 2D bewusst nicht mit dpr skaliert (siehe _draw).
+    // Mit CSS-Pixeln läge die Kulisse sonst nur im linken oberen Viertel.
+    const W = this._canvas?.width  || 0;
+    const H = this._canvas?.height || 0;
     if (!W || !H) return;
+    // Deko-Größen mitskalieren, sonst wirkt auf Retina alles winzig
+    const k = this._canvasCssW ? (W / this._canvasCssW) : 1;
 
     const fx      = this._weatherFx(w.condition);
     const night   = w.condition === "clear-night";
@@ -12749,7 +12754,7 @@ _drawDoors() {
 
     // ── Sonne / Mond mit Sternen ──────────────────────────────────────
     if (fx === "sun" || fx === "night") {
-      const cx = W - 52, cy = 52, r = 17;
+      const cx = W - 52 * k, cy = 52 * k, r = 17 * k;
       if (night) {
         // Mond mit weichem Schein
         const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
@@ -12775,7 +12780,7 @@ _drawDoors() {
             : 0.7;
           ctx.globalAlpha = op;
           ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(sx, sy, 1.2, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(sx, sy, 1.2 * k, 0, Math.PI * 2); ctx.fill();
         }
         ctx.globalAlpha = 1;
       } else {
@@ -12791,14 +12796,14 @@ _drawDoors() {
         ctx.translate(cx, cy);
         ctx.rotate(rot);
         ctx.strokeStyle = "#ffc93c";
-        ctx.lineWidth = 2.4;
+        ctx.lineWidth = 2.4 * k;
         ctx.lineCap = "round";
         ctx.globalAlpha = 0.85;
         for (let i = 0; i < 12; i++) {
           const a = i * Math.PI / 6;
           ctx.beginPath();
-          ctx.moveTo(Math.cos(a) * (r + 5), Math.sin(a) * (r + 5));
-          ctx.lineTo(Math.cos(a) * (r + 12), Math.sin(a) * (r + 12));
+          ctx.moveTo(Math.cos(a) * (r + 5 * k), Math.sin(a) * (r + 5 * k));
+          ctx.lineTo(Math.cos(a) * (r + 12 * k), Math.sin(a) * (r + 12 * k));
           ctx.stroke();
         }
         ctx.restore();
@@ -12815,8 +12820,8 @@ _drawDoors() {
       ctx.globalAlpha = fx === "storm" ? 0.55 : 0.4;
       ctx.fillStyle = tint;
       for (let c = 0; c < count; c++) {
-        const cw  = 60 + this._fpRand(c, 1) * 70;
-        const cy2 = 24 + this._fpRand(c, 2) * (H * 0.3);
+        const cw  = (60 + this._fpRand(c, 1) * 70) * k;
+        const cy2 = 24 * k + this._fpRand(c, 2) * (H * 0.3);
         const dur = 50 + c * 17;
         const base = this._fpRand(c, 7) * W;
         // Von links nach rechts driften und weich umbrechen
@@ -12860,19 +12865,19 @@ _drawDoors() {
         if (snowy || (fx === "sleet" && d % 2 === 0)) {
           ctx.globalAlpha = 0.85;
           ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(x, dy, 1.8, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(x, dy, 1.8 * k, 0, Math.PI * 2); ctx.fill();
         } else if (fx === "hail") {
           ctx.globalAlpha = 0.9;
           ctx.fillStyle = "#eaf2ff";
-          ctx.strokeStyle = "#b9c9dd"; ctx.lineWidth = 0.6;
-          ctx.beginPath(); ctx.arc(x, dy, 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = "#b9c9dd"; ctx.lineWidth = 0.6 * k;
+          ctx.beginPath(); ctx.arc(x, dy, 2 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         } else {
           ctx.globalAlpha = 0.75;
           ctx.strokeStyle = "#7fa6cc";
-          ctx.lineWidth = fx === "pour" ? 1.6 : 1.2;
+          ctx.lineWidth = (fx === "pour" ? 1.6 : 1.2) * k;
           ctx.lineCap = "round";
           ctx.beginPath();
-          ctx.moveTo(x, dy - 4); ctx.lineTo(x - 2, dy + 6);
+          ctx.moveTo(x, dy - 4 * k); ctx.lineTo(x - 2 * k, dy + 6 * k);
           ctx.stroke();
         }
       }
@@ -12883,14 +12888,14 @@ _drawDoors() {
     if (fx === "fog") {
       for (let f = 0; f < 5; f++) {
         const fy  = 30 + f * (H / 6);
-        const bh  = 10 + this._fpRand(f, 11) * 12;
+        const bh  = (10 + this._fpRand(f, 11) * 12) * k;
         const dur = 26 + f * 9;
         const prog = animate ? ((T + f * 7) % dur) / dur : 0;
         const bx = -W + prog * W;
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
-        ctx.roundRect(bx, fy, W * 3, bh, 8);
+        ctx.roundRect(bx, fy, W * 3, bh, 8 * k);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -12898,10 +12903,10 @@ _drawDoors() {
 
     // ── Windstriche ───────────────────────────────────────────────────
     if (fx === "wind") {
-      ctx.strokeStyle = tint; ctx.lineWidth = 1.6; ctx.lineCap = "round";
+      ctx.strokeStyle = tint; ctx.lineWidth = 1.6 * k; ctx.lineCap = "round";
       for (let i = 0; i < 14; i++) {
-        const wy  = 20 + this._fpRand(i, 12) * H;
-        const len = 30 + this._fpRand(i, 13) * 60;
+        const wy  = 20 * k + this._fpRand(i, 12) * H;
+        const len = (30 + this._fpRand(i, 13) * 60) * k;
         const dur = 2.2 + this._fpRand(i, 14) * 2;
         const ph  = this._fpRand(i, 15) * 3;
         const prog = animate ? ((T + ph) % dur) / dur : 0.5;
