@@ -1,6 +1,6 @@
 # BLE Positioning — WebGL-Renderer: Übergabestand
 
-Stand: 5.3.1 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
+Stand: 5.3.2 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
 
 Dieses Dokument beschreibt den zweiten Renderer (Three.js) so, dass man
 ohne die vorherige Sitzung weiterarbeiten kann. Es ersetzt kein Lesen des
@@ -238,6 +238,21 @@ und wie sich das mit dem Verschieben der Musik-Bubble verträgt.
 
 5. **`ctx.filter` fehlt in älteren iOS-WebViews.** Für Weichzeichner
    `shadowBlur` nehmen.
+
+6. **Modul-Import scheitert an einer einzigen fehlenden Datei.** In 5.3.0
+   wurde `three-furniture.js` nicht ausgeliefert (404). Weil
+   `three-scene.js` sie importiert, schlug der ganze Import fehl — und der
+   Rückfall auf Canvas sah fast normal aus, also fiel es nicht auf.
+   Seither kopiert `_copy_js_files` alle `three-*.js` per glob, und ein
+   fehlgeschlagener WebGL-Start zeigt einen Toast.
+
+7. **`preserveDrawingBuffer: true` ist Pflicht.** Ohne das Flag verwirft der
+   Browser den Zeichenpuffer nach dem Compositing. Die Szene steht meist
+   still und wird nur bei Änderungen neu gezeichnet — das Bild ist danach
+   schwarz, obwohl `readPixels` direkt nach `render()` korrekte Farben
+   liefert. Genau dieses Symptom (WebGL-Puffer korrekt, Bildschirm schwarz)
+   kostete beim ersten Test Zeit. Die Alternative wäre ein dauernder
+   RAF-Loop, der auf dem Handy ohne Not Akku verbrennt.
 
 ---
 

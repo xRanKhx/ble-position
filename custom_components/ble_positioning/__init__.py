@@ -246,7 +246,6 @@ def _copy_js_files(hass: HomeAssistant) -> None:
     for src_path, filename in [
         (_CARD_JS,    "ble-positioning-card.js"),
         (_TRACKER_JS, "ble-positioning-tracker.js"),
-        (_FRONTEND_DIR / "three-scene.js", "three-scene.js"),
     ]:
         dst = os.path.join(www_dir, filename)
         try:
@@ -254,6 +253,17 @@ def _copy_js_files(hass: HomeAssistant) -> None:
             _LOGGER.info("BLE Positioning: %s kopiert", filename)
         except Exception as exc:
             _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", filename, exc)
+
+    # Alle three-*.js per Muster, nicht einzeln aufgezaehlt: three-scene.js
+    # importiert three-furniture.js, und eine vergessene Datei laesst den
+    # gesamten Modul-Import fehlschlagen (404) – ohne sichtbaren Fehler,
+    # weil dann stillschweigend der Canvas-Renderer uebernimmt.
+    for tf in sorted(_FRONTEND_DIR.glob("three-*.js")):
+        try:
+            shutil.copy2(str(tf), os.path.join(www_dir, tf.name))
+            _LOGGER.info("BLE Positioning: %s kopiert", tf.name)
+        except Exception as exc:
+            _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", tf.name, exc)
 
     # vendor/ (Three.js) – bewusst mitgeliefert statt per CDN: eine
     # HA-Instanz laeuft haeufig ohne Internetzugang.

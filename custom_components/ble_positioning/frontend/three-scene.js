@@ -163,6 +163,12 @@ export class ThreeScene {
     try {
       this.renderer = new THREE.WebGLRenderer({
         canvas, antialias: true, alpha: false, powerPreference: "default",
+        // Ohne dieses Flag verwirft der Browser den Zeichenpuffer nach dem
+        // Compositing. Die Szene steht meist still und wird nur bei
+        // Aenderungen neu gezeichnet – das Bild waere danach schwarz.
+        // Die Alternative waere ein dauernder RAF-Loop, der auf dem Handy
+        // ohne Not Akku verbrennt.
+        preserveDrawingBuffer: true,
       });
     } catch (e) {
       // Kein WebGL – der Aufrufer faellt auf den Canvas-Renderer zurueck

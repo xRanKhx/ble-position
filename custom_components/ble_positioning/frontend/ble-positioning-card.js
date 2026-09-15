@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.3.1";
+const CARD_VERSION = "5.3.2";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19751,7 +19751,12 @@ trigger:
       return sc;
     } catch (err) {
       this._glFailed = true;
+      // Sichtbar machen: der Rueckfall auf Canvas sieht fast normal aus,
+      // ein stiller Fehlschlag wird sonst als "WebGL sieht halt so aus"
+      // missverstanden. Genau das ist mit einer fehlenden Moebel-Datei
+      // passiert – 404 beim Modul-Import, kein Hinweis in der Oberflaeche.
       console.warn("BLE Positioning: WebGL nicht nutzbar, nutze Canvas-Renderer", err);
+      this._showToast("WebGL konnte nicht starten \u2013 Standard-3D aktiv");
       return null;
     } finally {
       this._glLoading = false;
