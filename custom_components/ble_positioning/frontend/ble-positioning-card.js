@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.8.0";
+const CARD_VERSION = "4.8.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -4429,6 +4429,7 @@ class BLEPositioningCard extends HTMLElement {
           timer: setTimeout(() => {
             if (!this._musicPress) return;
             this._musicDrag = { ...this._musicPress };
+            this._musicDidDrag = true;
             this._canvas.style.cursor = "grabbing";
             this._markDirty();
           }, 420),
@@ -4654,14 +4655,18 @@ class BLEPositioningCard extends HTMLElement {
       this._markDirty();
       return;
     }
-    // Vor dem Halten: kleine Bewegungen brechen den Long-Press ab,
-    // damit ein Wischen nicht versehentlich verschiebt.
+    // Solange gedrückt: eine deutliche Bewegung startet das Ziehen sofort.
+    // Vorher brach sie es ab – bei dpr 2 reichten 3 CSS-Pixel Wackeln.
     if (this._musicPress) {
       const { cx: mx, cy: my } = this._canvasXY(e);
-      if (Math.abs(mx - this._musicPress.sx) > 6 ||
-          Math.abs(my - this._musicPress.sy) > 6) {
+      const dpr = window.devicePixelRatio || 1;
+      if (Math.hypot(mx - this._musicPress.sx, my - this._musicPress.sy) > 5 * dpr) {
         clearTimeout(this._musicPress.timer);
+        this._musicDrag = { ...this._musicPress };
         this._musicPress = null;
+        this._musicDidDrag = true;
+        this._canvas.style.cursor = "grabbing";
+        this._markDirty();
       }
     }
 
@@ -13438,8 +13443,9 @@ _drawDoors() {
     // Eigenes Gate: die Drehung hing vorher an weather_animate und stand
     // still, sobald die Wetter-Animation aus war.
     const animate = this._opts?.media_spin !== false;
-    // Eine Umdrehung pro 4 s – ruhiger als echte 33⅓ U/min
-    const ang = (spinning && animate) ? (T / 4) * Math.PI * 2 : 0;
+    // Eine Umdrehung pro 2,5 s – schnell genug, dass die Drehung bei
+    // einem kleinen Label auch wirklich auffällt
+    const ang = (spinning && animate) ? (T / 2.5) * Math.PI * 2 : 0;
 
     ctx.save();
     ctx.translate(cx, cy);
@@ -13484,12 +13490,21 @@ _drawDoors() {
       ctx.drawImage(img, -lr, -lr, lr * 2, lr * 2);
       ctx.restore();
     } else {
+      // Ohne Cover ein zweifarbiges Label, sonst wäre die Drehung
+      // auf einer einfarbigen Fläche unsichtbar.
       ctx.fillStyle = "#1e293b";
       ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#334155";
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, lr, -Math.PI / 2, 0);
+      ctx.closePath(); ctx.fill();
     }
-    // Kleine Marke, damit die Drehung auch bei ruhigem Cover erkennbar ist
-    ctx.fillStyle = "rgba(255,255,255,0.35)";
-    ctx.beginPath(); ctx.arc(0, -lr * 0.72, 1.1, 0, Math.PI * 2); ctx.fill();
+    // Marke am Labelrand, damit die Drehung immer ablesbar bleibt
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.beginPath();
+    ctx.arc(0, -lr * 0.78, Math.max(1.4, R * 0.075), 0, Math.PI * 2);
+    ctx.fill();
     ctx.restore();
 
     // Labelkante und Spindelloch
@@ -13569,10 +13584,11 @@ _drawDoors() {
       const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
       const bw   = vinyl ? vinylBox + 16 : 72;
       const barH = duration > 0 ? 14 : 0;
-      const volH = hasVol ? 12 : 0;
       // Steuerleiste erscheint nur für die angetippte Bubble
       const ctlOpen = this._musicCtlOpen === deco.entity;
       const ctlH    = ctlOpen ? 26 : 0;
+      // Die Lautstärke klappt mit der Leiste zusammen auf und zu
+      const volH    = (hasVol && ctlOpen) ? 12 : 0;
       const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
 
       ctx.save();
@@ -13690,7 +13706,7 @@ _drawDoors() {
       }
 
       // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol) {
+      if (hasVol && ctlOpen) {
         this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
                             volume, muted, "#38bdf8");
       }
