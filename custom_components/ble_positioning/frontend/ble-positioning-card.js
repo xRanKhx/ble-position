@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.8.2";
+const CARD_VERSION = "5.0.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -4418,8 +4418,11 @@ class BLEPositioningCard extends HTMLElement {
     // Bei Treffer wird abgebrochen, damit sich die Szene nicht mitdreht.
     const _m3d = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
     this._musicDidDrag = false;
+    // Touch liefert kein button-Feld (_touchToMouse setzt es nicht),
+    // ein Vergleich auf 0 schlägt in der Companion App immer fehl.
+    const _primary = e.button === 0 || e.button == null;
     if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
-        && e.button === 0) {
+        && _primary) {
       const { cx: dcx, cy: dcy } = this._canvasXY(e);
       const z = this._musicClickZonesFrame.find(q =>
         dcx >= q.x && dcx <= q.x + q.w && dcy >= q.y && dcy <= q.y + q.h);
@@ -16663,6 +16666,7 @@ _drawDoors() {
         { id:"comic",     label:"Comic",           icon:"(!)", desc:"Cel-Shading + Outlines" },
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
+        { id:"studio",     label:"Studio",           icon:"🏛", desc:"Wandvolumen, Sockelplatte, Architektur-Look" },
         { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
@@ -19416,6 +19420,43 @@ trigger:
         glassShimmer: true,
       },
 
+      // ── Studio: opake Materialien, Wandvolumen, Bodenplatte ─────────────
+      // Orientiert am Look klassischer Architektur-Renderings: helles
+      // Umfeld, warmes Licht von oben links, kein Durchscheinen.
+      studio: {
+        id: "studio", label: "Studio", icon: "🏛",
+        bg: "#e9ecef",
+        grid: { color: "rgba(90,105,125,0.07)", width: 0.5, step: 1 },
+        floor: () => "rgba(196,164,120,0.95)",
+        wall:  (rr,gg,bb,wa,brightness,isOuter) => {
+          // Außen fast weiß wie verputzte Fassade, innen leicht getönt
+          const base = isOuter ? 246 : 232;
+          const v = Math.round(base * (0.72 + 0.28 * brightness));
+          const r = Math.min(255, v + (isOuter ? 0 : Math.round((rr - 128) * 0.14)));
+          const g = Math.min(255, v + (isOuter ? 0 : Math.round((gg - 128) * 0.14)));
+          const b = Math.min(255, Math.round(v * 0.985)
+                             + (isOuter ? 0 : Math.round((bb - 128) * 0.14)));
+          return `rgba(${r},${g},${b},1)`;
+        },
+        ceiling:() => "rgba(0,0,0,0)",          // offenes Puppenhaus, keine Decke
+        edge:  () => "rgba(120,130,145,0.30)",
+        topEdge:() => "rgba(255,255,255,0.85)",
+        label: () => "rgba(70,80,95,0.85)",
+        door:  { frame:"#b08154", panel:"#8d6238", open:"#3fa96a", closed:"#8b7cc8" },
+        window:{ frame:"#cfd8e3", glass:"rgba(220,235,250,0.55)", open:"#e06c6c", closed:"#3fa96a", tilted:"#e0a13f" },
+        shutter:{ fill:"rgba(180,186,196,0.9)", slat:"rgba(140,148,160,0.5)", box:"rgba(160,166,178,0.95)" },
+        person:{ auraColor:"240,150,60", bodyColor:"#e88a34", headColor:"#f3b27a", labelBg:"rgba(60,70,85,0.85)" },
+        ble:   { color:"#2b9ec4", glow:"rgba(43,158,196,0.22)" },
+        decoTint: null,
+        aoCorners: true,
+        wallShading: "directional",
+        // Neu in 5.0: Wandstärke in Metern und Sockelplatte
+        wallDepth: 0.14,
+        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.9,
+                     shadow:"rgba(60,72,92,0.22)" },
+        lightWarm: true,
+      },
+
       // ── Neon-Grid ────────────────────────────────────────────────────────
       neon: {
         id: "neon", label: "Neon-Grid", icon: "⚡",
@@ -19706,6 +19747,37 @@ trigger:
       ctx.restore();
     }
 
+    // ── Sockelplatte (Studio-Theme) ────────────────────────────────────────
+    // Das Gebäude steht auf einer hellen Platte und wirft einen Schatten
+    // darauf, statt über einem Raster zu schweben.
+    if (TH.basePlate) {
+      const m  = TH.basePlate.margin ?? 0.8;
+      const bp = [project(-m,-m,0), project(fw+m,-m,0),
+                  project(fw+m,fh+m,0), project(-m,fh+m,0)];
+      // Schlagschatten nach rechts unten, Licht kommt von oben links.
+      // shadowBlur statt ctx.filter: letzteres fehlt in älteren
+      // iOS-WebViews, also auch in der Companion App.
+      const sOff = Math.max(3, unitPx * 0.13);
+      ctx.save();
+      ctx.shadowColor   = TH.basePlate.shadow;
+      ctx.shadowBlur    = Math.max(6, unitPx * 0.3);
+      ctx.shadowOffsetX = sOff;
+      ctx.shadowOffsetY = sOff * 0.6;
+      ctx.fillStyle = TH.basePlate.fill;
+      ctx.beginPath();
+      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+
+      ctx.fillStyle = TH.basePlate.fill;
+      ctx.beginPath();
+      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = TH.basePlate.edge;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
     // Floor grid
     const gridStep = TH.grid.step || 1;
     ctx.strokeStyle = TH.grid.color;
@@ -19879,6 +19951,32 @@ trigger:
           const brightness = 0.5 + 0.3 * dot;
           const [wr,wg,wb] = [Math.round(rr*brightness), Math.round(gg*brightness), Math.round(bb*brightness)];
           const wallPts = [f[w.bi[0]], f[w.bi[1]], t[w.ti[1]], t[w.ti[0]]];
+
+          // ── Wandvolumen: Krone und Außenseite (Studio-Theme) ──────────
+          // Ohne Dicke wirken Wände wie Pappe. Die Oberseite ist der
+          // Effekt, der ein Rendering wie ein gebautes Modell aussehen
+          // lässt. Nur an Außenwänden, innen stoßen die Räume aneinander.
+          const wd = TH.wallDepth || 0;
+          if (wd > 0 && isOuterWall) {
+            const c0 = corners[w.bi[0]], c1 = corners[w.bi[1]];
+            const ox = w.nx * wd, oy = w.ny * wd;
+            const to0 = project(c0[0] + ox, c0[1] + oy, h);
+            const to1 = project(c1[0] + ox, c1[1] + oy, h);
+            const bo0 = project(c0[0] + ox, c0[1] + oy, 0);
+            const bo1 = project(c1[0] + ox, c1[1] + oy, 0);
+            // Außenfläche
+            ctx.fillStyle = TH.wall(rr,gg,bb,1,Math.min(1,brightness+0.12),true);
+            ctx.beginPath();
+            [bo0, bo1, to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+            ctx.closePath(); ctx.fill();
+            // Krone, am hellsten weil sie zum Licht zeigt
+            ctx.fillStyle = TH.wall(rr,gg,bb,1,1.0,true);
+            ctx.beginPath();
+            [t[w.ti[0]], t[w.ti[1]], to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = TH.edge(rr,gg,bb); ctx.lineWidth = 0.7;
+            ctx.stroke();
+          }
 
           // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
           const wallMidX = ((w.nx === 0)
