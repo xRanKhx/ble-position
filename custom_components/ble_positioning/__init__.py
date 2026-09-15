@@ -246,6 +246,7 @@ def _copy_js_files(hass: HomeAssistant) -> None:
     for src_path, filename in [
         (_CARD_JS,    "ble-positioning-card.js"),
         (_TRACKER_JS, "ble-positioning-tracker.js"),
+        (_FRONTEND_DIR / "three-scene.js", "three-scene.js"),
     ]:
         dst = os.path.join(www_dir, filename)
         try:
@@ -253,6 +254,19 @@ def _copy_js_files(hass: HomeAssistant) -> None:
             _LOGGER.info("BLE Positioning: %s kopiert", filename)
         except Exception as exc:
             _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", filename, exc)
+
+    # vendor/ (Three.js) – bewusst mitgeliefert statt per CDN: eine
+    # HA-Instanz laeuft haeufig ohne Internetzugang.
+    vendor_src = _FRONTEND_DIR / "vendor"
+    vendor_dst = os.path.join(www_dir, "vendor")
+    if vendor_src.is_dir():
+        os.makedirs(vendor_dst, exist_ok=True)
+        for vf in vendor_src.glob("*.js"):
+            try:
+                shutil.copy2(str(vf), os.path.join(vendor_dst, vf.name))
+                _LOGGER.info("BLE Positioning: vendor/%s kopiert", vf.name)
+            except Exception as exc:
+                _LOGGER.warning("BLE Positioning: Konnte vendor/%s nicht kopieren: %s", vf.name, exc)
 
     # Module-Unterordner automatisch anlegen und befüllen
     modules_src = _FRONTEND_DIR / "modules"

@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.0.2";
+const CARD_VERSION = "5.3.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1204,6 +1204,7 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
+      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
@@ -3814,6 +3815,8 @@ class BLEPositioningCard extends HTMLElement {
     // die Canvas wieder auf voller Aufloesung, der Cache wuerde sonst eine
     // Skalierung melden, die gar nicht mehr anliegt.
     this._currentCanvasScale = 1;
+    // Der WebGL-Renderer hat ein eigenes Canvas und braucht die Groesse selbst
+    if (this._gl && this._gl.ok) { try { this._gl.resize(); } catch (e) {} }
   }
 
   _attachCanvasEvents() {
@@ -9627,6 +9630,10 @@ draw();
 
   disconnectedCallback() {
     if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
+    // GPU-Speicher freigeben: Geometrien, Texturen und der WebGL-Kontext
+    // selbst werden sonst erst vom Garbage Collector eingesammelt, und die
+    // Zahl gleichzeitiger Kontexte im Browser ist begrenzt.
+    if (this._gl) { try { this._gl.dispose(); } catch (e) {} this._gl = null; this._glDataKey = null; }
     if (this._dekoAnimFrame) { 
       if (typeof this._dekoAnimFrame === 'number') cancelAnimationFrame(this._dekoAnimFrame);
       else clearTimeout(this._dekoAnimFrame);
@@ -9882,6 +9889,16 @@ draw();
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
+      // ── WebGL-Renderer, falls das Theme ihn verlangt ──────────────────
+      // Schlaegt er fehl, laeuft der Canvas-Pfad unveraendert weiter.
+      if (this._webglWanted() && !this._glFailed) {
+        if (!this._gl) { this._ensureWebGL().then(() => this._markDirty()); }
+        this._syncGlVisibility();
+        if (this._gl && this._drawWebGL()) return;
+      } else if (this._gl || this._glFailed) {
+        this._syncGlVisibility();
+      }
+
       const _3dLights = this._mode === "lights"
         ? (this._pendingLights || []).map(l => ({...l, on: true, brightness: 200, rgb: null}))
         : (this._data?.lights || []);
@@ -16671,6 +16688,7 @@ _drawDoors() {
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
         { id:"studio",     label:"Studio",           icon:"🏛", desc:"Wandvolumen, Sockelplatte, Architektur-Look" },
+        { id:"webgl",      label:"Studio WebGL",     icon:"✨", desc:"Echte 3D-Beschleunigung mit Schatten und Texturen (neuere Geräte)" },
         { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
@@ -16695,6 +16713,62 @@ _drawDoors() {
       };
       renderThemeBtns();
       themeSection.appendChild(themeGrid);
+
+      // ── Umgebungsmap (nur fuer den WebGL-Renderer sinnvoll) ────────────
+      // Reflexionen brauchen etwas zum Spiegeln. Ohne Umgebung wirkt Glas
+      // flach und Metall wie grauer Kunststoff.
+      const envBox = document.createElement("div");
+      envBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
+      const envHead = document.createElement("div");
+      envHead.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\u2728 Spiegelungen (WebGL)</span>' +
+        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Umgebung, die sich in Glas und Metall spiegelt</div>';
+      envBox.appendChild(envHead);
+
+      const envSel = document.createElement("select");
+      envSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
+      const envOpts = [
+        ["studio",  "Studio (hell) \u2013 Standard"],
+        ["warm",    "Abendlicht"],
+        ["neutral", "Neutral grau"],
+        ["outdoor", "Freier Himmel"],
+        ["off",     "Aus (matt)"],
+      ];
+      for (const [v, lbl] of envOpts) {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = lbl;
+        if ((this._opts?.env_preset || "studio") === v) o.selected = true;
+        envSel.appendChild(o);
+      }
+      envSel.addEventListener("change", async () => {
+        if (!this._opts) this._opts = {};
+        this._opts.env_preset = envSel.value;
+        this._draw();
+        await this._saveOptions();
+        this._showToast("Spiegelungen: " + envSel.options[envSel.selectedIndex].textContent);
+      });
+      envBox.appendChild(envSel);
+
+      const envUrl = document.createElement("input");
+      envUrl.type = "text";
+      envUrl.placeholder = "Eigenes Panoramabild, z. B. /local/env.jpg (optional)";
+      envUrl.value = this._opts?.env_url || "";
+      envUrl.style.cssText = "width:100%;margin-top:4px;padding:4px;font-size:7.5px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;box-sizing:border-box";
+      envUrl.addEventListener("change", async () => {
+        if (!this._opts) this._opts = {};
+        this._opts.env_url = envUrl.value.trim();
+        this._draw();
+        await this._saveOptions();
+        this._showToast(envUrl.value.trim()
+          ? "Eigenes Umgebungsbild gesetzt"
+          : "Zurueck auf Standard-Umgebung");
+      });
+      envBox.appendChild(envUrl);
+      const envHint = document.createElement("div");
+      envHint.style.cssText = "font-size:6px;color:#445566;margin-top:3px";
+      envHint.textContent = "Bild muss equirectangular sein (2:1). Laedt es nicht, bleibt das Preset aktiv.";
+      envBox.appendChild(envHint);
+      themeSection.appendChild(envBox);
+
       wrap.appendChild(themeSection);
     }
 
@@ -19352,7 +19426,10 @@ trigger:
   // 3D THEMES – jedes Theme definiert alle visuellen Parameter
   // ══════════════════════════════════════════════════════════════════════════
   _get3DTheme(forceId) {
-    const id = forceId || this._3dTheme || "default";
+    // "webgl" hat kein eigenes 2D-Aussehen: faellt der WebGL-Renderer aus,
+    // soll der Canvas-Pfad wie "studio" zeichnen und nicht wie "default".
+    let id = forceId || this._3dTheme || "default";
+    if (id === "webgl") id = "studio";
     const THEMES = {
 
       // ── Standard (aktuell) ──────────────────────────────────────────────
@@ -19454,9 +19531,13 @@ trigger:
         decoTint: null,
         aoCorners: true,
         wallShading: "directional",
+        // Durchgehender Holzboden: Theme-Grundton statt Raumfarbe
+        floorBase: true,
+        floorTint: 0.05,
+        hideGrid: true,
         // Neu in 5.0: Wandstärke in Metern und Sockelplatte
         wallDepth: 0.14,
-        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.9,
+        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.35,
                      shadow:"rgba(60,72,92,0.22)" },
         lightWarm: true,
       },
@@ -19634,6 +19715,158 @@ trigger:
   }
 
 
+  /* ── WebGL-Renderer (Three.js) ─────────────────────────────────────────
+     Zweiter Renderer neben der Canvas-2D-Szene, aktiv im Theme "webgl".
+     Faellt bei fehlendem WebGL oder Kontextverlust auf 2D zurueck, damit
+     aeltere Geraete weiterhin ein Bild bekommen. */
+  _webglWanted() {
+    return (this._3dTheme === "webgl") &&
+           (this._mode === "view" || this._mode === "screensaver") &&
+           !!this._opts?.show3D;
+  }
+
+  async _ensureWebGL() {
+    if (this._glFailed) return null;
+    if (this._gl) return this._gl;
+    if (this._glLoading) return null;           // Import laeuft noch
+    this._glLoading = true;
+    try {
+      const mod = await import("/local/ble_positioning/three-scene.js");
+      const cv = this.shadowRoot.getElementById("gl");
+      const sc = new mod.ThreeScene(cv, {
+        envPreset: this._opts?.env_preset || "studio",
+        envUrl: this._opts?.env_url || null,
+      });
+      if (!sc.ok) throw sc.error || new Error("WebGL nicht verfuegbar");
+      sc.onContextLost(() => {
+        // Kontextverlust ist in WebViews normal. Nicht endlos neu versuchen:
+        // einmal zurueck auf 2D, der Nutzer kann bewusst neu laden.
+        this._glFailed = true;
+        this._showToast("3D-Beschleunigung verloren, zurueck auf Standard");
+        this._syncGlVisibility();
+        this._markDirty();
+      });
+      this._gl = sc;
+      this._glDataKey = null;
+      return sc;
+    } catch (err) {
+      this._glFailed = true;
+      console.warn("BLE Positioning: WebGL nicht nutzbar, nutze Canvas-Renderer", err);
+      return null;
+    } finally {
+      this._glLoading = false;
+    }
+  }
+
+  _syncGlVisibility() {
+    const cv = this.shadowRoot?.getElementById("gl");
+    const c2 = this.shadowRoot?.getElementById("c");
+    if (!cv || !c2) return;
+    const on = this._webglWanted() && this._gl && !this._glFailed;
+    cv.style.display = on ? "block" : "none";
+    if (on) c2.style.visibility = "hidden";
+    else if (c2.style.visibility === "hidden") c2.style.visibility = "";
+  }
+
+  /* Baut die Szene nur neu auf, wenn sich die Geometrie geaendert hat.
+     Kamera und Sonne sind billig und laufen jeden Frame. */
+  _drawWebGL() {
+    const sc = this._gl;
+    if (!sc || !sc.ok) return false;
+    const rooms = this._data?.rooms || [];
+    const doors   = this._data?.doors   || [];
+    const windows = this._data?.windows || [];
+    const decos   = this._data?.decos   || [];
+    // Deko-Eintraege, fuer die es ein 3D-Moebel gibt. TV und Lautsprecher
+    // tragen ihren Entity-Zustand mit: ein laufender Fernseher soll
+    // leuchten, ein spielender Lautsprecher seinen Ring zeigen.
+    const furniture = decos.map(dc => {
+      const st = dc.entity ? this._hass?.states?.[dc.entity] : null;
+      const at = st?.attributes || {};
+      return {
+        type: dc.type, x: dc.x, y: dc.y, z: dc.z,
+        rotation: dc.rotation ?? dc.angle ?? 0,
+        width: dc.width, depth: dc.depth, height: dc.height,
+        color: dc.color, wallMounted: dc.wall_mounted,
+        state: st?.state,
+        level: at.volume_level,
+      };
+    }).filter(f => f.x != null && f.y != null);
+    // Der Schlüssel deckt nur Geometrie ab. Zustände von Türen, Fenstern
+    // und Lampen ändern sich ständig und dürfen keinen Neuaufbau auslösen.
+    const key = JSON.stringify([
+      rooms.map(r => [r.x1, r.y1, r.x2, r.y2, r.color]),
+      doors.map(o => [o.x, o.y, o.width, o.height]),
+      windows.map(o => [o.x, o.y, o.width, o.height, o.sill]),
+      furniture.map(f => [f.type, f.x, f.y, f.rotation, f.state, f.level]),
+      this._data?.floor_w, this._data?.floor_h, this._wallHeight,
+    ]);
+    const att = this._hass?.states?.["sun.sun"]?.attributes || {};
+    if (key !== this._glDataKey) {
+      sc.build({
+        rooms,
+        doors: doors.map(o => ({
+          ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
+        })),
+        windows: windows.map(o => ({
+          ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
+        })),
+        floorW: this._data?.floor_w || 10,
+        floorH: this._data?.floor_h || 10,
+        wallHeight: this._wallHeight ?? 2.5,
+        wallDepth: 0.14,
+        furniture,
+        sunAzimuth: parseFloat(att.azimuth),
+        sunElevation: parseFloat(att.elevation),
+      });
+      this._glDataKey = key;
+      this._glLightKey = null;
+    }
+    sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
+
+    // Umgebung nur bei Aenderung neu erzeugen – der PMREM-Durchlauf ist
+    // zu teuer fuer jedes Bild, aber zu billig fuer einen Szenenneubau.
+    const ekey = (this._opts?.env_preset || "studio") + "|" + (this._opts?.env_url || "");
+    if (ekey !== this._glEnvKey) {
+      sc.setEnvironment(this._opts?.env_preset || "studio", this._opts?.env_url || null);
+      this._glEnvKey = ekey;
+    }
+
+    // Lampen getrennt aktualisieren: Farbe und Helligkeit wechseln oft,
+    // ein Neuaufbau der Szene dafür wäre Verschwendung.
+    const lamps = (this._data?.lights || []).map(l => {
+      const st = l.entity ? this._hass?.states?.[l.entity] : null;
+      const a  = st?.attributes || {};
+      return {
+        entity: l.entity, x: l.x, y: l.y, z: l.z,
+        on: st ? st.state === "on" : !!l.on,
+        brightness: a.brightness ?? (l.brightness ?? 255),
+        rgb: a.rgb_color || l.rgb || null,
+        kelvin: a.color_temp_kelvin || null,
+      };
+    });
+    const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));
+    if (lkey !== this._glLightKey) { sc.updateLights(lamps); this._glLightKey = lkey; }
+
+    // Personen wandern staendig – eigener, billiger Pfad ohne Neuaufbau.
+    // Quelle sind die getrackten Geraete aus _data.devices; mmWave liefert
+    // zusaetzlich eine Haltung, BLE allein nicht.
+    const people = (this._data?.devices || [])
+      .filter(dv => dv.x != null && dv.y != null && dv.present !== false)
+      .map((dv, i) => ({
+        id: dv.id || dv.mac || dv.name || ("dev" + i),
+        x: dv.x, y: dv.y, z: dv.z,
+        posture: dv.posture || dv.pose || "standing",
+        heading: dv.heading ?? dv.angle,
+        color: dv.color,
+      }));
+    sc.updatePeople(people);
+
+    sc.setView(this._3dAzimuth ?? 45, this._3dElevation ?? 30, this._3dZoom ?? 1);
+    sc.render();
+    return true;
+  }
+
   /* Wrapper: sichert den Canvas-Transform-Stack ab. Fliegt beim Zeichnen
      eine Ausnahme, wird das ctx.restore() am Ende nie erreicht – dann
      stapelt sich pro Frame eine weitere Skalierung und das Bild zoomt
@@ -19685,11 +19918,30 @@ trigger:
     const az  = ((this._3dAzimuth  ?? 45) * Math.PI) / 180;
     const el  = ((this._3dElevation ?? 30) * Math.PI) / 180;
 
-    // World center: middle of floor plan
-    const wcx = fw / 2, wcy = fh / 2;
+    // World center und Maßstab richten sich nach den tatsächlich bebauten
+    // Räumen, nicht nach floor_w/floor_h. Ist das Grundstück deutlich
+    // größer als die Bebauung, schrumpft das Gebäude sonst auf einen
+    // Bruchteil der Fläche und wirkt detailarm.
+    let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
+    (rooms || []).forEach(r => {
+      if (r.x1 == null || r.x2 == null) return;
+      bx1 = Math.min(bx1, r.x1, r.x2); bx2 = Math.max(bx2, r.x1, r.x2);
+      by1 = Math.min(by1, r.y1, r.y2); by2 = Math.max(by2, r.y1, r.y2);
+    });
+    let wcx = fw / 2, wcy = fh / 2, spanW = fw, spanH = fh;
+    if (isFinite(bx1) && bx2 > bx1 && by2 > by1) {
+      const pad = 0.6;                       // etwas Luft um die Bebauung
+      const rw = (bx2 - bx1) + pad * 2, rh = (by2 - by1) + pad * 2;
+      // Nur umschalten, wenn die Bebauung spürbar kleiner ist als das
+      // Grundstück – sonst bleibt das gewohnte Verhalten erhalten.
+      if (rw * rh < fw * fh * 0.72) {
+        wcx = (bx1 + bx2) / 2; wcy = (by1 + by2) / 2;
+        spanW = rw; spanH = rh;
+      }
+    }
 
     // Unit scale: fit floor into canvas – auf Hochformat (Portrait) mehr Breite nutzen
-    const diag   = Math.sqrt(fw*fw + fh*fh);
+    const diag   = Math.sqrt(spanW*spanW + spanH*spanH);
     const isPortrait = ch > cw * 1.2;
     const fitBase = isPortrait ? (cw * 0.92 * zoom) : (Math.min(cw, ch) * 0.82 * zoom);
     const unitPx = fitBase / diag;
@@ -19811,8 +20063,9 @@ trigger:
       ctx.stroke();
     }
 
-    // Floor grid
+    // Floor grid – im Studio-Theme liegt eine glatte Platte statt Raster
     const gridStep = TH.grid.step || 1;
+    if (!TH.hideGrid) {
     ctx.strokeStyle = TH.grid.color;
     ctx.lineWidth   = TH.grid.width || 0.5;
     for (let x = 0; x <= fw; x += gridStep) {
@@ -19822,6 +20075,7 @@ trigger:
     for (let y = 0; y <= fh; y += gridStep) {
       const a = project(0, y, 0), b = project(fw, y, 0);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+    }
     }
     // Sekundäres Grid (Neon-Theme bei 0.5-Schritt)
     if (TH.grid.secondary) {
@@ -19925,12 +20179,20 @@ trigger:
       // Floor – mit Textur oder Theme-Farbe
       const floorPat = this._texPattern(ctx, "floor", unitPx * 0.5);
       if (floorPat) {
+        const poly = () => { ctx.beginPath();
+          f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); };
         ctx.save();
+        // Grundton des Themes zuerst: sonst bestimmt allein die Raumfarbe,
+        // wie hell der Boden wirkt, und zwei Raeume bekommen sichtbar
+        // verschiedene Boeden statt eines durchgehenden Belags.
+        if (TH.floorBase) { ctx.fillStyle = TH.floor(rr,gg,bb,wallAlpha); poly(); ctx.fill(); }
         ctx.fillStyle = floorPat;
-        ctx.globalAlpha = 0.82;
-        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = `rgba(${rr},${gg},${bb},0.18)`;
-        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = TH.floorBase ? 0.5 : 0.82;
+        poly(); ctx.fill();
+        ctx.globalAlpha = 1;
+        // Raumfarbe nur noch als Hauch, Staerke kommt aus dem Theme
+        const tint = TH.floorTint != null ? TH.floorTint : 0.18;
+        if (tint > 0) { ctx.fillStyle = `rgba(${rr},${gg},${bb},${tint})`; poly(); ctx.fill(); }
         ctx.restore();
       } else {
         // Realistischer Boden: Canvas-generierte Parkett/Fliesen-Textur

@@ -1,0 +1,782 @@
+/**
+ * BLE Positioning – WebGL-Renderer (Three.js)
+ *
+ * Zweiter Renderer neben der Canvas-2D-Szene. Der Canvas-Renderer bleibt
+ * unveraendert bestehen und dient als Rueckfallebene fuer Geraete ohne
+ * brauchbares WebGL.
+ *
+ * Warum ueberhaupt: der 2D-Renderer sortiert Flaechen von hinten nach vorn.
+ * Fuer Waende reicht das; sobald sich Moebel gegenseitig und die Waende
+ * ueberlappen, hat eine Reihenfolge pro Flaeche keine richtige Antwort mehr.
+ * Dafuer braucht es einen Tiefenpuffer pro Pixel. Ausserdem laesst sich ein
+ * Canvas-Pattern nicht perspektivisch verzerren – Dielen wirken deshalb
+ * aufgeklebt statt in die Tiefe laufend. Beides loest WebGL strukturell.
+ *
+ * Die Datei laedt Three.js aus vendor/ und nie von einem CDN: eine
+ * HA-Instanz laeuft haeufig ohne Internetzugang.
+ */
+
+import * as THREE from "./vendor/three.module.js";
+import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js";
+
+/* ── Prozedurale Texturen ────────────────────────────────────────────────
+   Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
+   die Aufloesung laesst sich am Geraet ausrichten. */
+
+function woodTexture(renderer) {
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 512;
+  const x = c.getContext("2d");
+  const plank = 64;
+  for (let i = 0; i < c.height / plank; i++) {
+    // Leicht wechselnde Grundtoene, sonst wirkt der Boden wie Tapete
+    const base = 178 + Math.floor(Math.random() * 26);
+    x.fillStyle = `rgb(${base},${Math.round(base * 0.79)},${Math.round(base * 0.55)})`;
+    x.fillRect(0, i * plank, c.width, plank);
+    // Maserung
+    for (let g = 0; g < 26; g++) {
+      const y = i * plank + Math.random() * plank;
+      x.strokeStyle = `rgba(90,60,30,${0.03 + Math.random() * 0.06})`;
+      x.lineWidth = 0.5 + Math.random();
+      x.beginPath();
+      x.moveTo(0, y);
+      for (let px = 0; px <= c.width; px += 32) {
+        x.lineTo(px, y + Math.sin((px + i * 40) / 60) * 1.4);
+      }
+      x.stroke();
+    }
+    // Fuge zwischen den Reihen
+    x.strokeStyle = "rgba(60,40,20,0.35)";
+    x.lineWidth = 1.5;
+    x.beginPath(); x.moveTo(0, i * plank); x.lineTo(c.width, i * plank); x.stroke();
+    // Stossfugen versetzt
+    const off = (i % 2) * 140;
+    for (let sx = off; sx < c.width; sx += 256) {
+      x.beginPath(); x.moveTo(sx, i * plank); x.lineTo(sx, (i + 1) * plank); x.stroke();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  const aniso = renderer?.capabilities?.getMaxAnisotropy?.() || 1;
+  t.anisotropy = Math.min(8, aniso);
+  return t;
+}
+
+function plasterTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const x = c.getContext("2d");
+  x.fillStyle = "#f2f2ef";
+  x.fillRect(0, 0, 256, 256);
+  const img = x.getImageData(0, 0, 256, 256);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 12;
+    img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
+  }
+  x.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+/* Umgebungsmap: ohne sie hat Glas nichts zu spiegeln und wirkt flach,
+   und Metall sieht aus wie grauer Kunststoff.
+
+   Statt eine HDR-Datei mitzuliefern werden hier Umgebungen prozedural
+   erzeugt. Das kostet einmalig ein paar Millisekunden, wiegt nichts im
+   Paket und laesst sich in Stufen anbieten. Wer eine eigene Aufnahme
+   nutzen will, gibt eine equirectangulare Bilddatei an – die Presets
+   bleiben dann als Rueckfall bestehen. */
+
+export const ENV_PRESETS = {
+  studio:  { label: "Studio (hell)",    sky: ["#ffffff","#dfe6ef","#b9b3a8","#6d6459"],
+             key: [150, 70, 110, "rgba(255,255,255,1)"],
+             fill:[390, 96,  80, "rgba(255,236,205,0.85)"] },
+  warm:    { label: "Abendlicht",       sky: ["#ffd9a8","#f0b183","#8a6a5a","#3d3230"],
+             key: [170, 92, 130, "rgba(255,214,160,1)"],
+             fill:[400,110,  70, "rgba(255,160,110,0.7)"] },
+  neutral: { label: "Neutral grau",     sky: ["#f4f4f4","#d8d8d8","#a8a8a8","#6a6a6a"],
+             key: [256, 64, 150, "rgba(255,255,255,0.9)"],
+             fill:[100,120,  60, "rgba(255,255,255,0.35)"] },
+  outdoor: { label: "Freier Himmel",    sky: ["#9fc7f0","#cfe3f7","#8fa87d","#4d5c42"],
+             key: [120, 50,  90, "rgba(255,252,240,1)"],
+             fill:[380, 80, 110, "rgba(200,225,255,0.6)"] },
+};
+
+function envCanvas(preset) {
+  const p = ENV_PRESETS[preset] || ENV_PRESETS.studio;
+  const c = document.createElement("canvas");
+  c.width = 512; c.height = 256;
+  const x = c.getContext("2d");
+
+  const sky = x.createLinearGradient(0, 0, 0, 256);
+  sky.addColorStop(0.00, p.sky[0]);
+  sky.addColorStop(0.45, p.sky[1]);
+  sky.addColorStop(0.55, p.sky[2]);
+  sky.addColorStop(1.00, p.sky[3]);
+  x.fillStyle = sky;
+  x.fillRect(0, 0, 512, 256);
+
+  // Weiches Lichtfeld – das erscheint auf Glaskanten als Glanz
+  const soft = (cx, cy, r, col) => {
+    const g = x.createRadialGradient(cx, cy, 4, cx, cy, r);
+    g.addColorStop(0, col);
+    g.addColorStop(1, col.replace(/[\d.]+\)$/, "0)"));
+    x.fillStyle = g;
+    x.fillRect(cx - r, cy - r, r * 2, r * 2);
+  };
+  soft(p.key[0],  p.key[1],  p.key[2],  p.key[3]);
+  soft(p.fill[0], p.fill[1], p.fill[2], p.fill[3]);
+  return c;
+}
+
+function envFromCanvas(renderer, canvas) {
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  pmrem.compileEquirectangularShader();
+  const env = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose();
+  tex.dispose();
+  return env;
+}
+
+export class ThreeScene {
+  /**
+   * @param {HTMLCanvasElement} canvas eigenes Canvas, getrennt vom 2D-Canvas
+   */
+  constructor(canvas, opts) {
+    this.canvas = canvas;
+    // Glas mit echter Lichtbrechung kostet pro Bild ein zusaetzliches
+    // Render-Target. Auf schwachen Geraeten lieber schlichtes Transparenz-
+    // glas als eine ruckelnde Szene.
+    const cores = navigator.hardwareConcurrency || 4;
+    this.lowQuality = opts?.lowQuality ?? (cores <= 4);
+    this.ok = false;
+    this.disposed = false;
+    this._objects = [];
+    this._onLost = null;
+
+    try {
+      this.renderer = new THREE.WebGLRenderer({
+        canvas, antialias: true, alpha: false, powerPreference: "default",
+      });
+    } catch (e) {
+      // Kein WebGL – der Aufrufer faellt auf den Canvas-Renderer zurueck
+      this.error = e;
+      return;
+    }
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
+
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0xe9ecef);
+
+    // Orthografisch, nicht perspektivisch: das Referenzbild ist eine
+    // isometrische Architekturdarstellung, keine Kameraaufnahme.
+    this.camera = new THREE.OrthographicCamera(-10, 10, 10, -10, -200, 400);
+
+    this._buildLights();
+
+    // Kontextverlust kommt in WebViews real vor (Tab im Hintergrund,
+    // Speicherdruck). Ohne Behandlung bleibt ein schwarzes Bild stehen.
+    this._lostHandler = (ev) => {
+      ev.preventDefault();
+      this.ok = false;
+      if (this._onLost) this._onLost();
+    };
+    this._restoredHandler = () => { this.ok = true; this.render(); };
+    canvas.addEventListener("webglcontextlost", this._lostHandler, false);
+    canvas.addEventListener("webglcontextrestored", this._restoredHandler, false);
+
+    this.wood = woodTexture(this.renderer);
+    this.plaster = plasterTexture();
+    // Reflexionen fuer alle Materialien, nicht nur fuers Glas
+    this.ok = true;
+    this.setEnvironment(opts?.envPreset || "studio", opts?.envUrl);
+  }
+
+  onContextLost(fn) { this._onLost = fn; }
+
+  /**
+   * Umgebung setzen. Ohne eigene Datei greift eines der Presets, das ist
+   * der Normalfall. `url` erwartet ein equirectangulares Bild; schlaegt
+   * das Laden fehl, bleibt das Preset stehen statt dass die Spiegelungen
+   * ganz verschwinden.
+   */
+  setEnvironment(preset, url) {
+    if (!this.ok) return;
+    const apply = (tex) => {
+      const old = this.env;
+      this.env = tex;
+      this.scene.environment = tex;
+      if (old && old !== tex) old.dispose();
+    };
+    if (preset === "off") { apply(null); return; }
+
+    apply(envFromCanvas(this.renderer, envCanvas(preset)));
+    if (!url) return;
+
+    // Eigene Aufnahme nachladen – asynchron, damit die Szene sofort steht
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (this.disposed || !this.ok) return;
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext("2d").drawImage(img, 0, 0);
+        apply(envFromCanvas(this.renderer, c));
+      } catch (e) {
+        console.warn("BLE Positioning: Umgebungsbild unbrauchbar, nutze Preset", e);
+      }
+    };
+    img.onerror = () => {
+      console.warn("BLE Positioning: Umgebungsbild nicht ladbar:", url);
+    };
+    img.src = url;
+  }
+
+  _buildLights() {
+    // Himmel/Boden-Aufhellung ersetzt teure globale Beleuchtung
+    this.scene.add(new THREE.HemisphereLight(0xdcE8f5, 0xb9a88f, 1.5));
+
+    const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0008;
+    sun.shadow.normalBias = 0.02;
+    this.sun = sun;
+    this.scene.add(sun);
+    this.scene.add(sun.target);
+  }
+
+  /* Wand mit Öffnungen. Three.js kennt kein CSG, und eine Boolean-
+     Bibliothek wäre für rechteckige Löcher überdimensioniert: die Wand
+     wird stattdessen aus Segmenten um jede Öffnung herum zusammengesetzt.
+     Robust, exakt, und die Segmente werfen korrekte Schatten.
+
+     `axis` ist "x" (Wand läuft in X-Richtung) oder "z".
+     `openings`: [{ pos, width, sillH, topH }] – pos ist die Mitte der
+     Öffnung entlang der Wandachse, in Weltkoordinaten. */
+  _wallWithOpenings(axis, aStart, aEnd, fixed, wallH, wd, openings, mat) {
+    const g = new THREE.Group();
+    const len = aEnd - aStart;
+    if (len <= 0) return g;
+
+    const box = (a0, a1, y0, y1) => {
+      const w = a1 - a0, h = y1 - y0;
+      if (w <= 0.001 || h <= 0.001) return;
+      const geo = axis === "x"
+        ? new THREE.BoxGeometry(w, h, wd)
+        : new THREE.BoxGeometry(wd, h, w);
+      const m = new THREE.Mesh(geo, mat);
+      const ac = (a0 + a1) / 2, yc = (y0 + y1) / 2;
+      m.position.set(axis === "x" ? ac : fixed, yc, axis === "x" ? fixed : ac);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      g.add(m);
+    };
+
+    // Öffnungen sortieren und auf die Wand beschneiden
+    const ops = (openings || [])
+      .map(o => ({
+        a0: Math.max(aStart, o.pos - o.width / 2),
+        a1: Math.min(aEnd,   o.pos + o.width / 2),
+        y0: Math.max(0, o.sillH || 0),
+        y1: Math.min(wallH, o.topH ?? wallH),
+      }))
+      .filter(o => o.a1 > o.a0 && o.y1 > o.y0)
+      .sort((p, q) => p.a0 - q.a0);
+
+    let cur = aStart;
+    for (const o of ops) {
+      box(cur, o.a0, 0, wallH);                 // Pfeiler davor
+      if (o.y0 > 0)     box(o.a0, o.a1, 0, o.y0);        // Brüstung unter dem Fenster
+      if (o.y1 < wallH) box(o.a0, o.a1, o.y1, wallH);    // Sturz darüber
+      cur = Math.max(cur, o.a1);
+    }
+    box(cur, aEnd, 0, wallH);                   // Rest bis zum Wandende
+    return g;
+  }
+
+  /* Türblatt. Der Öffnungswinkel kommt aus dem HA-Status, damit eine
+     offene Tür auch offen dasteht. */
+  _doorLeaf(axis, pos, fixed, width, height, wd, openAmount) {
+    const g = new THREE.Group();
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xb98a5c, roughness: 0.65, metalness: 0.02,
+    });
+    const leaf = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, Math.max(0.03, wd * 0.28)), mat
+    );
+    // Drehpunkt an die Kante legen, sonst rotiert das Blatt um die Mitte
+    leaf.position.x = width / 2;
+    leaf.position.y = height / 2;
+    leaf.castShadow = true;
+    const pivot = new THREE.Group();
+    pivot.add(leaf);
+    pivot.rotation.y = -(openAmount || 0) * Math.PI * 0.42;
+    if (axis === "x") pivot.position.set(pos - width / 2, 0, fixed);
+    else { pivot.position.set(fixed, 0, pos - width / 2); pivot.rotation.y += Math.PI / 2; }
+    g.add(pivot);
+
+    // Zarge
+    const fr = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.8 });
+    const t = 0.05;
+    const jamb = (dx, dz, w, h, d) => {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fr);
+      m.position.set(
+        axis === "x" ? pos + dx : fixed,
+        h / 2 + (dz === "top" ? height : 0),
+        axis === "x" ? fixed : pos + dx
+      );
+      if (dz === "top") m.position.y = height + t / 2;
+      m.castShadow = true;
+      g.add(m);
+    };
+    const side = axis === "x" ? [width / 2, -width / 2] : [width / 2, -width / 2];
+    for (const s of side) jamb(s, "side", axis === "x" ? t : wd * 1.05, height, axis === "x" ? wd * 1.05 : t);
+    jamb(0, "top", axis === "x" ? width + t * 2 : wd * 1.05, t, axis === "x" ? wd * 1.05 : width + t * 2);
+    return g;
+  }
+
+  /* Fenster: Rahmen, Glas, Fensterbank. Glas ist bewusst nicht voll
+     transparent – sonst verschwindet es in der isometrischen Ansicht. */
+  _windowUnit(axis, pos, fixed, width, sillH, topH, wd, state) {
+    const g = new THREE.Group();
+    const h = topH - sillH;
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f2f5, roughness: 0.55 });
+    // Echtes Fensterglas ist farblos – gruenlich wird es nur an der
+    // Schnittkante. Die fruehere Blaufaerbung kam aus einem eingefaerbten
+    // color-Wert. Ausserdem schliessen sich transmission und
+    // transparent/opacity gegenseitig aus: transmission bringt seine
+    // eigene Durchsicht mit, opacity daneben macht es milchig.
+    const glassMat = this.lowQuality
+      ? new THREE.MeshPhysicalMaterial({
+          color: 0xffffff, roughness: 0.06, metalness: 0,
+          transparent: true, opacity: 0.22, envMapIntensity: 1.4,
+        })
+      : new THREE.MeshPhysicalMaterial({
+          color: 0xffffff, roughness: 0.02, metalness: 0,
+          transmission: 1.0, thickness: 0.012, ior: 1.52,
+          specularIntensity: 1.0, envMapIntensity: 1.5,
+          transparent: false,
+        });
+    const put = (mesh, a, y, d) => {
+      mesh.position.set(axis === "x" ? a : fixed + (d || 0), y, axis === "x" ? fixed + (d || 0) : a);
+      g.add(mesh);
+    };
+    const glass = new THREE.Mesh(
+      axis === "x" ? new THREE.BoxGeometry(width * 0.92, h * 0.9, 0.02)
+                   : new THREE.BoxGeometry(0.02, h * 0.9, width * 0.92),
+      glassMat
+    );
+    put(glass, pos, sillH + h / 2);
+
+    const fw = 0.05;
+    const bar = (w, hh, d, a, y) => {
+      const m = new THREE.Mesh(
+        axis === "x" ? new THREE.BoxGeometry(w, hh, d) : new THREE.BoxGeometry(d, hh, w),
+        frameMat
+      );
+      m.castShadow = true;
+      put(m, a, y);
+    };
+    bar(width, fw, wd * 1.02, pos, sillH);          // unten
+    bar(width, fw, wd * 1.02, pos, topH);           // oben
+    bar(fw, h, wd * 1.02, pos - width / 2, sillH + h / 2);
+    bar(fw, h, wd * 1.02, pos + width / 2, sillH + h / 2);
+
+    // Zustandsring: offen/gekippt sichtbar machen, ohne Text zu brauchen
+    if (state === "open" || state === "tilted") {
+      const c = state === "open" ? 0xe06c6c : 0xe0a13f;
+      const ring = new THREE.Mesh(
+        axis === "x" ? new THREE.BoxGeometry(width * 0.94, 0.03, wd * 1.3)
+                     : new THREE.BoxGeometry(wd * 1.3, 0.03, width * 0.94),
+        new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.5 })
+      );
+      put(ring, pos, topH - 0.04);
+    }
+    return g;
+  }
+
+  /* ── Licht ───────────────────────────────────────────────────────────
+     Three.js rechnet seit r155 in physikalischen Einheiten: Intensität
+     einer Punktlichtquelle in Candela, Abfall mit dem Quadrat der
+     Entfernung (decay = 2). Damit verhält sich eine Lampe von selbst
+     richtig – doppelter Abstand, ein Viertel der Helligkeit – statt dass
+     man einen Radius von Hand einstellt.
+
+     HA liefert je nach Lampe rgb_color, color_temp_kelvin oder nur
+     brightness. Alle drei Fälle landen hier in Farbe plus Lumen. */
+
+  /** Farbtemperatur nach RGB, Näherung nach Tanner Helland. */
+  static kelvinToRGB(k) {
+    const t = Math.max(1000, Math.min(12000, k)) / 100;
+    let r, g, b;
+    if (t <= 66) {
+      r = 255;
+      g = 99.47 * Math.log(t) - 161.12;
+      b = t <= 19 ? 0 : 138.52 * Math.log(t - 10) - 305.04;
+    } else {
+      r = 329.7 * Math.pow(t - 60, -0.1332);
+      g = 288.12 * Math.pow(t - 60, -0.0755);
+      b = 255;
+    }
+    const cl = (v) => Math.max(0, Math.min(255, v)) / 255;
+    return [cl(r), cl(g), cl(b)];
+  }
+
+  /**
+   * Lichter aus HA übernehmen. Wird bei jeder Zustandsänderung gerufen –
+   * bestehende Lampen werden aktualisiert statt neu gebaut, damit Farbe
+   * und Helligkeit ohne Flackern überblenden können.
+   *
+   * @param {Array<{x,y,z,on,brightness,rgb,kelvin,entity}>} lights
+   */
+  updateLights(lights) {
+    if (!this.ok) return;
+    this._lamps = this._lamps || new Map();
+    const seen = new Set();
+    // WebGL bindet Lichter im Shader: jede zusätzliche Lampe kostet in
+    // jedem Fragment. Darum eine harte Obergrenze – die hellsten gewinnen.
+    const MAX = 8;
+    const list = (lights || [])
+      .filter(l => l.on && l.x != null && l.y != null)
+      .sort((a, b) => (b.brightness || 0) - (a.brightness || 0))
+      .slice(0, MAX);
+
+    for (const l of list) {
+      const key = l.entity || `${l.x},${l.y}`;
+      seen.add(key);
+      let lamp = this._lamps.get(key);
+      if (!lamp) {
+        const pl = new THREE.PointLight(0xffffff, 1, 0, 2);   // decay 2
+        pl.castShadow = false;      // Punktschatten sind teuer; die Sonne reicht
+        const bulb = new THREE.Mesh(
+          new THREE.SphereGeometry(0.05, 12, 8),
+          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff })
+        );
+        const grp = new THREE.Group();
+        grp.add(pl); grp.add(bulb);
+        this.scene.add(grp);
+        lamp = { grp, pl, bulb };
+        this._lamps.set(key, lamp);
+      }
+
+      // Farbe: RGB schlägt Kelvin, Kelvin schlägt neutrales Warmweiß
+      let rgb;
+      if (Array.isArray(l.rgb) && l.rgb.length === 3) {
+        rgb = l.rgb.map(v => Math.max(0, Math.min(255, v)) / 255);
+      } else if (l.kelvin) {
+        rgb = ThreeScene.kelvinToRGB(l.kelvin);
+      } else {
+        rgb = ThreeScene.kelvinToRGB(2700);
+      }
+      lamp.pl.color.setRGB(rgb[0], rgb[1], rgb[2]);
+      lamp.bulb.material.color.setRGB(rgb[0], rgb[1], rgb[2]);
+      lamp.bulb.material.emissive.setRGB(rgb[0], rgb[1], rgb[2]);
+
+      // Helligkeit: HA gibt 0..255. Als Lichtstrom gedacht entspricht
+      // volle Helligkeit etwa einer 800-lm-Birne. Candela = lm / 4π.
+      const frac = Math.max(0, Math.min(255, l.brightness ?? 255)) / 255;
+      const lumen = 800 * frac;
+      lamp.pl.intensity = lumen / (4 * Math.PI);
+      lamp.bulb.material.emissiveIntensity = 0.4 + frac * 0.6;
+
+      const h = l.z != null ? l.z : Math.max(0.6, (this._wallH || 2.5) - 0.35);
+      lamp.grp.position.set(l.x, h, l.y);
+    }
+
+    // Erloschene oder entfallene Lampen abräumen
+    for (const [key, lamp] of this._lamps) {
+      if (seen.has(key)) continue;
+      this.scene.remove(lamp.grp);
+      lamp.bulb.geometry.dispose();
+      lamp.bulb.material.dispose();
+      this._lamps.delete(key);
+    }
+  }
+
+  /** Alte Geometrie freigeben – sonst waechst der GPU-Speicher bei jedem Neubau. */
+  _clear() {
+    for (const o of this._objects) {
+      this.scene.remove(o);
+      o.traverse?.((n) => {
+        if (n.geometry) n.geometry.dispose();
+        if (n.material) {
+          const mats = Array.isArray(n.material) ? n.material : [n.material];
+          for (const m of mats) m.dispose();
+        }
+      });
+    }
+    this._objects = [];
+  }
+
+  /**
+   * Szene aus den Kartendaten aufbauen.
+   * @param {{rooms:Array, floorW:number, floorH:number, wallHeight:number,
+   *          wallDepth:number, sunAzimuth:number, sunElevation:number}} d
+   */
+  build(d) {
+    if (!this.ok) return;
+    this._clear();
+
+    const rooms = d.rooms || [];
+    const wallH = Math.max(0.5, Math.min(6, d.wallHeight ?? 2.5));
+    const wd = d.wallDepth ?? 0.14;
+
+    // Bezugsrahmen: die bebaute Flaeche, nicht das Grundstueck. Sonst
+    // schrumpft das Gebaeude, wenn das Grundstueck viel groesser ist.
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const r of rooms) {
+      if (r.x1 == null || r.x2 == null) continue;
+      x1 = Math.min(x1, r.x1, r.x2); x2 = Math.max(x2, r.x1, r.x2);
+      y1 = Math.min(y1, r.y1, r.y2); y2 = Math.max(y2, r.y1, r.y2);
+    }
+    if (!isFinite(x1)) { x1 = 0; y1 = 0; x2 = d.floorW || 10; y2 = d.floorH || 10; }
+    this.bounds = { x1, y1, x2, y2 };
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    this.center = new THREE.Vector3(cx, 0, cy);
+    this.span = Math.max(x2 - x1, y2 - y1, 2);
+
+    this._wallH = wallH;
+    const group = new THREE.Group();
+
+    // Tueren und Fenster in eine gemeinsame Form bringen: die Wandlogik
+    // interessiert nur Position, Breite und Hoehenband.
+    const openings = [];
+    for (const dr of (d.doors || [])) {
+      if (dr.x == null || dr.y == null) continue;
+      openings.push({
+        kind: "door", x: dr.x, y: dr.y,
+        width: dr.width || 0.9, sillH: 0, topH: dr.height || 2.05,
+        openAmount: dr.state === "open" ? 1 : (dr.open_amount ?? 0),
+      });
+    }
+    for (const wi of (d.windows || [])) {
+      if (wi.x == null || wi.y == null) continue;
+      openings.push({
+        kind: "window", x: wi.x, y: wi.y,
+        width: wi.width || 1.1,
+        sillH: wi.sill ?? 0.9,
+        topH: (wi.sill ?? 0.9) + (wi.height || 1.2),
+        state: wi.state,
+      });
+    }
+
+    // ── Sockelplatte ────────────────────────────────────────────────────
+    const pad = 0.45;
+    const pw = (x2 - x1) + pad * 2, ph = (y2 - y1) + pad * 2;
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(pw, 0.12, ph),
+      new THREE.MeshStandardMaterial({ color: 0xf6f7f9, roughness: 0.92, metalness: 0 })
+    );
+    plate.position.set(cx, -0.06, cy);
+    plate.receiveShadow = true;
+    group.add(plate);
+
+    // ── Raeume ──────────────────────────────────────────────────────────
+    for (const r of rooms) {
+      if (r.x1 == null || r.x2 == null) continue;
+      const rx1 = Math.min(r.x1, r.x2), rx2 = Math.max(r.x1, r.x2);
+      const ry1 = Math.min(r.y1, r.y2), ry2 = Math.max(r.y1, r.y2);
+      const rw = rx2 - rx1, rh = ry2 - ry1;
+      if (rw <= 0 || rh <= 0) continue;
+
+      // Boden: eigene Texturkopie, damit repeat pro Raum stimmt und die
+      // Dielen ueber Raumgrenzen hinweg nicht springen.
+      const wood = this.wood.clone();
+      wood.needsUpdate = true;
+      wood.repeat.set(rw / 2.2, rh / 2.2);
+      wood.offset.set(rx1 / 2.2, ry1 / 2.2);
+      const floor = new THREE.Mesh(
+        new THREE.PlaneGeometry(rw, rh),
+        new THREE.MeshStandardMaterial({ map: wood, roughness: 0.72, metalness: 0 })
+      );
+      floor.rotation.x = -Math.PI / 2;
+      floor.position.set(rx1 + rw / 2, 0.001, ry1 + rh / 2);
+      floor.receiveShadow = true;
+      group.add(floor);
+
+      // Waende als Koerper mit Dicke, Decke bleibt offen (Puppenhaus).
+      // Nur Nord- und Westwand, damit der Raum zur Kamera hin offen bleibt.
+      const wallMat = new THREE.MeshStandardMaterial({
+        map: this.plaster, color: 0xffffff, roughness: 0.95, metalness: 0,
+      });
+      // Oeffnungen dieser Wand einsammeln: alles, was nah genug an der
+      // Wandlinie liegt, gehoert dazu.
+      const near = (v, target) => Math.abs(v - target) < 0.45;
+      const opsN = [], opsW = [];
+      for (const o of openings) {
+        const inX = o.x >= rx1 - 0.5 && o.x <= rx2 + 0.5;
+        const inY = o.y >= ry1 - 0.5 && o.y <= ry2 + 0.5;
+        if (near(o.y, ry1) && inX) opsN.push({ ...o, axis: "x", pos: o.x, fixed: ry1 - wd / 2 });
+        else if (near(o.x, rx1) && inY) opsW.push({ ...o, axis: "z", pos: o.y, fixed: rx1 - wd / 2 });
+      }
+
+      const wN = this._wallWithOpenings("x", rx1 - wd, rx2 + wd, ry1 - wd / 2,
+                                        wallH, wd, opsN, wallMat);
+      const wW = this._wallWithOpenings("z", ry1 - wd, ry2 + wd, rx1 - wd / 2,
+                                        wallH, wd, opsW, wallMat);
+      group.add(wN); group.add(wW);
+
+      // Tuerblaetter und Fensterelemente in die Oeffnungen setzen
+      for (const o of [...opsN, ...opsW]) {
+        if (o.kind === "door") {
+          group.add(this._doorLeaf(o.axis, o.pos, o.fixed, o.width,
+                                   o.topH ?? 2.05, wd, o.openAmount));
+        } else {
+          group.add(this._windowUnit(o.axis, o.pos, o.fixed, o.width,
+                                     o.sillH ?? 0.9, o.topH ?? 2.1, wd, o.state));
+        }
+      }
+
+      // Sockelleiste: klein, aber sie macht den Uebergang glaubwuerdig
+      const skMat = new THREE.MeshStandardMaterial({ color: 0xf8f8f6, roughness: 0.6 });
+      const sk1 = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.09, 0.025), skMat);
+      sk1.position.set(rx1 + rw / 2, 0.045, ry1 + 0.012);
+      group.add(sk1);
+      const sk2 = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.09, rh), skMat);
+      sk2.position.set(rx1 + 0.012, 0.045, ry1 + rh / 2);
+      group.add(sk2);
+    }
+
+    // ── Moebel und Geraete ──────────────────────────────────────────────
+    for (const it of (d.furniture || [])) {
+      const obj = makeFurniture(it.type, it);
+      if (obj) { group.add(obj); }
+    }
+
+    this.scene.add(group);
+    this._objects.push(group);
+
+    this.setSun(d.sunAzimuth ?? 135, d.sunElevation ?? 55);
+    this.resize();
+  }
+
+  /**
+   * Personen aus dem Tracking. Getrennt von build(), weil sich Positionen
+   * laufend aendern – Figuren werden verschoben statt neu gebaut, sonst
+   * flackert es bei jedem Update.
+   * @param {Array<{id,x,y,posture,color,heading}>} people
+   */
+  updatePeople(people) {
+    if (!this.ok) return;
+    this._people = this._people || new Map();
+    const seen = new Set();
+    for (const p of (people || [])) {
+      if (p.x == null || p.y == null) continue;
+      const id = p.id || `${p.x},${p.y}`;
+      seen.add(id);
+      let fig = this._people.get(id);
+      // Haltungswechsel braucht eine andere Geometrie, sonst reicht Verschieben
+      if (fig && fig.posture !== (p.posture || "standing")) {
+        this.scene.remove(fig.obj); fig = null; this._people.delete(id);
+      }
+      if (!fig) {
+        const obj = makeFurniture("person", {
+          posture: p.posture || "standing", color: p.color,
+        });
+        if (!obj) continue;
+        this.scene.add(obj);
+        fig = { obj, posture: p.posture || "standing" };
+        this._people.set(id, fig);
+      }
+      fig.obj.position.set(p.x, p.z || 0, p.y);
+      if (p.heading != null) fig.obj.rotation.y = (p.heading * Math.PI) / 180;
+    }
+    for (const [id, fig] of this._people) {
+      if (seen.has(id)) continue;
+      this.scene.remove(fig.obj);
+      this._people.delete(id);
+    }
+  }
+
+  /** Sonnenstand aus HA uebernehmen – dieselbe Quelle wie die 2D-Kulisse. */
+  setSun(azimuthDeg, elevationDeg) {
+    if (!this.ok || !this.sun) return;
+    const az = (azimuthDeg * Math.PI) / 180;
+    const el = Math.max(12, elevationDeg) * Math.PI / 180;
+    const dist = this.span * 3 + 10;
+    this.sun.position.set(
+      this.center.x + Math.sin(az) * Math.cos(el) * dist,
+      Math.sin(el) * dist,
+      this.center.z + Math.cos(az) * Math.cos(el) * dist
+    );
+    this.sun.target.position.copy(this.center);
+    const s = this.span * 1.4 + 3;
+    const cam = this.sun.shadow.camera;
+    cam.left = -s; cam.right = s; cam.top = s; cam.bottom = -s;
+    cam.near = 0.5; cam.far = dist * 2.2;
+    cam.updateProjectionMatrix();
+  }
+
+  /** Kamera aus Azimut/Elevation/Zoom setzen – gleiche Bedienung wie in 2D. */
+  setView(azimuthDeg, elevationDeg, zoom) {
+    if (!this.ok) return;
+    this._az = azimuthDeg; this._el = elevationDeg; this._zoom = zoom || 1;
+    const az = (azimuthDeg * Math.PI) / 180;
+    const el = Math.max(5, Math.min(89, elevationDeg)) * Math.PI / 180;
+    const d = this.span * 4 + 20;
+    this.camera.position.set(
+      this.center.x + Math.sin(az) * Math.cos(el) * d,
+      Math.sin(el) * d,
+      this.center.z + Math.cos(az) * Math.cos(el) * d
+    );
+    this.camera.lookAt(this.center);
+    this.resize();
+  }
+
+  resize() {
+    if (!this.ok) return;
+    const w = this.canvas.clientWidth || 300;
+    const h = this.canvas.clientHeight || 200;
+    this.renderer.setSize(w, h, false);
+    // Orthografisches Frustum an das Seitenverhaeltnis anpassen
+    const half = (this.span * 0.85) / (this._zoom || 1);
+    const aspect = w / h;
+    let hw = half, hh = half;
+    if (aspect >= 1) hw = half * aspect; else hh = half / aspect;
+    const c = this.camera;
+    c.left = -hw; c.right = hw; c.top = hh; c.bottom = -hh;
+    c.updateProjectionMatrix();
+  }
+
+  render() {
+    if (!this.ok || this.disposed) return;
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  dispose() {
+    this.disposed = true;
+    this.ok = false;
+    this._clear();
+    this.canvas.removeEventListener("webglcontextlost", this._lostHandler);
+    this.canvas.removeEventListener("webglcontextrestored", this._restoredHandler);
+    if (this._people) {
+      for (const f of this._people.values()) this.scene.remove(f.obj);
+      this._people.clear();
+    }
+    if (this._lamps) {
+      for (const l of this._lamps.values()) this.scene.remove(l.grp);
+      this._lamps.clear();
+    }
+    disposeFurnitureCache();
+    this.wood?.dispose();
+    this.plaster?.dispose();
+    this.env?.dispose();
+    this.renderer?.dispose();
+  }
+}
+
+export default ThreeScene;
