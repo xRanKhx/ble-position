@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.7.3";
+const CARD_VERSION = "4.7.4";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -12751,6 +12751,37 @@ _drawDoors() {
 
   /* Wetter-Kulisse. Wie bei Hovi nur außerhalb der Räume sichtbar – dort per
      SVG <mask>, hier über eine evenodd-Clip-Region: Vollfläche minus Räume. */
+  /* Stand von Sonne bzw. Mond am Himmel, als Bahnpunkt.
+     u = 0 im Osten (links), 1 im Westen (rechts); h = 0 am Horizont,
+     1 im Zenit. Die Sonne kommt aus sun.sun, der Mond wird über seine
+     Phase zeitversetzt genähert: bei Neumond läuft er mit der Sonne,
+     bei Vollmond genau gegenläufig. HA liefert keinen Mond-Azimut. */
+  _skyArc(night) {
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    const att   = this._hass?.states?.["sun.sun"]?.attributes || {};
+    const azim  = parseFloat(att.azimuth);
+    const elev  = parseFloat(att.elevation);
+
+    if (!night && isFinite(azim) && isFinite(elev)) {
+      // Echte Werte: Ost (60°) bis West (300°) auf die Breite abbilden
+      return {
+        u: clamp((azim - 60) / 240, 0.04, 0.96),
+        h: clamp(elev / 55, 0.02, 1),
+      };
+    }
+
+    const now = new Date();
+    const hh  = now.getHours() + now.getMinutes() / 60;
+    // Mond: um die Phase verschobene "Ortszeit"
+    const t   = night ? (hh - this._moonPhase() * 24) : hh;
+    let   tt  = ((t % 24) + 24) % 24;
+    const u   = (tt - 6) / 12;                 // 6h→0, 18h→1
+    return {
+      u: clamp(u, 0.04, 0.96),
+      h: clamp(Math.sin(clamp(u, 0, 1) * Math.PI), 0.02, 1),
+    };
+  }
+
   _drawWeatherLayer(rooms, o) {
     if (!this._opts?.show_weather) return;
     const w = this._weatherState();
@@ -12842,8 +12873,14 @@ _drawDoors() {
     // Nachts immer ein Gestirn zeigen, auch bei Wolken oder Regen –
     // vorher blieb der Himmel bei "cloudy" leer.
     if (fx === "sun" || fx === "night" || night) {
-      // etwas größer als zuvor (17k), damit die Temperatur im Zentrum passt
-      const cx = DW - 58 * k, cy = 58 * k, r = 23 * k;
+      // Stand am Himmel statt fest in der Ecke: wandert im Tagesverlauf
+      // von links nach rechts am Gebäude vorbei.
+      const arc = this._skyArc(night);
+      const r   = (night ? 26 : 34) * k;       // Sonne deutlich größer
+      const mgn = r + 14 * k;                  // Rand, damit nichts anschneidet
+      const cx  = mgn + arc.u * Math.max(0, DW - mgn * 2);
+      // hoch am Himmel = weit oben; Bahn bleibt im oberen Drittel
+      const cy  = mgn + (1 - arc.h) * Math.max(0, DH * 0.34 - mgn * 0.5);
       if (night) {
         // Mond mit weichem Schein
         const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
@@ -12922,24 +12959,6 @@ _drawDoors() {
         ctx.fillStyle = "#ffd25e";
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
-      }
-
-      // ── Temperatur im Zentrum des Gestirns ──────────────────────────
-      // Zuletzt gezeichnet, damit sie nicht vom Mondschatten ausgestanzt
-      // wird. Outline, weil der Untergrund je nach Phase hell oder dunkel ist.
-      if (w.temp != null && isFinite(w.temp)) {
-        const label = Math.round(w.temp) + "°";
-        ctx.save();
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.font = "600 " + (15 * k).toFixed(1) + "px system-ui, sans-serif";
-        ctx.lineWidth = 3.2 * k;
-        ctx.lineJoin = "round";
-        ctx.strokeStyle = night ? "rgba(12,18,34,0.78)" : "rgba(120,72,0,0.30)";
-        ctx.strokeText(label, cx, cy);
-        ctx.fillStyle = night ? "#f2f5ff" : "#5a3a00";
-        ctx.fillText(label, cx, cy);
-        ctx.restore();
       }
     }
 
@@ -13065,9 +13084,30 @@ _drawDoors() {
     }
 
     ctx.restore();
-  }
 
-  /* Moderne Lautstärke-Zeile: Icon, gerundeter Balken, Prozent. */
+    // ── Temperatur links oben am Rand ─────────────────────────────────
+    // Nach dem restore, also außerhalb der Clip-Region: sonst würde sie
+    // verschwinden, sobald links oben ein Raum liegt.
+    if (w.temp != null && isFinite(w.temp)) {
+      const label = Math.round(w.temp) + (w.unit || "°C");
+      const px = 16 * k, py = 16 * k;
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.font = "600 " + (17 * k).toFixed(1) + "px system-ui, sans-serif";
+      const tw = ctx.measureText(label).width;
+      const padX = 9 * k, padY = 6 * k, th = 17 * k;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = night ? "#0d1426" : "#233045";
+      ctx.beginPath();
+      ctx.roundRect(px, py, tw + padX * 2, th + padY * 2, 8 * k);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = night ? "#dfe6ff" : "#f2f6ff";
+      ctx.fillText(label, px + padX, py + padY);
+      ctx.restore();
+    }
+  }
   _drawVolumeBar(ctx, x, y, w, volume, muted, color) {
     const v = muted ? 0 : Math.max(0, Math.min(1, volume ?? 0));
     const barX = x + 13, barW = w - 13 - 24;
