@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.7.2";
+const CARD_VERSION = "4.7.3";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -10413,6 +10413,9 @@ draw();
 
   _drawDaytimeSunIcon(ctx, W, H) {
     if (!this._opts?.showDayTime) return;
+    // Die Wetter-Kulisse bringt ihr eigenes Gestirn samt Temperatur mit –
+    // sonst stünden zwei Sonnen am Himmel.
+    if (this._opts?.show_weather && this._weatherState()) return;
     const dt   = this._getDaytimeConfig();
     if (!dt.isDay) return;
     // Sun position across top of canvas
@@ -12714,29 +12717,61 @@ _drawDoors() {
     if (!eid) return null;
     const st = this._hass?.states?.[eid];
     if (!st) return null;
-    return { condition: st.state, temp: st.attributes?.temperature ?? null };
+    return {
+      condition: st.state,
+      temp: st.attributes?.temperature ?? null,
+      unit: st.attributes?.temperature_unit || "°C",
+    };
+  }
+
+  /* Mondphase als kontinuierlicher Wert 0..1
+     0 = Neumond, 0.25 = zunehmender Halbmond, 0.5 = Vollmond,
+     0.75 = abnehmender Halbmond.
+     Gerechnet wird astronomisch; existiert sensor.moon_phase und
+     widerspricht er der Rechnung, gewinnt der Sensor (grob, 8 Stufen). */
+  _moonPhase() {
+    const SYN = 29.530588853;                       // synodischer Monat
+    const REF = Date.UTC(2000, 0, 6, 18, 14, 0);    // bekannter Neumond
+    let p = (((Date.now() - REF) / 86400000) / SYN) % 1;
+    if (p < 0) p += 1;
+
+    const raw = this._hass?.states?.["sensor.moon_phase"]?.state;
+    if (!raw) return p;
+    const mid = {
+      new_moon: 0.0, waxing_crescent: 0.125, first_quarter: 0.25,
+      waxing_gibbous: 0.375, full_moon: 0.5, waning_gibbous: 0.625,
+      last_quarter: 0.75, waning_crescent: 0.875,
+    }[String(raw).toLowerCase().replace(/[\s-]/g, "_")];
+    if (mid == null) return p;
+    // Abweichung über eine halbe Stufe: dem Sensor folgen
+    let d = Math.abs(p - mid);
+    if (d > 0.5) d = 1 - d;
+    return d > 0.0625 ? mid : p;
   }
 
   /* Wetter-Kulisse. Wie bei Hovi nur außerhalb der Räume sichtbar – dort per
      SVG <mask>, hier über eine evenodd-Clip-Region: Vollfläche minus Räume. */
-  _drawWeatherLayer(rooms) {
+  _drawWeatherLayer(rooms, o) {
     if (!this._opts?.show_weather) return;
     const w = this._weatherState();
     if (!w) return;
-    const ctx = this._ctx;
-    // _f2c() und _floorScale() rechnen in PHYSISCHEN Canvas-Pixeln, der
-    // Kontext wird in 2D bewusst nicht mit dpr skaliert (siehe _draw).
-    // Mit CSS-Pixeln läge die Kulisse sonst nur im linken oberen Viertel.
-    const W = this._canvas?.width  || 0;
-    const H = this._canvas?.height || 0;
+    const ctx = o?.ctx || this._ctx;
+    // 2D: _f2c() und _floorScale() rechnen in PHYSISCHEN Canvas-Pixeln, der
+    // Kontext wird bewusst nicht mit dpr skaliert (siehe _draw). Mit
+    // CSS-Pixeln läge die Kulisse sonst nur im linken oberen Viertel.
+    // 3D (iso): _draw3DScene skaliert selbst mit dpr und übergibt CSS-Maße.
+    const iso = !!o?.iso;
+    const W = iso ? (o.w || 0) : (this._canvas?.width  || 0);
+    const H = iso ? (o.h || 0) : (this._canvas?.height || 0);
     if (!W || !H) return;
     // Deko-Größen mitskalieren, sonst wirkt auf Retina alles winzig
     const k = this._canvasCssW ? (W / this._canvasCssW) : 1;
-    // Der Himmel füllt die Canvas, die Deko hängt dagegen am Grundriss:
+    // 2D: Der Himmel füllt die Canvas, die Deko hängt dagegen am Grundriss –
     // sonst bleiben Sonne, Wolken und Regen beim Zoomen/Pannen stehen,
     // während die ausgestanzten Räume darunter wegwandern.
-    const fr = this._floorRectC();
-    const z  = this._zoomFactor() || 1;
+    // 3D: Der Himmel ist schlicht Hintergrund, die Szene steht davor.
+    const fr = iso ? { x: 0, y: 0, w: W, h: H } : this._floorRectC();
+    const z  = iso ? 1 : (this._zoomFactor() || 1);
     const DW = fr.w / z;   // Grundrissbreite in ungezoomten Canvas-Pixeln
     const DH = fr.h / z;
 
@@ -12750,17 +12785,21 @@ _drawDoors() {
 
     ctx.save();
 
-    // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert
-    ctx.beginPath();
-    ctx.rect(0, 0, W, H);
-    (rooms || []).forEach(r => {
-      if (r.x1 == null || r.x2 == null) return;
-      const a = this._f2c(r.x1, r.y1);
-      const b = this._f2c(r.x2, r.y2);
-      ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
-               Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-    });
-    ctx.clip("evenodd");
+    // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert.
+    // Nur in 2D sinnvoll – in 3D liegen die Räume perspektivisch woanders
+    // und werden ohnehin nach dem Himmel über ihn gezeichnet.
+    if (!iso) {
+      ctx.beginPath();
+      ctx.rect(0, 0, W, H);
+      (rooms || []).forEach(r => {
+        if (r.x1 == null || r.x2 == null) return;
+        const a = this._f2c(r.x1, r.y1);
+        const b = this._f2c(r.x2, r.y2);
+        ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
+                 Math.abs(b.x - a.x), Math.abs(b.y - a.y));
+      });
+      ctx.clip("evenodd");
+    }
 
     // ── Himmel ────────────────────────────────────────────────────────
     const skyDay = {
@@ -12803,7 +12842,8 @@ _drawDoors() {
     // Nachts immer ein Gestirn zeigen, auch bei Wolken oder Regen –
     // vorher blieb der Himmel bei "cloudy" leer.
     if (fx === "sun" || fx === "night" || night) {
-      const cx = DW - 52 * k, cy = 52 * k, r = 17 * k;
+      // etwas größer als zuvor (17k), damit die Temperatur im Zentrum passt
+      const cx = DW - 58 * k, cy = 58 * k, r = 23 * k;
       if (night) {
         // Mond mit weichem Schein
         const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
@@ -12811,12 +12851,34 @@ _drawDoors() {
         halo.addColorStop(1, "rgba(238,242,255,0)");
         ctx.fillStyle = halo;
         ctx.beginPath(); ctx.arc(cx, cy, r * 3, 0, Math.PI * 2); ctx.fill();
-        // Sichel: Vollkreis, dann versetzt ausstanzen
+        // Sichel: Vollkreis, dann Terminator als Ellipsenbogen ausstanzen.
+        // Der Mond wird größer als vorher, damit die Temperatur Platz hat.
+        const ph     = this._moonPhase();
+        const waxing = ph < 0.5;               // zunehmend: helle Seite rechts
+        const term   = Math.cos(2 * Math.PI * ph);  // +1 Neumond … -1 Vollmond
         ctx.save();
+        ctx.translate(cx, cy);
+        if (!waxing) ctx.scale(-1, 1);         // abnehmend: gespiegelt zeichnen
         ctx.fillStyle = "#eef2ff";
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-        ctx.globalCompositeOperation = "destination-out";
-        ctx.beginPath(); ctx.arc(cx + r * 0.42, cy - r * 0.24, r * 0.92, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+        if (term > 0.995) {
+          // Neumond: nur ein schwacher Umriss bleibt übrig
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.beginPath(); ctx.arc(0, 0, r * 0.97, 0, Math.PI * 2); ctx.fill();
+        } else if (term < -0.995) {
+          // Vollmond: nichts ausstanzen
+        } else {
+          ctx.globalCompositeOperation = "destination-out";
+          ctx.beginPath();
+          // dunkle Hälfte (links) …
+          ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, true);
+          // … zurück über den Terminator. Wölbung folgt dem Vorzeichen:
+          // Sichel wölbt in die helle Seite, Gibbous in die dunkle.
+          ctx.ellipse(0, 0, r * Math.abs(term), r, 0,
+                      Math.PI / 2, -Math.PI / 2, term > 0);
+          ctx.closePath();
+          ctx.fill();
+        }
         ctx.restore();
         // Sterne, langsam pulsierend
         for (let s = 0; s < 18; s++) {
@@ -12860,6 +12922,24 @@ _drawDoors() {
         ctx.fillStyle = "#ffd25e";
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
         ctx.globalAlpha = 1;
+      }
+
+      // ── Temperatur im Zentrum des Gestirns ──────────────────────────
+      // Zuletzt gezeichnet, damit sie nicht vom Mondschatten ausgestanzt
+      // wird. Outline, weil der Untergrund je nach Phase hell oder dunkel ist.
+      if (w.temp != null && isFinite(w.temp)) {
+        const label = Math.round(w.temp) + "°";
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "600 " + (15 * k).toFixed(1) + "px system-ui, sans-serif";
+        ctx.lineWidth = 3.2 * k;
+        ctx.lineJoin = "round";
+        ctx.strokeStyle = night ? "rgba(12,18,34,0.78)" : "rgba(120,72,0,0.30)";
+        ctx.strokeText(label, cx, cy);
+        ctx.fillStyle = night ? "#f2f5ff" : "#5a3a00";
+        ctx.fillText(label, cx, cy);
+        ctx.restore();
       }
     }
 
@@ -19281,6 +19361,9 @@ trigger:
     // ── Background ───────────────────────────────────────────────────────────
     ctx.fillStyle = TH.bg;
     ctx.fillRect(0, 0, cw, ch);
+    // Wetter-Kulisse als Himmel hinter der Szene. Ohne Ausstanzen: die
+    // Räume werden gleich darüber gezeichnet und verdecken sie von selbst.
+    this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx });
 
     // ── Draufsicht-Theme: Grundriss-Bild als isometrischer Boden ────────────
     if (TH.floorplanMode && this._bgLoaded && this._bgImg?.complete) {
