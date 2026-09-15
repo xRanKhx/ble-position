@@ -20,7 +20,7 @@ import * as THREE from "./vendor/three.module.js";
 // Query-Version im Pfad: Modul-Importe nutzen den HTTP-Cache, und eine
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
-import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=2";
+import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=3";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -559,6 +559,7 @@ export class ThreeScene {
     this.span = Math.max(x2 - x1, y2 - y1, 2);
 
     this._wallH = wallH;
+    this._walls = [];
     const group = new THREE.Group();
 
     // Tueren und Fenster in eine gemeinsame Form bringen: die Wandlogik
@@ -622,31 +623,49 @@ export class ThreeScene {
       const wallMat = new THREE.MeshStandardMaterial({
         map: this.plaster, color: 0xffffff, roughness: 0.95, metalness: 0,
       });
-      // Oeffnungen dieser Wand einsammeln: alles, was nah genug an der
-      // Wandlinie liegt, gehoert dazu.
-      const near = (v, target) => Math.abs(v - target) < 0.45;
-      const opsN = [], opsW = [];
-      for (const o of openings) {
-        const inX = o.x >= rx1 - 0.5 && o.x <= rx2 + 0.5;
-        const inY = o.y >= ry1 - 0.5 && o.y <= ry2 + 0.5;
-        if (near(o.y, ry1) && inX) opsN.push({ ...o, axis: "x", pos: o.x, fixed: ry1 - wd / 2 });
-        else if (near(o.x, rx1) && inY) opsW.push({ ...o, axis: "z", pos: o.y, fixed: rx1 - wd / 2 });
-      }
+      // Alle vier Wände bauen. Nur Nord und West zu zeichnen war zu
+      // einfach gedacht: Fenster an der Süd- oder Ostwand hatten dann
+      // keine Wand, in der sie sitzen konnten, und blieben unsichtbar.
+      // Stattdessen werden alle gebaut und die zur Kamera zeigenden beim
+      // Blickwechsel ausgeblendet (siehe _updateWallVisibility).
+      const near = (v, t) => Math.abs(v - t) < 0.45;
+      const sides = [
+        { id: "N", axis: "x", a0: rx1 - wd, a1: rx2 + wd, fixed: ry1 - wd / 2, nx: 0, nz: -1 },
+        { id: "S", axis: "x", a0: rx1 - wd, a1: rx2 + wd, fixed: ry2 + wd / 2, nx: 0, nz:  1 },
+        { id: "W", axis: "z", a0: ry1 - wd, a1: ry2 + wd, fixed: rx1 - wd / 2, nx: -1, nz: 0 },
+        { id: "E", axis: "z", a0: ry1 - wd, a1: ry2 + wd, fixed: rx2 + wd / 2, nx:  1, nz: 0 },
+      ];
 
-      const wN = this._wallWithOpenings("x", rx1 - wd, rx2 + wd, ry1 - wd / 2,
-                                        wallH, wd, opsN, wallMat);
-      const wW = this._wallWithOpenings("z", ry1 - wd, ry2 + wd, rx1 - wd / 2,
-                                        wallH, wd, opsW, wallMat);
-      group.add(wN); group.add(wW);
+      for (const sd of sides) {
+        const ops = [];
+        for (const o of openings) {
+          const along = sd.axis === "x" ? o.x : o.y;
+          const across = sd.axis === "x" ? o.y : o.x;
+          const lo = sd.axis === "x" ? rx1 : ry1, hi = sd.axis === "x" ? rx2 : ry2;
+          const edge = sd.id === "N" ? ry1 : sd.id === "S" ? ry2
+                     : sd.id === "W" ? rx1 : rx2;
+          if (near(across, edge) && along >= lo - 0.5 && along <= hi + 0.5) {
+            ops.push({ ...o, axis: sd.axis, pos: along, fixed: sd.fixed });
+          }
+        }
+        const wall = this._wallWithOpenings(sd.axis, sd.a0, sd.a1, sd.fixed,
+                                            wallH, wd, ops, wallMat);
+        // Normale merken, damit die Sichtbarkeit später vom Blickwinkel
+        // abhängen kann statt fest verdrahtet zu sein.
+        wall.userData.normal = new THREE.Vector3(sd.nx, 0, sd.nz);
+        wall.userData.isWall = true;
+        group.add(wall);
+        this._walls.push(wall);
 
-      // Tuerblaetter und Fensterelemente in die Oeffnungen setzen
-      for (const o of [...opsN, ...opsW]) {
-        if (o.kind === "door") {
-          group.add(this._doorLeaf(o.axis, o.pos, o.fixed, o.width,
-                                   o.topH ?? 2.05, wd, o.openAmount));
-        } else {
-          group.add(this._windowUnit(o.axis, o.pos, o.fixed, o.width,
-                                     o.sillH ?? 0.9, o.topH ?? 2.1, wd, o.state));
+        for (const o of ops) {
+          const el = o.kind === "door"
+            ? this._doorLeaf(o.axis, o.pos, o.fixed, o.width, o.topH ?? 2.05, wd, o.openAmount)
+            : this._windowUnit(o.axis, o.pos, o.fixed, o.width, o.sillH ?? 0.9,
+                               o.topH ?? 2.1, wd, o.state);
+          el.userData.normal = wall.userData.normal;
+          el.userData.isWall = true;
+          group.add(el);
+          this._walls.push(el);
         }
       }
 
@@ -663,7 +682,9 @@ export class ThreeScene {
     // ── Moebel und Geraete ──────────────────────────────────────────────
     for (const it of (d.furniture || [])) {
       const obj = makeFurniture(it.type, it);
-      if (obj) { group.add(obj); }
+      if (!obj) continue;
+      if (it.scale && it.scale !== 1) obj.scale.setScalar(it.scale);
+      group.add(obj);
     }
 
     this.scene.add(group);
@@ -743,7 +764,24 @@ export class ThreeScene {
       this.center.z + Math.cos(az) * Math.cos(el) * d
     );
     this.camera.lookAt(this.center);
+    this._updateWallVisibility();
     this.resize();
+  }
+
+  /* Wände, deren Aussenseite zur Kamera zeigt, würden den Raum zustellen.
+     Sie werden ausgeblendet – dasselbe Prinzip wie das Backface-Culling im
+     Canvas-Renderer, nur pro Wand statt pro Fläche. */
+  _updateWallVisibility() {
+    if (!this._walls || !this._walls.length) return;
+    const dir = new THREE.Vector3();
+    this.camera.getWorldDirection(dir);          // zeigt von der Kamera weg
+    for (const w of this._walls) {
+      const n = w.userData.normal;
+      if (!n) continue;
+      // Skalarprodukt > 0: die Aussenseite zeigt von der Kamera fort,
+      // die Wand steht also hinten und bleibt sichtbar.
+      w.visible = n.dot(dir) > 0.06;
+    }
   }
 
   resize() {

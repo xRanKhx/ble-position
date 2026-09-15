@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.3.3";
+const CARD_VERSION = "5.4.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19790,9 +19790,12 @@ trigger:
     const furniture = decos.map(dc => {
       const st = dc.entity ? this._hass?.states?.[dc.entity] : null;
       const at = st?.attributes || {};
+      // Deko liegt in Kartenkoordinaten mx/my, nicht x/y – mit x/y wurde
+      // bisher alles herausgefiltert und nichts erschien.
       return {
-        type: dc.type, x: dc.x, y: dc.y, z: dc.z,
+        type: dc.type, x: dc.mx ?? dc.x, y: dc.my ?? dc.y, z: dc.mz ?? dc.z,
         rotation: dc.rotation ?? dc.angle ?? 0,
+        scale: dc.size || 1,
         width: dc.width, depth: dc.depth, height: dc.height,
         color: dc.color, wallMounted: dc.wall_mounted,
         state: st?.state,
@@ -19844,12 +19847,13 @@ trigger:
     const lamps = (this._data?.lights || []).map(l => {
       const st = l.entity ? this._hass?.states?.[l.entity] : null;
       const a  = st?.attributes || {};
+      // Auch Lichter liegen in mx/my/mz
       return {
-        entity: l.entity, x: l.x, y: l.y, z: l.z,
+        entity: l.entity, x: l.mx ?? l.x, y: l.my ?? l.y, z: l.mz ?? l.z,
         on: st ? st.state === "on" : !!l.on,
         brightness: a.brightness ?? (l.brightness ?? 255),
         rgb: a.rgb_color || l.rgb || null,
-        kelvin: a.color_temp_kelvin || null,
+        kelvin: a.color_temp_kelvin || l.color_temp || null,
       };
     });
     const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));

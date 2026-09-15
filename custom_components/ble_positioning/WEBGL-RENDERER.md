@@ -1,6 +1,6 @@
 # BLE Positioning — WebGL-Renderer: Übergabestand
 
-Stand: 5.3.3 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
+Stand: 5.4.0 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
 
 Dieses Dokument beschreibt den zweiten Renderer (Three.js) so, dass man
 ohne die vorherige Sitzung weiterarbeiten kann. Es ersetzt kein Lesen des
@@ -71,6 +71,13 @@ sc.build({
 
 Achsen: HA-`x` → Three-`x`, HA-`y` → Three-**`z`**, Höhe → Three-`y`.
 
+> **Feldnamen unterscheiden sich je Objektart.** Räume, Türen und Fenster
+> liegen in `x`/`y`. **Deko und Lichter dagegen in `mx`/`my`/`mz`** — mit
+> `x`/`y` gelesen wird alles herausgefiltert und es erscheint schlicht
+> nichts, ohne Fehlermeldung. Deko hat zusätzlich `size` als Skalierung,
+> Lichter tragen `brightness`, `rgb` und `color_temp` auch direkt im
+> Objekt, nicht nur in den Entity-Attributen.
+
 ### Was einen Neuaufbau auslöst
 `_glDataKey` deckt **nur Geometrie** ab. Zustände von Türen, Fenstern und
 Lampen ändern sich ständig und dürfen die Szene nicht neu bauen. Sonne und
@@ -87,8 +94,15 @@ darunter, Sturz darüber, Pfeiler rechts (`_wallWithOpenings`).
 Vorteile: exakt, robust, korrekte Schatten, keine weitere Abhängigkeit.
 
 Zuordnung: eine Öffnung gehört zu einer Wand, wenn sie weniger als 0,45 m
-von der Wandlinie entfernt liegt. Gezeichnet werden nur Nord- und Westwand,
-damit der Raum zur Kamera hin offen bleibt (Puppenhaus-Ansicht).
+von der Wandlinie entfernt liegt.
+
+**Alle vier Wände werden gebaut.** Nur Nord und West zu zeichnen war zu
+einfach gedacht: Fenster an Süd- oder Ostwand hatten dann keine Wand, in
+der sie sitzen konnten, und blieben unsichtbar. Stattdessen trägt jede Wand
+ihre Normale in `userData`, und `_updateWallVisibility()` blendet beim
+Blickwechsel die aus, deren Aussenseite zur Kamera zeigt — dasselbe Prinzip
+wie das Backface-Culling im Canvas-Renderer, nur pro Wand statt pro Fläche.
+Damit bleibt die Puppenhaus-Ansicht erhalten und dreht korrekt mit.
 
 Türblätter rotieren um einen Pivot **an der Kante**, nicht um die Mitte.
 Der Öffnungswinkel kommt aus dem HA-Status.
