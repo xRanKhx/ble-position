@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.7.0";
+const CARD_VERSION = "5.8.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19767,6 +19767,10 @@ trigger:
       });
       this._gl = sc;
       this._glDataKey = null;
+      // Himmelskuppel: Preetham-Shader, mit Verlaufskuppel als Rueckfall
+      if (this._opts?.sky_dome !== false) {
+        sc.initSky(this._opts?.sky_mode || "sky").then(() => this._markDirty());
+      }
       return sc;
     } catch (err) {
       this._glFailed = true;
@@ -19894,7 +19898,10 @@ trigger:
       const wctx = wx.getContext("2d");
       wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.clearRect(0, 0, wx.width, wx.height);
-      if (this._opts?.show_weather && this._weatherState()) {
+      if (sc.dome) sc.setSkyWeather(this._weatherState()?.condition);
+      // Mit Kuppel traegt diese den Himmel; die flache Kulisse waere
+      // dann ein zweiter, widersprechender Horizont.
+      if (this._opts?.show_weather && this._weatherState() && !sc.dome) {
         sc.setSky(null);                     // Himmel kommt von der Kulisse
         wctx.save();
         wctx.scale(wdpr, wdpr);

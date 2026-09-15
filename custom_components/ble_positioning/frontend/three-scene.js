@@ -21,6 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
+import { SkyDome } from "./three-sky.js?s=1";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -419,6 +420,16 @@ export class ThreeScene {
       p.light.intensity = lumen / (4 * Math.PI);
       p.light.color.setHex(f > 0.55 ? 0xfff4e2 : 0xe8eef7);
     }
+  }
+
+  /** Himmelskuppel anlegen. Ersetzt Hintergrundfarbe und Wetter-Canvas. */
+  async initSky(mode) {
+    if (!this.ok || this.dome) return null;
+    this.dome = new SkyDome(this.scene, { mode: mode || "sky" });
+    const used = await this.dome.initShader();
+    this.scene.background = null;     // die Kuppel traegt den Himmel
+    this._skyHex = "__dome__";
+    return used;
   }
 
   onContextLost(fn) { this._onLost = fn; }
@@ -1025,6 +1036,8 @@ export class ThreeScene {
   /** Sonnenstand aus HA uebernehmen – dieselbe Quelle wie die 2D-Kulisse. */
   setSun(azimuthDeg, elevationDeg) {
     if (!this.ok || !this.sun) return;
+    // Kuppel folgt demselben Sonnenstand wie das Richtungslicht
+    if (this.dome) this.dome.updateSunPosition(elevationDeg, azimuthDeg);
     const az = (azimuthDeg * Math.PI) / 180;
     const el = Math.max(12, elevationDeg) * Math.PI / 180;
     const dist = this.span * 3 + 10;
@@ -1091,8 +1104,14 @@ export class ThreeScene {
   }
 
   /** Himmelsfarbe, z. B. aus dem Wetterzustand. */
+  setSkyWeather(condition) {
+    if (this.dome) this.dome.setWeather(condition);
+  }
+
   setSky(hex) {
     if (!this.ok) return;
+    if (this.dome) return;             // Kuppel hat Vorrang
+
     if (this._skyHex === hex) return;      // Farbobjekt nicht jedes Bild neu
     this._skyHex = hex;
     // null heisst: das Wetter-Canvas dahinter uebernimmt den Himmel
@@ -1133,6 +1152,7 @@ export class ThreeScene {
       for (const l of this._lamps.values()) this.scene.remove(l.grp);
       this._lamps.clear();
     }
+    this.dome?.dispose();
     disposeFurnitureCache();
     for (const set of [this.wood, this.plaster]) {
       if (!set) continue;
