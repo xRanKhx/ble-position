@@ -784,6 +784,30 @@ export class ThreeScene {
     }
   }
 
+  /* Weltpunkt nach Bildschirmkoordinaten (CSS-Pixel). Damit koennen die
+     bestehenden 2D-Overlays – Musik-Bubbles samt Treffer-Zonen – unveraendert
+     ueber der WebGL-Szene weiterlaufen, statt sie in 3D neu zu bauen. */
+  projectToScreen(x, y, z) {
+    const v = new THREE.Vector3(x, z || 0, y).project(this.camera);
+    const w = this.canvas.clientWidth || 1, h = this.canvas.clientHeight || 1;
+    return { x: (v.x * 0.5 + 0.5) * w, y: (-v.y * 0.5 + 0.5) * h };
+  }
+
+  /** Pixel pro Meter auf dem Bildschirm – fuer Groessen in den Overlays. */
+  screenUnitPx() {
+    const a = this.projectToScreen(0, 0, 0);
+    const b = this.projectToScreen(1, 0, 0);
+    return Math.max(4, Math.hypot(b.x - a.x, b.y - a.y));
+  }
+
+  /** Himmelsfarbe, z. B. aus dem Wetterzustand. */
+  setSky(hex) {
+    if (!this.ok) return;
+    if (this._skyHex === hex) return;      // Farbobjekt nicht jedes Bild neu
+    this._skyHex = hex;
+    this.scene.background = new THREE.Color(hex);
+  }
+
   resize() {
     if (!this.ok) return;
     const w = this.canvas.clientWidth || 300;

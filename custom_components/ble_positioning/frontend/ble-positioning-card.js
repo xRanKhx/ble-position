@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.4.0";
+const CARD_VERSION = "5.4.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1204,7 +1204,7 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
-      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;"></canvas>
+      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
@@ -19771,8 +19771,12 @@ trigger:
     if (!cv || !c2) return;
     const on = this._webglWanted() && this._gl && !this._glFailed;
     cv.style.display = on ? "block" : "none";
-    if (on) c2.style.visibility = "hidden";
-    else if (c2.style.visibility === "hidden") c2.style.visibility = "";
+    // Das 2D-Canvas bleibt sichtbar und liegt oben: es traegt die Overlays
+    // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
+    // Drehen, Zoomen und der Editor verloren.
+    c2.style.position = on ? "relative" : "";
+    c2.style.zIndex = on ? "1" : "";
+    if (c2.style.visibility === "hidden") c2.style.visibility = "";
   }
 
   /* Baut die Szene nur neu auf, wenn sich die Geometrie geaendert hat.
@@ -19834,6 +19838,24 @@ trigger:
     }
     sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
 
+    // Wetter: in 3D gibt es keine gemalte Kulisse, aber der Himmel kann
+    // die Stimmung tragen. Farbe aus derselben Quelle wie in 2D.
+    if (this._opts?.show_weather) {
+      const w = this._weatherState();
+      if (w) {
+        const night = this._isDark();
+        const fx = this._weatherFx(w.condition);
+        const sky = (night
+          ? { sun:"#1b2440", night:"#161e38", clouds:"#1d2742", fog:"#222a40",
+              rain:"#161f38", pour:"#111930", snow:"#212c48", sleet:"#1a2440",
+              hail:"#151e36", storm:"#0e1428", wind:"#1c2540" }
+          : { sun:"#cfe8ff", night:"#2b3550", clouds:"#dbe3ec", fog:"#dfe3e8",
+              rain:"#c6d3e2", pour:"#b3c3d6", snow:"#dde6f0", sleet:"#d2dce8",
+              hail:"#c8d4e2", storm:"#9fb0c6", wind:"#d8e2ec" })[fx];
+        if (sky) sc.setSky(sky);
+      }
+    }
+
     // Umgebung nur bei Aenderung neu erzeugen – der PMREM-Durchlauf ist
     // zu teuer fuer jedes Bild, aber zu billig fuer einen Szenenneubau.
     const ekey = (this._opts?.env_preset || "studio") + "|" + (this._opts?.env_url || "");
@@ -19875,6 +19897,34 @@ trigger:
 
     sc.setView(this._3dAzimuth ?? 45, this._3dElevation ?? 30, this._3dZoom ?? 1);
     sc.render();
+
+    // ── Overlays auf dem 2D-Canvas darueber ────────────────────────────
+    // Musik-Bubbles inklusive Steuerleiste und Treffer-Zonen laufen
+    // unveraendert weiter; sie bekommen nur die Projektion der 3D-Kamera
+    // statt der eigenen. Neu bauen waere doppelte Arbeit.
+    const ctx2 = this._ctx;
+    if (ctx2 && this._canvas) {
+      ctx2.setTransform(1, 0, 0, 1, 0, 0);
+      ctx2.clearRect(0, 0, this._canvas.width, this._canvas.height);
+      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
+      // Treffer-Zonen werden in physischen Pixeln abgelegt, der Kontext
+      // rechnet hier in CSS-Pixeln – derselbe Faktor wie im Canvas-3D.
+      this._3dCtxScale = dpr;
+      ctx2.save();
+      ctx2.scale(dpr, dpr);
+      try {
+        const glProject = (x, y, z) => sc.projectToScreen(x, y, z);
+        if (this._opts?.show_music_bubble) {
+          this._drawMusicBubbles3D(glProject, sc.screenUnitPx());
+        }
+      } catch (e) {
+        if (!this._glOverlayErr) {
+          this._glOverlayErr = true;
+          console.warn("BLE Positioning: Overlay ueber WebGL fehlgeschlagen", e);
+        }
+      }
+      ctx2.restore();
+    }
     return true;
   }
 
