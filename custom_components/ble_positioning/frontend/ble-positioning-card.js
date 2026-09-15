@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.3.2";
+const CARD_VERSION = "5.3.3";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19731,7 +19731,9 @@ trigger:
     if (this._glLoading) return null;           // Import laeuft noch
     this._glLoading = true;
     try {
-      const mod = await import("/local/ble_positioning/three-scene.js");
+      // Version an die URL haengen, damit ein frueher gecachter 404 oder
+      // eine alte Fassung den Import nicht dauerhaft blockiert.
+      const mod = await import("/local/ble_positioning/three-scene.js?v=" + CARD_VERSION);
       const cv = this.shadowRoot.getElementById("gl");
       const sc = new mod.ThreeScene(cv, {
         envPreset: this._opts?.env_preset || "studio",

@@ -1,6 +1,6 @@
 # BLE Positioning — WebGL-Renderer: Übergabestand
 
-Stand: 5.3.2 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
+Stand: 5.3.3 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
 
 Dieses Dokument beschreibt den zweiten Renderer (Three.js) so, dass man
 ohne die vorherige Sitzung weiterarbeiten kann. Es ersetzt kein Lesen des
@@ -246,7 +246,23 @@ und wie sich das mit dem Verschieben der Musik-Bubble verträgt.
    Seither kopiert `_copy_js_files` alle `three-*.js` per glob, und ein
    fehlgeschlagener WebGL-Start zeigt einen Toast.
 
-7. **`preserveDrawingBuffer: true` ist Pflicht.** Ohne das Flag verwirft der
+7. **Ein gecachter 404 bleibt tot.** Modul-Importe nutzen den HTTP-Cache.
+   Wurde eine URL einmal als 404 beantwortet, scheitert `import()` weiter,
+   obwohl `fetch()` derselben URL längst 200 liefert — ein sehr
+   verwirrendes Bild bei der Fehlersuche. Deshalb tragen beide Import-Pfade
+   eine Version: die Karte lädt `three-scene.js?v=<CARD_VERSION>`, die
+   Szene lädt `three-furniture.js?m=<n>`. Bei Änderungen an den Möbeln das
+   `m=` hochzählen.
+
+8. **Doppelte Lovelace-Ressourcen.** War in der Praxis der übelste Fehler:
+   zwei Einträge auf dieselbe Datei mit verschiedenen Query-Parametern
+   (`?v=2.11.28` und `?v=5.3.2`). Query-Parameter gehören zum Cache-Schlüssel,
+   also lieferte der alte Eintrag eine uralte Fassung, und
+   `customElements.define` gewinnt beim ersten Aufruf. Ergebnis: eine
+   jahrealte Karte läuft, während auf der Platte die neue liegt. Bei
+   „Änderung kommt nicht an" immer zuerst die Ressourcenliste prüfen.
+
+9. **`preserveDrawingBuffer: true` ist Pflicht.** Ohne das Flag verwirft der
    Browser den Zeichenpuffer nach dem Compositing. Die Szene steht meist
    still und wird nur bei Änderungen neu gezeichnet — das Bild ist danach
    schwarz, obwohl `readPixels` direkt nach `render()` korrekte Farben

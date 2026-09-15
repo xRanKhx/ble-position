@@ -17,7 +17,10 @@
  */
 
 import * as THREE from "./vendor/three.module.js";
-import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js";
+// Query-Version im Pfad: Modul-Importe nutzen den HTTP-Cache, und eine
+// einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
+// ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
+import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=2";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
