@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.0.1";
+const CARD_VERSION = "5.0.2";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19634,7 +19634,27 @@ trigger:
   }
 
 
+  /* Wrapper: sichert den Canvas-Transform-Stack ab. Fliegt beim Zeichnen
+     eine Ausnahme, wird das ctx.restore() am Ende nie erreicht – dann
+     stapelt sich pro Frame eine weitere Skalierung und das Bild zoomt
+     endlos nach oben links weg. Genau das ist in 5.0.0 passiert. */
   _draw3DScene(ctx, rooms, doors, windows, lights, devices) {
+    const depth = typeof ctx.getTransform === "function" ? ctx.getTransform() : null;
+    try {
+      return this._draw3DSceneInner(ctx, rooms, doors, windows, lights, devices);
+    } catch (err) {
+      if (!this._3dErrLogged) {
+        this._3dErrLogged = true;
+        console.error("BLE Positioning: Fehler in der 3D-Szene", err);
+      }
+      // Transform auf den Stand vor dem Aufruf zurücksetzen
+      if (depth) { ctx.setTransform(depth); }
+      else { ctx.setTransform(1, 0, 0, 1, 0, 0); }
+      return undefined;
+    }
+  }
+
+  _draw3DSceneInner(ctx, rooms, doors, windows, lights, devices) {
     if (!ctx || !rooms) return;
     // Texturen laden/aktualisieren
     this._loadTextures();
@@ -19965,6 +19985,19 @@ trigger:
           const [wr,wg,wb] = [Math.round(rr*brightness), Math.round(gg*brightness), Math.round(bb*brightness)];
           const wallPts = [f[w.bi[0]], f[w.bi[1]], t[w.ti[1]], t[w.ti[0]]];
 
+          // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
+          const wallMidX = ((w.nx === 0)
+            ? (x1+x2)/2
+            : (w.nx > 0 ? x2 : x1)) + w.nx * 0.05;
+          const wallMidY = ((w.ny === 0)
+            ? (y1+y2)/2
+            : (w.ny > 0 ? y2 : y1)) + w.ny * 0.05;
+          const isOuterWall = !rooms.some(rr2 =>
+            rr2 !== room &&
+            wallMidX >= rr2.x1 - 0.1 && wallMidX <= rr2.x2 + 0.1 &&
+            wallMidY >= rr2.y1 - 0.1 && wallMidY <= rr2.y2 + 0.1
+          );
+
           // ── Wandvolumen: Krone und Außenseite (Studio-Theme) ──────────
           // Ohne Dicke wirken Wände wie Pappe. Die Oberseite ist der
           // Effekt, der ein Rendering wie ein gebautes Modell aussehen
@@ -19990,19 +20023,6 @@ trigger:
             ctx.strokeStyle = TH.edge(rr,gg,bb); ctx.lineWidth = 0.7;
             ctx.stroke();
           }
-
-          // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
-          const wallMidX = ((w.nx === 0)
-            ? (x1+x2)/2
-            : (w.nx > 0 ? x2 : x1)) + w.nx * 0.05;
-          const wallMidY = ((w.ny === 0)
-            ? (y1+y2)/2
-            : (w.ny > 0 ? y2 : y1)) + w.ny * 0.05;
-          const isOuterWall = !rooms.some(rr2 =>
-            rr2 !== room &&
-            wallMidX >= rr2.x1 - 0.1 && wallMidX <= rr2.x2 + 0.1 &&
-            wallMidY >= rr2.y1 - 0.1 && wallMidY <= rr2.y2 + 0.1
-          );
 
           const texKey = isOuterWall ? "wall_outer" : "wall_inner";
           const wallPat = this._texPattern(ctx, texKey, unitPx * 0.4);
