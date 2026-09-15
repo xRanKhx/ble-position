@@ -328,6 +328,99 @@ export class ThreeScene {
     return geo;
   }
 
+  /**
+   * Tageslicht nach Sonnenstand und Wetter.
+   *
+   * Der entscheidende Punkt: das Aussenlicht wird NICHT global in die
+   * Raeume geschuettet. Die Grundhelligkeit bleibt niedrig, und das
+   * Tageslicht kommt ueber eigene Lichter an Fenstern und offenen Tueren
+   * herein (siehe updateDaylightPorts). Dadurch ist ein fensterloser Raum
+   * von selbst dunkel – ohne Sonderregel, und eine Lampe wirkt dort auch
+   * tagsueber.
+   *
+   * @param {{elevation:number, condition:string, night:boolean}} o
+   */
+  setDaylight(o) {
+    if (!this.ok) return;
+    const night = !!o.night;
+    const cond = String(o.condition || "");
+    // Truebung: 1 = klar, 0.5 = stark bewoelkt, darunter Regen und Sturm
+    const clarity = night ? 0 :
+      /sunny|clear/.test(cond)            ? 1.0 :
+      /partlycloudy/.test(cond)           ? 0.78 :
+      /cloudy|fog/.test(cond)             ? 0.5 :
+      /rain|snow|sleet|hail/.test(cond)   ? 0.38 :
+      /pouring|lightning|storm/.test(cond)? 0.28 : 0.7;
+
+    // Sonnenhoehe: flach stehende Sonne bringt weniger Licht
+    const elev = Math.max(0, Math.min(90, o.elevation ?? 45));
+    const height = Math.sin((elev * Math.PI) / 180);
+    this._dayFactor = night ? 0 : clarity * (0.25 + 0.75 * height);
+
+    if (night) {
+      // Mondlicht: sehr schwach, kuehl. Ohne etwas Grundlicht waere die
+      // Szene komplett schwarz und man saehe nicht einmal die Umrisse.
+      this.hemi.intensity = 0.16;
+      this.hemi.color.setHex(0x2a3a5c);
+      this.hemi.groundColor.setHex(0x14171f);
+      this.sun.intensity = 0.12;
+      this.sun.color.setHex(0x9fb6e0);
+      this.sun.castShadow = false;          // Mondschatten waere aufdringlich
+    } else {
+      // Bedeckter Himmel streut: weniger Richtungslicht, mehr Diffuses
+      this.hemi.intensity = 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
+      this.hemi.color.setHex(0xdce8f5);
+      this.hemi.groundColor.setHex(0xb9a88f);
+      this.sun.intensity = 2.4 * this._dayFactor;
+      this.sun.color.setHex(clarity > 0.7 ? 0xfff3e0 : 0xeef2f8);
+      this.sun.castShadow = clarity > 0.45; // diffuses Licht wirft keine harten Schatten
+    }
+    this._applyPortIntensity();
+  }
+
+  /**
+   * Fenster und offene Tueren als Lichtquellen. Jede Oeffnung bekommt ein
+   * Licht knapp innerhalb des Raums – so wandert das Tageslicht dorthin,
+   * wo es real auch hinkommt.
+   * @param {Array<{x,y,sillH,topH,width,kind,open}>} ports
+   */
+  updateDaylightPorts(ports) {
+    if (!this.ok) return;
+    this._ports = this._ports || [];
+    for (const p of this._ports) this.scene.remove(p.light);
+    this._ports = [];
+
+    // Lichtbudget: WebGL bindet jede Lampe im Shader. Die Raumlampen
+    // brauchen Platz, daher hier deckeln und nach Flaeche priorisieren.
+    const list = (ports || [])
+      .filter(p => p.kind === "window" || p.open)
+      .sort((a, b) => (b.width || 1) - (a.width || 1))
+      .slice(0, 5);
+
+    for (const p of list) {
+      const h = ((p.sillH ?? 0.9) + (p.topH ?? 2.1)) / 2;
+      const l = new THREE.PointLight(0xffffff, 0, 0, 2);
+      l.castShadow = false;
+      // Etwas nach innen versetzt, sonst leuchtet es die Aussenwand an
+      l.position.set(p.x + (p.inx || 0) * 0.35, h, p.y + (p.iny || 0) * 0.35);
+      l.userData.area = Math.max(0.3, (p.width || 1) * ((p.topH ?? 2.1) - (p.sillH ?? 0.9)));
+      this.scene.add(l);
+      this._ports.push({ light: l });
+    }
+    this._applyPortIntensity();
+  }
+
+  _applyPortIntensity() {
+    if (!this._ports) return;
+    const f = this._dayFactor ?? 0.6;
+    for (const p of this._ports) {
+      // Grosse Fenster lassen mehr herein; Candela wie bei den Lampen
+      const lumen = 2600 * f * p.light.userData.area;
+      p.light.intensity = lumen / (4 * Math.PI);
+      p.light.color.setHex(f > 0.55 ? 0xfff4e2 : 0xe8eef7);
+    }
+  }
+
   onContextLost(fn) { this._onLost = fn; }
 
   /* Ambient Occlusion fuer den Boden: zum Wandfuss hin wird es dunkler,
@@ -416,7 +509,9 @@ export class ThreeScene {
 
   _buildLights() {
     // Himmel/Boden-Aufhellung ersetzt teure globale Beleuchtung
-    this.scene.add(new THREE.HemisphereLight(0xdcE8f5, 0xb9a88f, 1.5));
+    // Referenz behalten: die Grundhelligkeit haengt an Tageszeit und Wetter
+    this.hemi = new THREE.HemisphereLight(0xdcE8f5, 0xb9a88f, 1.5);
+    this.scene.add(this.hemi);
 
     const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
     sun.castShadow = true;
@@ -864,6 +959,23 @@ export class ThreeScene {
       if (it.scale && it.scale !== 1) obj.scale.setScalar(it.scale);
       group.add(obj);
     }
+
+    // Oeffnungen fuer das Tageslicht merken, mit Richtung nach innen
+    const ports = openings.map(o => {
+      let inx = 0, iny = 0;
+      for (const r of rooms) {
+        if (r.x1 == null) continue;
+        const rx1 = Math.min(r.x1, r.x2), rx2 = Math.max(r.x1, r.x2);
+        const ry1 = Math.min(r.y1, r.y2), ry2 = Math.max(r.y1, r.y2);
+        if (o.x >= rx1 - 0.5 && o.x <= rx2 + 0.5 && o.y >= ry1 - 0.5 && o.y <= ry2 + 0.5) {
+          iny = Math.abs(o.y - ry1) < 0.45 ? 1 : Math.abs(o.y - ry2) < 0.45 ? -1 : 0;
+          inx = Math.abs(o.x - rx1) < 0.45 ? 1 : Math.abs(o.x - rx2) < 0.45 ? -1 : 0;
+          break;
+        }
+      }
+      return { ...o, inx, iny, open: o.kind === "door" && (o.openAmount || 0) > 0.1 };
+    });
+    this.updateDaylightPorts(ports);
 
     this.scene.add(group);
     this._objects.push(group);

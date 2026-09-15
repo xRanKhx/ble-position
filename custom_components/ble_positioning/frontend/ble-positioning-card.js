@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.6.0";
+const CARD_VERSION = "5.7.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19829,7 +19829,8 @@ trigger:
     // und Lampen ändern sich ständig und dürfen keinen Neuaufbau auslösen.
     const key = JSON.stringify([
       rooms.map(r => [r.x1, r.y1, r.x2, r.y2, r.color]),
-      doors.map(o => [o.x, o.y, o.width, o.height]),
+      doors.map(o => [o.x, o.y, o.width, o.height,
+                      o.entity ? this._hass?.states?.[o.entity]?.state : o.state]),
       windows.map(o => [o.x, o.y, o.width, o.height, o.sill]),
       furniture.map(f => [f.type, f.x, f.y, f.rotation, f.state, f.level]),
       this._data?.floor_w, this._data?.floor_h, this._wallHeight,
@@ -19838,9 +19839,12 @@ trigger:
     if (key !== this._glDataKey) {
       sc.build({
         rooms,
-        doors: doors.map(o => ({
-          ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
-        })),
+        doors: doors.map(o => {
+          const st2 = o.entity ? this._hass?.states?.[o.entity]?.state : o.state;
+          // Offene Tueren lassen Tageslicht herein, geschlossene nicht
+          return { ...o, state: st2,
+                   open_amount: (st2 === "open" || st2 === "on") ? 1 : (o.open_amount ?? 0) };
+        }),
         windows: windows.map(o => ({
           ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
         })),
@@ -19856,6 +19860,22 @@ trigger:
       this._glLightKey = null;
     }
     sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
+
+    // ── Tageslicht nach Sonnenstand und Wetter ────────────────────────
+    // Nachts bleibt der Innenraum dunkel, damit eine Lampe ueberhaupt
+    // etwas bewirkt; bei Bewoelkung kommt weniger und weicheres Licht.
+    // Das Licht faellt durch Fenster und offene Tueren ein, deshalb
+    // bleibt ein Raum ohne Oeffnung von selbst dunkel.
+    const wSt = this._weatherState();
+    const lkeyDay = [this._isDark(), wSt?.condition, Math.round(parseFloat(att.elevation) || 0)].join("|");
+    if (lkeyDay !== this._glDayKey) {
+      sc.setDaylight({
+        elevation: parseFloat(att.elevation),
+        condition: wSt?.condition,
+        night: this._isDark(),
+      });
+      this._glDayKey = lkeyDay;
+    }
 
     // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
     // Die gesamte 2D-Kulisse samt Wolken, Gestirn und Temperatur wird
