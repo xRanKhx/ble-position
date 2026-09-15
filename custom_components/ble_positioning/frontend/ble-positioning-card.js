@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.5.0";
+const CARD_VERSION = "5.6.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1204,8 +1204,8 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
-      <canvas id="wx" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;"></canvas>
-      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
+      <canvas id="wx" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
+      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
@@ -19720,6 +19720,22 @@ trigger:
      Zweiter Renderer neben der Canvas-2D-Szene, aktiv im Theme "webgl".
      Faellt bei fehlendem WebGL oder Kontextverlust auf 2D zurueck, damit
      aeltere Geraete weiterhin ein Bild bekommen. */
+  /* HS nach RGB. HA liefert Farbton 0..360 und Saettigung 0..100. */
+  _hsToRgb(h, sPct) {
+    const sat = Math.max(0, Math.min(100, sPct)) / 100;
+    const hh = ((h % 360) + 360) % 360 / 60;
+    const c = sat, x = c * (1 - Math.abs((hh % 2) - 1));
+    let r = 0, g = 0, b = 0;
+    if      (hh < 1) { r = c; g = x; }
+    else if (hh < 2) { r = x; g = c; }
+    else if (hh < 3) { g = c; b = x; }
+    else if (hh < 4) { g = x; b = c; }
+    else if (hh < 5) { r = x; b = c; }
+    else             { r = c; b = x; }
+    const m = 1 - c;
+    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
+  }
+
   _webglWanted() {
     return (this._3dTheme === "webgl") &&
            (this._mode === "view" || this._mode === "screensaver") &&
@@ -19778,7 +19794,7 @@ trigger:
     // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
     // Drehen, Zoomen und der Editor verloren.
     c2.style.position = on ? "relative" : "";
-    c2.style.zIndex = on ? "1" : "";
+    c2.style.zIndex = on ? "3" : "";
     if (c2.style.visibility === "hidden") c2.style.visibility = "";
   }
 
@@ -19886,13 +19902,23 @@ trigger:
     const lamps = (this._data?.lights || []).map(l => {
       const st = l.entity ? this._hass?.states?.[l.entity] : null;
       const a  = st?.attributes || {};
-      // Auch Lichter liegen in mx/my/mz
+      // Auch Lichter liegen in mx/my/mz.
+      // Farbe: HA meldet je nach Lampe rgb_color, hs_color, xy_color,
+      // color_temp_kelvin oder color_temp in Mired. Nur zwei davon zu
+      // lesen heisst, dass die meisten Lampen immer gleich aussehen.
+      let rgb = a.rgb_color || l.rgb || null;
+      if (!rgb && Array.isArray(a.hs_color) && a.hs_color.length === 2) {
+        rgb = this._hsToRgb(a.hs_color[0], a.hs_color[1]);
+      }
+      let kelvin = a.color_temp_kelvin || null;
+      // color_temp ist in Mired: Kelvin = 1e6 / Mired
+      const mired = a.color_temp ?? l.color_temp;
+      if (!kelvin && mired) kelvin = Math.round(1e6 / mired);
       return {
         entity: l.entity, x: l.mx ?? l.x, y: l.my ?? l.y, z: l.mz ?? l.z,
         on: st ? st.state === "on" : !!l.on,
         brightness: a.brightness ?? (l.brightness ?? 255),
-        rgb: a.rgb_color || l.rgb || null,
-        kelvin: a.color_temp_kelvin || l.color_temp || null,
+        rgb, kelvin,
       };
     });
     const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));

@@ -20,68 +20,155 @@ import * as THREE from "./vendor/three.module.js";
 // Query-Version im Pfad: Modul-Importe nutzen den HTTP-Cache, und eine
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
-import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=3";
+import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
    die Aufloesung laesst sich am Geraet ausrichten. */
 
-function woodTexture(renderer) {
+function _canvasFrom(w, h, draw) {
   const c = document.createElement("canvas");
-  c.width = 512; c.height = 512;
-  const x = c.getContext("2d");
-  const plank = 64;
-  for (let i = 0; i < c.height / plank; i++) {
-    // Leicht wechselnde Grundtoene, sonst wirkt der Boden wie Tapete
-    const base = 178 + Math.floor(Math.random() * 26);
-    x.fillStyle = `rgb(${base},${Math.round(base * 0.79)},${Math.round(base * 0.55)})`;
-    x.fillRect(0, i * plank, c.width, plank);
-    // Maserung
-    for (let g = 0; g < 26; g++) {
-      const y = i * plank + Math.random() * plank;
-      x.strokeStyle = `rgba(90,60,30,${0.03 + Math.random() * 0.06})`;
-      x.lineWidth = 0.5 + Math.random();
-      x.beginPath();
-      x.moveTo(0, y);
-      for (let px = 0; px <= c.width; px += 32) {
-        x.lineTo(px, y + Math.sin((px + i * 40) / 60) * 1.4);
-      }
-      x.stroke();
-    }
-    // Fuge zwischen den Reihen
-    x.strokeStyle = "rgba(60,40,20,0.35)";
-    x.lineWidth = 1.5;
-    x.beginPath(); x.moveTo(0, i * plank); x.lineTo(c.width, i * plank); x.stroke();
-    // Stossfugen versetzt
-    const off = (i % 2) * 140;
-    for (let sx = off; sx < c.width; sx += 256) {
-      x.beginPath(); x.moveTo(sx, i * plank); x.lineTo(sx, (i + 1) * plank); x.stroke();
+  c.width = w; c.height = h;
+  draw(c.getContext("2d"), c);
+  return c;
+}
+
+/* Normal-Map aus einem Graustufenbild. Die Helligkeit wird als Hoehe
+   gelesen und per Sobel-Operator abgeleitet – so bekommen Fugen und
+   Maserung echte Tiefe, statt nur aufgemalt zu sein. */
+function normalFromHeight(srcCanvas, strength) {
+  const w = srcCanvas.width, h = srcCanvas.height;
+  const src = srcCanvas.getContext("2d").getImageData(0, 0, w, h).data;
+  const lum = new Float32Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    lum[i] = (src[i*4] * 0.299 + src[i*4+1] * 0.587 + src[i*4+2] * 0.114) / 255;
+  }
+  const at = (x, y) => lum[((y + h) % h) * w + ((x + w) % w)];
+  const out = new ImageData(w, h);
+  const k = strength ?? 2.2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const dx = (at(x-1,y-1) + 2*at(x-1,y) + at(x-1,y+1))
+               - (at(x+1,y-1) + 2*at(x+1,y) + at(x+1,y+1));
+      const dy = (at(x-1,y-1) + 2*at(x,y-1) + at(x+1,y-1))
+               - (at(x-1,y+1) + 2*at(x,y+1) + at(x+1,y+1));
+      let nx = dx * k, ny = dy * k, nz = 1;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      const i = (y * w + x) * 4;
+      out.data[i]   = ((nx / len) * 0.5 + 0.5) * 255;
+      out.data[i+1] = ((ny / len) * 0.5 + 0.5) * 255;
+      out.data[i+2] = ((nz / len) * 0.5 + 0.5) * 255;
+      out.data[i+3] = 255;
     }
   }
-  const t = new THREE.CanvasTexture(c);
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  c.getContext("2d").putImageData(out, 0, 0);
+  return c;
+}
+
+function _tex(canvas, renderer, srgb) {
+  const t = new THREE.CanvasTexture(canvas);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
+  if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   const aniso = renderer?.capabilities?.getMaxAnisotropy?.() || 1;
   t.anisotropy = Math.min(8, aniso);
   return t;
 }
 
-function plasterTexture() {
-  const c = document.createElement("canvas");
-  c.width = c.height = 256;
-  const x = c.getContext("2d");
-  x.fillStyle = "#f2f2ef";
-  x.fillRect(0, 0, 256, 256);
-  const img = x.getImageData(0, 0, 256, 256);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 12;
-    img.data[i] += n; img.data[i + 1] += n; img.data[i + 2] += n;
-  }
-  x.putImageData(img, 0, 0);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+/* Dielenboden als vollstaendiges PBR-Set: Farbe, Normale, Rauheit.
+   Die Fugen sind in allen drei Karten an derselben Stelle – nur dann
+   wirkt der Boden wie Holz und nicht wie bedrucktes Papier. */
+function woodMaps(renderer) {
+  const S = 512, plank = 64;
+  const seams = [];
+  const albedo = _canvasFrom(S, S, (x) => {
+    for (let i = 0; i < S / plank; i++) {
+      const base = 178 + Math.floor(Math.random() * 26);
+      x.fillStyle = `rgb(${base},${Math.round(base*0.79)},${Math.round(base*0.55)})`;
+      x.fillRect(0, i * plank, S, plank);
+      for (let g = 0; g < 26; g++) {
+        const y = i * plank + Math.random() * plank;
+        x.strokeStyle = `rgba(90,60,30,${0.03 + Math.random() * 0.06})`;
+        x.lineWidth = 0.5 + Math.random();
+        x.beginPath(); x.moveTo(0, y);
+        for (let px = 0; px <= S; px += 32) x.lineTo(px, y + Math.sin((px + i*40)/60) * 1.4);
+        x.stroke();
+      }
+      const off = (i % 2) * 140;
+      seams.push({ y: i * plank, off });
+      x.strokeStyle = "rgba(60,40,20,0.35)";
+      x.lineWidth = 1.5;
+      x.beginPath(); x.moveTo(0, i * plank); x.lineTo(S, i * plank); x.stroke();
+      for (let sx = off; sx < S; sx += 256) {
+        x.beginPath(); x.moveTo(sx, i * plank); x.lineTo(sx, (i+1) * plank); x.stroke();
+      }
+    }
+  });
+
+  // Hoehenbild: nur die Fugen sind tief, die Maserung kaum
+  const height = _canvasFrom(S, S, (x) => {
+    x.fillStyle = "#b8b8b8"; x.fillRect(0, 0, S, S);
+    x.strokeStyle = "#202020"; x.lineWidth = 2.5;
+    for (const sm of seams) {
+      x.beginPath(); x.moveTo(0, sm.y); x.lineTo(S, sm.y); x.stroke();
+      for (let sx = sm.off; sx < S; sx += 256) {
+        x.beginPath(); x.moveTo(sx, sm.y); x.lineTo(sx, sm.y + plank); x.stroke();
+      }
+    }
+    // leichte Wellung der Dielen
+    for (let i = 0; i < 90; i++) {
+      x.strokeStyle = `rgba(255,255,255,${0.05 + Math.random()*0.06})`;
+      x.lineWidth = 2 + Math.random() * 4;
+      const y = Math.random() * S;
+      x.beginPath(); x.moveTo(0, y); x.lineTo(S, y + (Math.random()-0.5)*6); x.stroke();
+    }
+  });
+
+  // Rauheit: Fugen matt, Dielenmitte seidig
+  const rough = _canvasFrom(S, S, (x) => {
+    x.fillStyle = "#6e6e6e"; x.fillRect(0, 0, S, S);
+    x.strokeStyle = "#d8d8d8"; x.lineWidth = 3;
+    for (const sm of seams) {
+      x.beginPath(); x.moveTo(0, sm.y); x.lineTo(S, sm.y); x.stroke();
+      for (let sx = sm.off; sx < S; sx += 256) {
+        x.beginPath(); x.moveTo(sx, sm.y); x.lineTo(sx, sm.y + plank); x.stroke();
+      }
+    }
+  });
+
+  return {
+    map:          _tex(albedo, renderer, true),
+    normalMap:    _tex(normalFromHeight(height, 2.6), renderer, false),
+    roughnessMap: _tex(rough, renderer, false),
+  };
+}
+
+function plasterMaps(renderer) {
+  const S = 256;
+  const base = _canvasFrom(S, S, (x) => {
+    x.fillStyle = "#f2f2ef"; x.fillRect(0, 0, S, S);
+    const img = x.getImageData(0, 0, S, S);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 12;
+      img.data[i] += n; img.data[i+1] += n; img.data[i+2] += n;
+    }
+    x.putImageData(img, 0, 0);
+  });
+  // Feines Korn als Relief – Putz ist nie spiegelglatt
+  const height = _canvasFrom(S, S, (x) => {
+    x.fillStyle = "#808080"; x.fillRect(0, 0, S, S);
+    const img = x.getImageData(0, 0, S, S);
+    for (let i = 0; i < img.data.length; i += 4) {
+      const n = (Math.random() - 0.5) * 42;
+      img.data[i] += n; img.data[i+1] += n; img.data[i+2] += n;
+    }
+    x.putImageData(img, 0, 0);
+  });
+  return {
+    map:       _tex(base, renderer, true),
+    normalMap: _tex(normalFromHeight(height, 0.7), renderer, false),
+  };
 }
 
 /* Umgebungsmap: ohne sie hat Glas nichts zu spiegeln und wirkt flach,
@@ -184,6 +271,7 @@ export class ThreeScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = true;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
@@ -209,14 +297,83 @@ export class ThreeScene {
     canvas.addEventListener("webglcontextlost", this._lostHandler, false);
     canvas.addEventListener("webglcontextrestored", this._restoredHandler, false);
 
-    this.wood = woodTexture(this.renderer);
-    this.plaster = plasterTexture();
+    this.wood = woodMaps(this.renderer);
+    this.plaster = plasterMaps(this.renderer);
     // Reflexionen fuer alle Materialien, nicht nur fuers Glas
     this.ok = true;
     this.setEnvironment(opts?.envPreset || "studio", opts?.envUrl);
   }
 
+  /* Quader mit gefasten Kanten. Three.js bringt so etwas nicht mit;
+     eine ExtrudeGeometry mit kleiner Bevel ist der guenstigste Weg. */
+  static chamferBox(w, h, d, bevel) {
+    const b = Math.min(bevel ?? 0.012, w / 3, h / 3, d / 3);
+    if (b <= 0.002) return new THREE.BoxGeometry(w, h, d);
+    const sh = new THREE.Shape();
+    sh.moveTo(-w / 2 + b, -h / 2);
+    sh.lineTo(w / 2 - b, -h / 2);
+    sh.lineTo(w / 2, -h / 2 + b);
+    sh.lineTo(w / 2, h / 2 - b);
+    sh.lineTo(w / 2 - b, h / 2);
+    sh.lineTo(-w / 2 + b, h / 2);
+    sh.lineTo(-w / 2, h / 2 - b);
+    sh.lineTo(-w / 2, -h / 2 + b);
+    sh.closePath();
+    const geo = new THREE.ExtrudeGeometry(sh, {
+      depth: d - b * 2, bevelEnabled: true, bevelSize: b, bevelThickness: b,
+      bevelSegments: 1, curveSegments: 1,
+    });
+    geo.translate(0, 0, -(d - b * 2) / 2);
+    geo.computeVertexNormals();
+    return geo;
+  }
+
   onContextLost(fn) { this._onLost = fn; }
+
+  /* Ambient Occlusion fuer den Boden: zum Wandfuss hin wird es dunkler,
+     in den Ecken am staerksten. Echtes SSAO waere ein Post-Processing-Pass
+     mit einem zusaetzlichen Vollbild-Durchlauf pro Frame – auf dem Handy
+     teuer. Eine gebackene Karte kostet einmalig ein paar Millisekunden
+     und traegt denselben Eindruck: Flaechen wirken angefasst statt
+     aufgelegt.
+     Der Verlauf wird in Metern gerechnet, damit ein grosser Raum nicht
+     mehr Schatten bekommt als ein kleiner. */
+  _roomAO(w, h) {
+    const key = w.toFixed(2) + "x" + h.toFixed(2);
+    this._aoCache = this._aoCache || new Map();
+    if (this._aoCache.has(key)) return this._aoCache.get(key);
+
+    const S = 256;
+    const c = document.createElement("canvas");
+    c.width = c.height = S;
+    const x = c.getContext("2d");
+    x.fillStyle = "#ffffff";
+    x.fillRect(0, 0, S, S);
+
+    // Abklinglaenge: rund 45 cm, in Pixel je Achse umgerechnet
+    const fall = 0.45;
+    const px = Math.min(0.42, fall / Math.max(w, 0.1)) * S;
+    const py = Math.min(0.42, fall / Math.max(h, 0.1)) * S;
+    const edge = (grad) => { x.fillStyle = grad; x.fillRect(0, 0, S, S); };
+
+    const g1 = x.createLinearGradient(0, 0, px, 0);
+    g1.addColorStop(0, "rgba(0,0,0,0.42)"); g1.addColorStop(1, "rgba(0,0,0,0)");
+    edge(g1);
+    const g2 = x.createLinearGradient(S, 0, S - px, 0);
+    g2.addColorStop(0, "rgba(0,0,0,0.42)"); g2.addColorStop(1, "rgba(0,0,0,0)");
+    edge(g2);
+    const g3 = x.createLinearGradient(0, 0, 0, py);
+    g3.addColorStop(0, "rgba(0,0,0,0.42)"); g3.addColorStop(1, "rgba(0,0,0,0)");
+    edge(g3);
+    const g4 = x.createLinearGradient(0, S, 0, S - py);
+    g4.addColorStop(0, "rgba(0,0,0,0.42)"); g4.addColorStop(1, "rgba(0,0,0,0)");
+    edge(g4);
+
+    const t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    this._aoCache.set(key, t);
+    return t;
+  }
 
   /**
    * Umgebung setzen. Ohne eigene Datei greift eines der Presets, das ist
@@ -263,9 +420,13 @@ export class ThreeScene {
 
     const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.bias = -0.0008;
-    sun.shadow.normalBias = 0.02;
+    // Auflösung nach Leistung: eine 4k-Map kostet 64 MB, das lohnt nur
+    // auf kräftiger Hardware. Radius weicht die Kante auf.
+    const big = (navigator.hardwareConcurrency || 4) > 4;
+    sun.shadow.mapSize.set(big ? 4096 : 2048, big ? 4096 : 2048);
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.025;
+    sun.shadow.radius = 2.5;
     this.sun = sun;
     this.scene.add(sun);
     this.scene.add(sun.target);
@@ -287,9 +448,12 @@ export class ThreeScene {
     const box = (a0, a1, y0, y1) => {
       const w = a1 - a0, h = y1 - y0;
       if (w <= 0.001 || h <= 0.001) return;
+      // Leichte Fase an den Kanten: eine scharfe Kante faengt kein Licht
+      // und wirkt deshalb wie ausgeschnittenes Papier. Der Grat von wenigen
+      // Millimetern erzeugt den hellen Saum, den echte Wandkanten haben.
       const geo = axis === "x"
-        ? new THREE.BoxGeometry(w, h, wd)
-        : new THREE.BoxGeometry(wd, h, w);
+        ? ThreeScene.chamferBox(w, h, wd)
+        : ThreeScene.chamferBox(wd, h, w);
       const m = new THREE.Mesh(geo, mat);
       const ac = (a0 + a1) / 2, yc = (y0 + y1) / 2;
       m.position.set(axis === "x" ? ac : fixed, yc, axis === "x" ? fixed : ac);
@@ -608,14 +772,23 @@ export class ThreeScene {
 
       // Boden: eigene Texturkopie, damit repeat pro Raum stimmt und die
       // Dielen ueber Raumgrenzen hinweg nicht springen.
-      const wood = this.wood.clone();
-      wood.needsUpdate = true;
-      wood.repeat.set(rw / 2.2, rh / 2.2);
-      wood.offset.set(rx1 / 2.2, ry1 / 2.2);
-      const floor = new THREE.Mesh(
-        new THREE.PlaneGeometry(rw, rh),
-        new THREE.MeshStandardMaterial({ map: wood, roughness: 0.72, metalness: 0 })
-      );
+      // Alle drei Karten teilen dieselbe Kachelung, sonst sitzen Fugen,
+      // Relief und Glanz nicht uebereinander.
+      const rep = [rw / 2.2, rh / 2.2], offs = [rx1 / 2.2, ry1 / 2.2];
+      const mk = (t) => { const c = t.clone(); c.needsUpdate = true;
+        c.repeat.set(rep[0], rep[1]); c.offset.set(offs[0], offs[1]); return c; };
+      const floorGeo = new THREE.PlaneGeometry(rw, rh);
+      // aoMap braucht einen zweiten UV-Satz; der erste passt hier genau.
+      floorGeo.setAttribute("uv1", floorGeo.getAttribute("uv"));
+      const floor = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({
+        map: mk(this.wood.map),
+        normalMap: mk(this.wood.normalMap),
+        normalScale: new THREE.Vector2(0.8, 0.8),
+        roughnessMap: mk(this.wood.roughnessMap),
+        roughness: 1, metalness: 0,
+        aoMap: this._roomAO(rw, rh), aoMapIntensity: 1,
+        envMapIntensity: 0.55,
+      }));
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(rx1 + rw / 2, 0.001, ry1 + rh / 2);
       floor.receiveShadow = true;
@@ -624,7 +797,9 @@ export class ThreeScene {
       // Waende als Koerper mit Dicke, Decke bleibt offen (Puppenhaus).
       // Nur Nord- und Westwand, damit der Raum zur Kamera hin offen bleibt.
       const wallMat = new THREE.MeshStandardMaterial({
-        map: this.plaster, color: 0xffffff, roughness: 0.95, metalness: 0,
+        map: this.plaster.map, normalMap: this.plaster.normalMap,
+        normalScale: new THREE.Vector2(0.35, 0.35),
+        color: 0xffffff, roughness: 0.94, metalness: 0, envMapIntensity: 0.4,
       });
       // Alle vier Wände bauen. Nur Nord und West zu zeichnen war zu
       // einfach gedacht: Fenster an der Süd- oder Ostwand hatten dann
@@ -847,8 +1022,11 @@ export class ThreeScene {
       this._lamps.clear();
     }
     disposeFurnitureCache();
-    this.wood?.dispose();
-    this.plaster?.dispose();
+    for (const set of [this.wood, this.plaster]) {
+      if (!set) continue;
+      for (const t of Object.values(set)) t?.dispose?.();
+    }
+    if (this._aoCache) { for (const t of this._aoCache.values()) t.dispose(); this._aoCache.clear(); }
     this.env?.dispose();
     this.renderer?.dispose();
   }
