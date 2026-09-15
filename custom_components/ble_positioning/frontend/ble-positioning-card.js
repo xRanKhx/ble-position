@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.7.4";
+const CARD_VERSION = "4.8.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -4319,16 +4319,35 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
-    // ── Musik-Bubble: Play/Pause per Klick ──────────────────────
+    // ── Musik-Bubble: Leiste öffnen bzw. Transport steuern ──────
+    // _canvasXY liefert bereits physische Canvas-Pixel, genau wie die
+    // beim Zeichnen gemerkten Zonen – hier darf nicht nochmal mit dpr
+    // multipliziert werden.
     if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
-      const {cx:mcx,cy:mcy} = this._canvasXY(e);
-      const dpr = window.devicePixelRatio||1;
-      for (const z of this._musicClickZonesFrame) {
-        if (mcx>=z.x*dpr && mcx<=(z.x+z.w)*dpr && mcy>=z.y*dpr && mcy<=(z.y+z.h)*dpr) {
-          try { await this._hass.callService("media_player","media_play_pause",{entity_id:z.entity}); this._showToast("\u23ef Play/Pause"); } catch(e2){}
-          return;
+      // Ein Verschieben endet nicht als Klick
+      if (this._musicDidDrag) { this._musicDidDrag = false; return; }
+      const { cx: mcx, cy: mcy } = this._canvasXY(e);
+      const hit = this._musicClickZonesFrame.find(z =>
+        mcx >= z.x && mcx <= z.x + z.w && mcy >= z.y && mcy <= z.y + z.h);
+      if (hit && hit.kind === "ctl") {
+        const svc = { play: "media_play_pause", next: "media_next_track",
+                      prev: "media_previous_track" }[hit.act];
+        this._musicCtlHot = hit.entity + ":" + hit.act;
+        setTimeout(() => { this._musicCtlHot = null; this._markDirty(); }, 180);
+        try {
+          await this._hass.callService("media_player", svc, { entity_id: hit.entity });
+        } catch (e2) {
+          this._showToast("Steuerung fehlgeschlagen");
         }
+        this._markDirty();
+        return;
       }
+      if (hit && hit.kind === "bubble") {
+        this._musicCtlOpen = this._musicCtlOpen === hit.entity ? null : hit.entity;
+        this._markDirty();
+        return;
+      }
+      if (this._musicCtlOpen) { this._musicCtlOpen = null; this._markDirty(); }
     }
 
     // ── Aktives Modul: Tap delegieren (generisch für alle Module) ────
@@ -4393,6 +4412,31 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasDown(e) {
+    // ── Musik-Bubble: Gedrückthalten verschiebt sie ────────────────────────
+    // Nur in 2D. In 3D belegt der Orbit-Drag dieselbe Geste.
+    const _m3d = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
+    this._musicDidDrag = false;
+    if (!_m3d && this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
+        && e.button === 0) {
+      const { cx: dcx, cy: dcy } = this._canvasXY(e);
+      const z = this._musicClickZonesFrame.find(q => q.kind === "bubble" &&
+        dcx >= q.x && dcx <= q.x + q.w && dcy >= q.y && dcy <= q.y + q.h);
+      if (z) {
+        const cur = this._musicOffset(z.entity);
+        this._musicPress = {
+          entity: z.entity, sx: dcx, sy: dcy,
+          ox: cur.dx, oy: cur.dy,
+          timer: setTimeout(() => {
+            if (!this._musicPress) return;
+            this._musicDrag = { ...this._musicPress };
+            this._canvas.style.cursor = "grabbing";
+            this._markDirty();
+          }, 420),
+        };
+        // kein return: ein kurzer Klick soll weiterhin die Leiste öffnen
+      }
+    }
+
     // ── 3D mode: intercept for orbit drag ──────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       this._3dDrag = { x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
@@ -4600,6 +4644,27 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasMove(e) {
+    // ── Musik-Bubble wird verschoben ────────────────────────────────────
+    if (this._musicDrag) {
+      const { cx: mx, cy: my } = this._canvasXY(e);
+      this._setMusicOffset(this._musicDrag.entity,
+        this._musicDrag.ox + (mx - this._musicDrag.sx),
+        this._musicDrag.oy + (my - this._musicDrag.sy));
+      this._musicDidDrag = true;
+      this._markDirty();
+      return;
+    }
+    // Vor dem Halten: kleine Bewegungen brechen den Long-Press ab,
+    // damit ein Wischen nicht versehentlich verschiebt.
+    if (this._musicPress) {
+      const { cx: mx, cy: my } = this._canvasXY(e);
+      if (Math.abs(mx - this._musicPress.sx) > 6 ||
+          Math.abs(my - this._musicPress.sy) > 6) {
+        clearTimeout(this._musicPress.timer);
+        this._musicPress = null;
+      }
+    }
+
     // ── Aktives Modul: Drag/Resize bewegen (generisch) ───────────────────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -4919,6 +4984,17 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasUp(e) {
+    // ── Musik-Bubble: Halten bzw. Ziehen beenden ────────────────────────
+    if (this._musicPress) { clearTimeout(this._musicPress.timer); this._musicPress = null; }
+    if (this._musicDrag) {
+      this._musicDrag = null;
+      this._canvas.style.cursor = "default";
+      this._markDirty();
+      // _musicDidDrag bleibt gesetzt, damit der folgende click nicht
+      // als Tippen gewertet wird; _onCanvasClick setzt es zurück.
+      return;
+    }
+
     // ── Aktives Modul: Drag/Resize beenden (generisch) ──────────────────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -5423,8 +5499,7 @@ class BLEPositioningCard extends HTMLElement {
         const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
         const hasMusicAnim = this._opts?.show_music_bubble &&
           (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
-            this._hass?.states?.[d.entity]?.state==="playing");
-        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
+            this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
         const hasWeatherAnim = this._opts?.show_weather && this._opts?.weather_animate !== false
           && !!this._weatherState();
         const hasCoverAnim = this._opts?.cover_motion !== false &&
@@ -13267,9 +13342,102 @@ _drawDoors() {
   /* Album-Cover als rotierende Schallplatte.
      Rillen und Glanz bleiben stehen, nur Label und Reflex drehen sich –
      sonst wäre die Drehung auf einer symmetrischen Scheibe unsichtbar. */
+  /* Laufschrift: passt der Text in maxW, wird er zentriert gezeichnet.
+     Sonst läuft er endlos durch, mit Lücke zwischen den Wiederholungen.
+     Der Aufrufer muss ctx.font und fillStyle vorher setzen. */
+  /* Verschiebung einer Musik-Bubble. Bleibt über Neuladen erhalten,
+     ohne dafür das Backend anfassen zu müssen. */
+  _musicOffset(entity) {
+    if (!this._musicOff) {
+      this._musicOff = {};
+      try {
+        const raw = localStorage.getItem("ble_music_off");
+        if (raw) this._musicOff = JSON.parse(raw) || {};
+      } catch (e) { this._musicOff = {}; }
+    }
+    return this._musicOff[entity] || { dx: 0, dy: 0 };
+  }
+
+  _setMusicOffset(entity, dx, dy) {
+    this._musicOffset(entity);               // sorgt für geladenen Cache
+    this._musicOff[entity] = { dx, dy };
+    try {
+      localStorage.setItem("ble_music_off", JSON.stringify(this._musicOff));
+    } catch (e) { /* Speicher voll oder gesperrt – Versatz gilt nur temporär */ }
+  }
+
+  /* Play/Pause, vor und zurück. Zonen werden für _onCanvasClick registriert. */
+  _drawMediaControls(ctx, x, y, w, h, entity, st) {
+    const playing = st?.state === "playing";
+    const btns = [
+      { id: "prev", sym: "\u23ee" },
+      { id: "play", sym: playing ? "\u23f8" : "\u25b6" },
+      { id: "next", sym: "\u23ed" },
+    ];
+    const bw = w / btns.length;
+
+    ctx.save();
+    // Abtrennung nach oben
+    ctx.strokeStyle = "rgba(56,189,248,0.22)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x + 4, y); ctx.lineTo(x + w - 4, y); ctx.stroke();
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    btns.forEach((b, i) => {
+      const bxx = x + i * bw;
+      const cxx = bxx + bw / 2, cyy = y + h / 2;
+      const hot = this._musicCtlHot === entity + ":" + b.id;
+      if (hot) {
+        ctx.fillStyle = "rgba(56,189,248,0.22)";
+        ctx.beginPath();
+        ctx.roundRect(bxx + 2, y + 3, bw - 4, h - 6, 5);
+        ctx.fill();
+      }
+      ctx.fillStyle = b.id === "play" ? "#38bdf8" : "#94a3b8";
+      ctx.font = (b.id === "play" ? "13px" : "11px") + " system-ui, sans-serif";
+      ctx.fillText(b.sym, cxx, cyy);
+      (this._musicClickZones ||= []).push({
+        entity, x: bxx, y, w: bw, h, kind: "ctl", act: b.id,
+      });
+    });
+    ctx.textBaseline = "alphabetic";
+    ctx.restore();
+  }
+
+  _marqueeText(ctx, text, cx, y, maxW) {
+    const s = String(text || "");
+    if (!s) return false;
+    const tw = ctx.measureText(s).width;
+    if (tw <= maxW) {
+      ctx.textAlign = "center";
+      ctx.fillText(s, cx, y);
+      return false;
+    }
+    const gap  = 18;                       // Lücke zwischen den Durchläufen
+    const span = tw + gap;
+    const spd  = 22;                       // Pixel pro Sekunde
+    const off  = this._opts?.media_spin !== false
+      ? ((Date.now() / 1000) * spd) % span
+      : 0;
+    const left = cx - maxW / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left, y - 10, maxW, 16);
+    ctx.clip();
+    ctx.textAlign = "left";
+    ctx.fillText(s, left - off, y);
+    ctx.fillText(s, left - off + span, y);   // nahtlos anschließend
+    ctx.restore();
+    ctx.textAlign = "center";
+    return true;
+  }
+
   _drawVinyl(ctx, cx, cy, R, img, spinning) {
     const T = Date.now() / 1000;
-    const animate = this._opts?.weather_animate !== false;
+    // Eigenes Gate: die Drehung hing vorher an weather_animate und stand
+    // still, sobald die Wetter-Animation aus war.
+    const animate = this._opts?.media_spin !== false;
     // Eine Umdrehung pro 4 s – ruhiger als echte 33⅓ U/min
     const ang = (spinning && animate) ? (T / 4) * Math.PI * 2 : 0;
 
@@ -13287,7 +13455,7 @@ _drawDoors() {
     // Rillen
     ctx.strokeStyle = "rgba(148,163,184,0.10)";
     ctx.lineWidth = 0.5;
-    for (let gr = R * 0.46; gr < R * 0.97; gr += Math.max(1.6, R * 0.055)) {
+    for (let gr = R * 0.68; gr < R * 0.97; gr += Math.max(1.4, R * 0.045)) {
       ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.stroke();
     }
 
@@ -13304,8 +13472,10 @@ _drawDoors() {
     ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
     ctx.restore();
 
-    // Label aus dem Cover, dreht mit
-    const lr = R * 0.44;
+    // Label aus dem Cover, dreht mit. Nimmt bewusst viel Fläche ein,
+    // vorher blieben bei R=26 nur ~11 px Cover übrig.
+    const lr = R * 0.64;
+    // Rillen nur noch außerhalb des größeren Labels
     ctx.save();
     ctx.rotate(ang);
     if (img) {
@@ -13381,12 +13551,15 @@ _drawDoors() {
       const sp   = this._f2c(deco.mx, deco.my);
       const size = (deco.size || 1.0) * 18;
 
-      // Bubble-Position: oben rechts, sanft schwebend
+      // Bubble-Position: oben rechts, sanft schwebend.
+      // Der Versatz kommt aus dem Verschieben per Gedrückthalten.
       const t      = (Date.now() / 2000) % (Math.PI * 2);
-      const floatY = Math.sin(t) * 4;
-      const bx  = sp.x + size * 2.2;
+      const off    = this._musicOffset(deco.entity);
+      const dragging = this._musicDrag?.entity === deco.entity;
+      const floatY = dragging ? 0 : Math.sin(t) * 4;
+      const bx  = sp.x + size * 2.2 + off.dx;
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
-      const by  = sp.y - wPx - size * 0.8 + floatY;
+      const by  = sp.y - wPx - size * 0.8 + floatY + off.dy;
       const volume  = st.attributes?.volume_level;
       const muted   = !!st.attributes?.is_volume_muted;
       const hasVol  = volume != null || muted;
@@ -13397,7 +13570,10 @@ _drawDoors() {
       const bw   = vinyl ? vinylBox + 16 : 72;
       const barH = duration > 0 ? 14 : 0;
       const volH = hasVol ? 12 : 0;
-      const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH;
+      // Steuerleiste erscheint nur für die angetippte Bubble
+      const ctlOpen = this._musicCtlOpen === deco.entity;
+      const ctlH    = ctlOpen ? 26 : 0;
+      const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
 
       ctx.save();
 
@@ -13475,15 +13651,17 @@ _drawDoors() {
       }
 
       // ── Titel + Artist ────────────────────────────────────────
+      // Laufschrift statt Abschneiden: lange Titel liefen vorher nach
+      // 10 Zeichen ins Auslassungszeichen.
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const mc = 10;
-      ctx.fillText(title.length > mc ? title.slice(0,mc) + "\u2026" : title, bx + bw/2, coverY + 9);
+      const txtW = bw - 8;
+      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
+        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -13497,7 +13675,7 @@ _drawDoors() {
         const elapsed = posTs ? (Date.now() - new Date(posTs).getTime()) / 1000 : 0;
         const curPos  = Math.min(position + elapsed, duration);
         const prog    = Math.max(0, Math.min(1, curPos / duration));
-        const barY    = by + bh - barH + 2;
+        const barY    = by + bh - ctlH - barH + 2;
         const barW2   = bw - 10;
         ctx.fillStyle = '#1c2535';
         ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2, 4, 2); ctx.fill();
@@ -13513,9 +13691,19 @@ _drawDoors() {
 
       // ── Lautstärke ────────────────────────────────────────────
       if (hasVol) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - volH / 2 - 1, bw - 10,
+        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
                             volume, muted, "#38bdf8");
       }
+
+      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
+      if (ctlOpen) {
+        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st);
+      }
+
+      // Trefferfläche der Bubble für Tippen und Verschieben merken
+      (this._musicClickZones ||= []).push({
+        entity: deco.entity, x: bx, y: by, w: bw, h: bh, kind: "bubble",
+      });
 
       ctx.restore();
     });
@@ -16210,6 +16398,7 @@ _drawDoors() {
       { key:"show_volume_ring",    emoji:"🔊",  label:"Lautstärke-Kranz",            desc:"Animierter Kranz um spielende Lautsprecher, Ausschlag nach Lautstärke", def:true },
       { key:"cover_motion",        emoji:"🪟",  label:"Rollladen-Laufanzeige",       desc:"Zeigt mit laufenden Pfeilen an, dass ein Rollladen gerade fährt", def:true },
       { key:"media_vinyl",         emoji:"💿",  label:"Medien als Schallplatte",     desc:"Album-Cover als drehende Platte mit Spektrum-Kranz statt Kachel", def:true },
+      { key:"media_spin",          emoji:"🔄",  label:"Platte dreht sich",           desc:"Drehung und Laufschrift bei langen Titeln; aus = stehendes Bild", def:true },
     ];
     energyToggles.forEach(({key, emoji, label, desc, def}) => {
       const row = document.createElement("div");
