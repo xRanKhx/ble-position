@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.8.1";
+const CARD_VERSION = "4.8.2";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -4114,6 +4114,38 @@ class BLEPositioningCard extends HTMLElement {
   // ── Canvas events ────────────────────────────────────────────────────────
 
   async _onCanvasClick(e) {
+    // ── Musik-Bubble: Leiste öffnen bzw. Transport steuern ──────────────────
+    // Steht bewusst ganz vorn: im 3D-Modus verlässt dieser Handler die
+    // Methode weiter unten mit return, dort käme die Prüfung nie an.
+    // _canvasXY liefert physische Canvas-Pixel, genau wie die gemerkten
+    // Zonen – hier darf nicht nochmal mit dpr multipliziert werden.
+    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
+      // Ein Verschieben endet nicht als Klick
+      if (this._musicDidDrag) { this._musicDidDrag = false; return; }
+      const { cx: mcx, cy: mcy } = this._canvasXY(e);
+      const hit = this._musicClickZonesFrame.find(z =>
+        mcx >= z.x && mcx <= z.x + z.w && mcy >= z.y && mcy <= z.y + z.h);
+      if (hit && hit.kind === "ctl") {
+        const svc = { play: "media_play_pause", next: "media_next_track",
+                      prev: "media_previous_track" }[hit.act];
+        this._musicCtlHot = hit.entity + ":" + hit.act;
+        setTimeout(() => { this._musicCtlHot = null; this._markDirty(); }, 180);
+        try {
+          await this._hass.callService("media_player", svc, { entity_id: hit.entity });
+        } catch (e2) {
+          this._showToast("Steuerung fehlgeschlagen");
+        }
+        this._markDirty();
+        return;
+      }
+      if (hit && hit.kind === "bubble") {
+        this._musicCtlOpen = this._musicCtlOpen === hit.entity ? null : hit.entity;
+        this._markDirty();
+        return;
+      }
+      if (this._musicCtlOpen) { this._musicCtlOpen = null; this._markDirty(); }
+    }
+
     // ── 3D: Reset-Button prüfen ─────────────────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       if (this._3dResetBtn) {
@@ -4319,37 +4351,6 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
-    // ── Musik-Bubble: Leiste öffnen bzw. Transport steuern ──────
-    // _canvasXY liefert bereits physische Canvas-Pixel, genau wie die
-    // beim Zeichnen gemerkten Zonen – hier darf nicht nochmal mit dpr
-    // multipliziert werden.
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
-      // Ein Verschieben endet nicht als Klick
-      if (this._musicDidDrag) { this._musicDidDrag = false; return; }
-      const { cx: mcx, cy: mcy } = this._canvasXY(e);
-      const hit = this._musicClickZonesFrame.find(z =>
-        mcx >= z.x && mcx <= z.x + z.w && mcy >= z.y && mcy <= z.y + z.h);
-      if (hit && hit.kind === "ctl") {
-        const svc = { play: "media_play_pause", next: "media_next_track",
-                      prev: "media_previous_track" }[hit.act];
-        this._musicCtlHot = hit.entity + ":" + hit.act;
-        setTimeout(() => { this._musicCtlHot = null; this._markDirty(); }, 180);
-        try {
-          await this._hass.callService("media_player", svc, { entity_id: hit.entity });
-        } catch (e2) {
-          this._showToast("Steuerung fehlgeschlagen");
-        }
-        this._markDirty();
-        return;
-      }
-      if (hit && hit.kind === "bubble") {
-        this._musicCtlOpen = this._musicCtlOpen === hit.entity ? null : hit.entity;
-        this._markDirty();
-        return;
-      }
-      if (this._musicCtlOpen) { this._musicCtlOpen = null; this._markDirty(); }
-    }
-
     // ── Aktives Modul: Tap delegieren (generisch für alle Module) ────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -4412,14 +4413,15 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasDown(e) {
-    // ── Musik-Bubble: Gedrückthalten verschiebt sie ────────────────────────
-    // Nur in 2D. In 3D belegt der Orbit-Drag dieselbe Geste.
+    // ── Musik-Bubble: Ziehen, auch in 3D ──────────────────────────────────
+    // Muss vor dem Orbit-Drag stehen, sonst verschluckt der die Geste.
+    // Bei Treffer wird abgebrochen, damit sich die Szene nicht mitdreht.
     const _m3d = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
     this._musicDidDrag = false;
-    if (!_m3d && this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
+    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
         && e.button === 0) {
       const { cx: dcx, cy: dcy } = this._canvasXY(e);
-      const z = this._musicClickZonesFrame.find(q => q.kind === "bubble" &&
+      const z = this._musicClickZonesFrame.find(q =>
         dcx >= q.x && dcx <= q.x + q.w && dcy >= q.y && dcy <= q.y + q.h);
       if (z) {
         const cur = this._musicOffset(z.entity);
@@ -4434,7 +4436,10 @@ class BLEPositioningCard extends HTMLElement {
             this._markDirty();
           }, 420),
         };
-        // kein return: ein kurzer Klick soll weiterhin die Leiste öffnen
+        // In 3D hier aussteigen: sonst startet gleichzeitig der Orbit-Drag.
+        // Der anschließende click öffnet die Leiste weiterhin.
+        if (_m3d) return;
+        // kein return in 2D: dort stört der restliche Handler nicht
       }
     }
 
@@ -4648,9 +4653,10 @@ class BLEPositioningCard extends HTMLElement {
     // ── Musik-Bubble wird verschoben ────────────────────────────────────
     if (this._musicDrag) {
       const { cx: mx, cy: my } = this._canvasXY(e);
+      const _ddpr = window.devicePixelRatio || 1;
       this._setMusicOffset(this._musicDrag.entity,
-        this._musicDrag.ox + (mx - this._musicDrag.sx),
-        this._musicDrag.oy + (my - this._musicDrag.sy));
+        this._musicDrag.ox + (mx - this._musicDrag.sx) / _ddpr,
+        this._musicDrag.oy + (my - this._musicDrag.sy) / _ddpr);
       this._musicDidDrag = true;
       this._markDirty();
       return;
@@ -5502,8 +5508,14 @@ class BLEPositioningCard extends HTMLElement {
         const useDirty = this._opts?.dirty_render !== false;
         // Immer zeichnen wenn: Animationen aktiv, Screensaver, oder dirty
         const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
+        // Dieselbe Deko-Quelle wie die Zeichenroutinen verwenden. Vorher
+        // schaute das Gate nur in _data.decos: lagen die Decos in
+        // _pendingDecos, wurde die Bubble zwar gezeichnet, aber nie
+        // erneut – die Platte stand still.
+        const _animDecos = this._pendingDecos?.length
+          ? this._pendingDecos : (this._data?.decos || []);
         const hasMusicAnim = this._opts?.show_music_bubble &&
-          (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
+          _animDecos.some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
             this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
         const hasWeatherAnim = this._opts?.show_weather && this._opts?.weather_animate !== false
           && !!this._weatherState();
@@ -12656,10 +12668,16 @@ _drawDoors() {
       const bw  = vinyl ? vinylBox + 16 : 72;
       // In 3D wird kein Zeitbalken gezeichnet – daher keine Höhe dafür
       const barH = 0;
-      const volH = hasVol ? 12 : 0;
-      const bh  = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH;
-      const bx = bPos.x - bw / 2;
-      const by = bPos.y - bh;
+      // Steuerleiste und Lautstärke klappen gemeinsam auf
+      const ctlOpen = this._musicCtlOpen === deco.entity;
+      const ctlH    = ctlOpen ? 26 : 0;
+      const volH    = (hasVol && ctlOpen) ? 12 : 0;
+      const bh  = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
+      // Versatz aus dem Verschieben; in 3D rechnet der Kontext in CSS-Pixeln,
+      // dort gilt der gespeicherte Wert unverändert.
+      const off = this._musicOffset(deco.entity);
+      const bx = bPos.x - bw / 2 + off.dx;
+      const by = bPos.y - bh + off.dy;
 
       ctx.save();
 
@@ -12736,11 +12754,12 @@ _drawDoors() {
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      ctx.fillText(title.length > 10 ? title.slice(0,10) + "\u2026" : title, bx + bw/2, coverY + 9);
+      const txtW3 = bw - 8;
+      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW3);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
+        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW3);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -12750,9 +12769,24 @@ _drawDoors() {
       ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
 
       // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - volH / 2 - 1, bw - 10,
+      if (hasVol && ctlOpen) {
+        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
                             volume, muted, "#38bdf8");
+      }
+
+      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
+      if (ctlOpen) {
+        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st, true);
+      }
+
+      // Trefferfläche merken. Zonen werden einheitlich in physischen
+      // Canvas-Pixeln gehalten, weil _canvasXY in dieser Einheit misst.
+      {
+        const zd = window.devicePixelRatio || 1;
+        (this._musicClickZones ||= []).push({
+          entity: deco.entity, kind: "bubble",
+          x: bx * zd, y: by * zd, w: bw * zd, h: bh * zd,
+        });
       }
 
       // ── Lautstärke-Kranz am Gerät ─────────────────────────────
@@ -12763,6 +12797,10 @@ _drawDoors() {
 
       ctx.restore();
     });
+    // Zonen dieses Frames übernehmen – geschieht in 2D am Ende von
+    // _drawMusicBubbles, in 3D wurde es bisher gar nicht gemacht.
+    this._musicClickZonesFrame = [...(this._musicClickZones||[])];
+    this._musicClickZones = [];
   }
 
   // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
@@ -13352,6 +13390,9 @@ _drawDoors() {
      Der Aufrufer muss ctx.font und fillStyle vorher setzen. */
   /* Verschiebung einer Musik-Bubble. Bleibt über Neuladen erhalten,
      ohne dafür das Backend anfassen zu müssen. */
+  /* Versatz wird in CSS-Pixeln gehalten. 2D zeichnet in physischen
+     Canvas-Pixeln, 3D in CSS-Pixeln – ohne gemeinsame Einheit springt die
+     Bubble beim Wechsel zwischen den Ansichten. */
   _musicOffset(entity) {
     if (!this._musicOff) {
       this._musicOff = {};
@@ -13372,7 +13413,10 @@ _drawDoors() {
   }
 
   /* Play/Pause, vor und zurück. Zonen werden für _onCanvasClick registriert. */
-  _drawMediaControls(ctx, x, y, w, h, entity, st) {
+  _drawMediaControls(ctx, x, y, w, h, entity, st, iso) {
+    // iso: in 3D rechnet der Kontext in CSS-Pixeln, die Zonen müssen aber
+    // wie in 2D in physischen Canvas-Pixeln abgelegt werden.
+    const zd = iso ? (window.devicePixelRatio || 1) : 1;
     const playing = st?.state === "playing";
     const btns = [
       { id: "prev", sym: "\u23ee" },
@@ -13403,7 +13447,8 @@ _drawDoors() {
       ctx.font = (b.id === "play" ? "13px" : "11px") + " system-ui, sans-serif";
       ctx.fillText(b.sym, cxx, cyy);
       (this._musicClickZones ||= []).push({
-        entity, x: bxx, y, w: bw, h, kind: "ctl", act: b.id,
+        entity, kind: "ctl", act: b.id,
+        x: bxx * zd, y: y * zd, w: bw * zd, h: h * zd,
       });
     });
     ctx.textBaseline = "alphabetic";
@@ -13570,11 +13615,12 @@ _drawDoors() {
       // Der Versatz kommt aus dem Verschieben per Gedrückthalten.
       const t      = (Date.now() / 2000) % (Math.PI * 2);
       const off    = this._musicOffset(deco.entity);
+      const _odpr  = window.devicePixelRatio || 1;
       const dragging = this._musicDrag?.entity === deco.entity;
       const floatY = dragging ? 0 : Math.sin(t) * 4;
-      const bx  = sp.x + size * 2.2 + off.dx;
+      const bx  = sp.x + size * 2.2 + off.dx * _odpr;
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
-      const by  = sp.y - wPx - size * 0.8 + floatY + off.dy;
+      const by  = sp.y - wPx - size * 0.8 + floatY + off.dy * _odpr;
       const volume  = st.attributes?.volume_level;
       const muted   = !!st.attributes?.is_volume_muted;
       const hasVol  = volume != null || muted;
