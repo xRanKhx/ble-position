@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.0.0";
+const CARD_VERSION = "5.0.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -3810,6 +3810,10 @@ class BLEPositioningCard extends HTMLElement {
     // Canvas-Größe für _draw3DScene merken (CSS-Pixel)
     this._canvasCssW = cssW;
     this._canvasCssH = cssH;
+    // _applyCanvasScale ueberspringt gleiche Werte. Nach einem Resize ist
+    // die Canvas wieder auf voller Aufloesung, der Cache wuerde sonst eine
+    // Skalierung melden, die gar nicht mehr anliegt.
+    this._currentCanvasScale = 1;
   }
 
   _attachCanvasEvents() {
@@ -12785,7 +12789,7 @@ _drawDoors() {
       // Trefferfläche merken. Zonen werden einheitlich in physischen
       // Canvas-Pixeln gehalten, weil _canvasXY in dieser Einheit misst.
       {
-        const zd = window.devicePixelRatio || 1;
+        const zd = this._3dCtxScale || window.devicePixelRatio || 1;
         (this._musicClickZones ||= []).push({
           entity: deco.entity, kind: "bubble",
           x: bx * zd, y: by * zd, w: bw * zd, h: bh * zd,
@@ -13419,7 +13423,7 @@ _drawDoors() {
   _drawMediaControls(ctx, x, y, w, h, entity, st, iso) {
     // iso: in 3D rechnet der Kontext in CSS-Pixeln, die Zonen müssen aber
     // wie in 2D in physischen Canvas-Pixeln abgelegt werden.
-    const zd = iso ? (window.devicePixelRatio || 1) : 1;
+    const zd = iso ? (this._3dCtxScale || window.devicePixelRatio || 1) : 1;
     const playing = st?.state === "playing";
     const btns = [
       { id: "prev", sym: "\u23ee" },
@@ -19638,7 +19642,16 @@ trigger:
     // Canvas-Kontext auf CSS-Pixel skalieren (HiDPI/Retina Fix)
     // Alle Koordinaten arbeiten dann in CSS-Pixel, Canvas-Auflösung ist dpr-fach höher
     ctx.save();
-    ctx.scale(dpr, dpr);
+    // Nicht blind mit dpr skalieren: adaptive_resolution setzt die Canvas
+    // auf cssW * dpr * scale (Nacht 0.75, Screensaver 0.5). Mit fester
+    // dpr-Annahme wird dann alles um 1/scale zu gross gezeichnet und
+    // waechst nach oben links aus dem Bild. Der echte Faktor ergibt sich
+    // aus der Canvas selbst.
+    const effX = this._canvasCssW ? (this._canvas.width  / this._canvasCssW) : dpr;
+    const effY = this._canvasCssH ? (this._canvas.height / this._canvasCssH) : dpr;
+    ctx.scale(effX, effY);
+    // Fuer Treffer-Zonen: _canvasXY misst in physischen Canvas-Pixeln
+    this._3dCtxScale = effX;
     const cw  = this._canvasCssW || (this._canvas.width  / dpr);
     const ch  = this._canvasCssH || (this._canvas.height / dpr);
     const fw  = this._data?.floor_w || 10;
