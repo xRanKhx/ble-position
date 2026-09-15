@@ -165,7 +165,9 @@ export class ThreeScene {
 
     try {
       this.renderer = new THREE.WebGLRenderer({
-        canvas, antialias: true, alpha: false, powerPreference: "default",
+        // alpha: die Wetterkulisse liegt auf einem eigenen Canvas dahinter
+        // und muss durchscheinen, wo kein Gebaeude steht.
+        canvas, antialias: true, alpha: true, powerPreference: "default",
         // Ohne dieses Flag verwirft der Browser den Zeichenpuffer nach dem
         // Compositing. Die Szene steht meist still und wird nur bei
         // Aenderungen neu gezeichnet – das Bild waere danach schwarz.
@@ -187,7 +189,8 @@ export class ThreeScene {
     this.renderer.toneMappingExposure = 1.05;
 
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0xe9ecef);
+    this.scene.background = null;          // Himmel kommt vom Canvas dahinter
+    this.renderer.setClearColor(0x000000, 0);
 
     // Orthografisch, nicht perspektivisch: das Referenzbild ist eine
     // isometrische Architekturdarstellung, keine Kameraaufnahme.
@@ -805,7 +808,8 @@ export class ThreeScene {
     if (!this.ok) return;
     if (this._skyHex === hex) return;      // Farbobjekt nicht jedes Bild neu
     this._skyHex = hex;
-    this.scene.background = new THREE.Color(hex);
+    // null heisst: das Wetter-Canvas dahinter uebernimmt den Himmel
+    this.scene.background = hex ? new THREE.Color(hex) : null;
   }
 
   resize() {

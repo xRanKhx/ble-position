@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.4.1";
+const CARD_VERSION = "5.5.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1204,6 +1204,7 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
+      <canvas id="wx" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:-1;"></canvas>
       <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
@@ -19771,6 +19772,8 @@ trigger:
     if (!cv || !c2) return;
     const on = this._webglWanted() && this._gl && !this._glFailed;
     cv.style.display = on ? "block" : "none";
+    const wx = this.shadowRoot?.getElementById("wx");
+    if (wx) wx.style.display = on ? "block" : "none";
     // Das 2D-Canvas bleibt sichtbar und liegt oben: es traegt die Overlays
     // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
     // Drehen, Zoomen und der Editor verloren.
@@ -19838,21 +19841,35 @@ trigger:
     }
     sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
 
-    // Wetter: in 3D gibt es keine gemalte Kulisse, aber der Himmel kann
-    // die Stimmung tragen. Farbe aus derselben Quelle wie in 2D.
-    if (this._opts?.show_weather) {
-      const w = this._weatherState();
-      if (w) {
-        const night = this._isDark();
-        const fx = this._weatherFx(w.condition);
-        const sky = (night
-          ? { sun:"#1b2440", night:"#161e38", clouds:"#1d2742", fog:"#222a40",
-              rain:"#161f38", pour:"#111930", snow:"#212c48", sleet:"#1a2440",
-              hail:"#151e36", storm:"#0e1428", wind:"#1c2540" }
-          : { sun:"#cfe8ff", night:"#2b3550", clouds:"#dbe3ec", fog:"#dfe3e8",
-              rain:"#c6d3e2", pour:"#b3c3d6", snow:"#dde6f0", sleet:"#d2dce8",
-              hail:"#c8d4e2", storm:"#9fb0c6", wind:"#d8e2ec" })[fx];
-        if (sky) sc.setSky(sky);
+    // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
+    // Die gesamte 2D-Kulisse samt Wolken, Gestirn und Temperatur wird
+    // wiederverwendet: sie kann bereits in einen fremden Kontext zeichnen
+    // (iso-Modus, ohne Raeume auszustanzen). Das Gebaeude steht davor,
+    // weil der WebGL-Renderer transparent ist.
+    const wx = this.shadowRoot.getElementById("wx");
+    if (wx) {
+      const cw = this._canvasCssW || wx.clientWidth || 1;
+      const ch = this._canvasCssH || wx.clientHeight || 1;
+      const wdpr = Math.min(window.devicePixelRatio || 1, 2);
+      if (wx.width !== Math.round(cw * wdpr) || wx.height !== Math.round(ch * wdpr)) {
+        wx.width = Math.round(cw * wdpr);
+        wx.height = Math.round(ch * wdpr);
+      }
+      const wctx = wx.getContext("2d");
+      wctx.setTransform(1, 0, 0, 1, 0, 0);
+      wctx.clearRect(0, 0, wx.width, wx.height);
+      if (this._opts?.show_weather && this._weatherState()) {
+        sc.setSky(null);                     // Himmel kommt von der Kulisse
+        wctx.save();
+        wctx.scale(wdpr, wdpr);
+        try {
+          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx });
+        } catch (e) {
+          if (!this._wxErr) { this._wxErr = true; console.warn("BLE Positioning: Wetter-Kulisse", e); }
+        }
+        wctx.restore();
+      } else {
+        sc.setSky("#e9ecef");                // ohne Wetter ein neutraler Himmel
       }
     }
 
