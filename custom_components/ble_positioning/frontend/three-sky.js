@@ -42,17 +42,23 @@ function makeStars(count) {
   geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
   geo.setAttribute("aSize", new THREE.BufferAttribute(size, 1));
   const mat = new THREE.ShaderMaterial({
-    uniforms: { uOpacity: { value: 0 } },
+    uniforms: {
+      uOpacity: { value: 0 },
+      uPixelRatio: { value: Math.min(window.devicePixelRatio || 1, 2) },
+    },
     transparent: true,
     depthWrite: false,
     vertexShader: `
       attribute float aSize;
+      uniform float uPixelRatio;
       varying float vS;
       void main() {
         vS = aSize;
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         gl_Position = projectionMatrix * mv;
-        gl_PointSize = aSize;
+        // Punktgroesse an die Pixeldichte koppeln, sonst verschwinden
+        // die Sterne auf hochaufloesenden Displays unter einem Pixel.
+        gl_PointSize = aSize * uPixelRatio;
       }`,
     fragmentShader: `
       uniform float uOpacity;
