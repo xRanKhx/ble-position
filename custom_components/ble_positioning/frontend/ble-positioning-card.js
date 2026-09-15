@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.7.2";
+const CARD_VERSION = "4.7.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -3928,28 +3928,6 @@ class BLEPositioningCard extends HTMLElement {
     if (!d) return { x: 0, y: 0 };
     const { scale, ox, oy } = this._floorScale();
     return { x: ox + mx * scale, y: oy + my * scale };
-  }
-
-  // ── Zoom-bewusste Skalierung ────────────────────────────────────────────
-  // _floorScale() liefert den UNGEZOOMTEN Maßstab. Wer damit Größen rechnet,
-  // muss den Zoom selbst dazunehmen – sonst bleiben Flächen, Texturen und
-  // Deko stehen, während die über _f2c() gezeichneten Räume mitwachsen.
-  _zoomFactor() {
-    return this._opts?.zoomPan ? (this._zoom || 1) : 1;
-  }
-
-  // px pro Meter inklusive Zoom – die richtige Basis für alle Größen in 2D.
-  _zoomScale() {
-    return this._floorScale().scale * this._zoomFactor();
-  }
-
-  // Grundriss-Rechteck in Canvas-Pixeln, inklusive Zoom und Pan.
-  _floorRectC() {
-    const fw = this._data?.floor_w || 10;
-    const fh = this._data?.floor_h || 10;
-    const a = this._f2c(0, 0);
-    const b = this._f2c(fw, fh);
-    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
   }
 
   _c2f(cx, cy) {
@@ -8827,7 +8805,7 @@ draw();
         bri = (light.brightness ?? 255) / 255;
       }
       const lumFactor2D = this._lumensToGlowFactor(light.lumen, bri);
-      const _lScale = this._zoomScale();
+      const { scale: _lScale } = this._floorScale();
       const glowPx = lumFactor2D * _lScale;
       const alpha  = Math.min(0.55, 0.10 + lumFactor2D * 0.22);
       const pos    = this._f2c(light.mx, light.my);
@@ -9846,10 +9824,11 @@ draw();
     } else {
       ctx.fillStyle = "#07090d";
       ctx.fillRect(0, 0, W, H);
-      // Grundriss-Bereich leicht heller – zoom-/pan-fest über _floorRectC()
-      const _bgR = this._floorRectC();
+      // Grundriss-Bereich leicht heller
+      const {scale:_bg_sc,ox:_bg_ox,oy:_bg_oy}=this._floorScale();
+      const _fw3=this._data?.floor_w||10,_fh3=this._data?.floor_h||10;
       ctx.fillStyle = "#0d1219";
-      ctx.fillRect(_bgR.x, _bgR.y, _bgR.w, _bgR.h);
+      ctx.fillRect(_bg_ox, _bg_oy, _fw3*_bg_sc, _fh3*_bg_sc);
     }
 
     const mode = this._mode;
@@ -9857,7 +9836,8 @@ draw();
     const scanners = mode === "scanners" ? this._pendingScanners : (this._data.scanners || []);
 
     // unitPx2d für Textur-Skalierung: Pixel pro Meter im 2D-Canvas (gleichmäßig)
-    this._unitPx2d = this._zoomScale();
+    const { scale: _scale2d } = this._floorScale();
+    this._unitPx2d = _scale2d;
 
     this._checkNightMode();
     // Im Räume-Modus: Reißbrett als Hintergrund ZUERST
@@ -12732,19 +12712,9 @@ _drawDoors() {
     if (!W || !H) return;
     // Deko-Größen mitskalieren, sonst wirkt auf Retina alles winzig
     const k = this._canvasCssW ? (W / this._canvasCssW) : 1;
-    // Der Himmel füllt die Canvas, die Deko hängt dagegen am Grundriss:
-    // sonst bleiben Sonne, Wolken und Regen beim Zoomen/Pannen stehen,
-    // während die ausgestanzten Räume darunter wegwandern.
-    const fr = this._floorRectC();
-    const z  = this._zoomFactor() || 1;
-    const DW = fr.w / z;   // Grundrissbreite in ungezoomten Canvas-Pixeln
-    const DH = fr.h / z;
 
     const fx      = this._weatherFx(w.condition);
-    // Tageszeit NICHT aus dem Wetterzustand ableiten: "clear-night" ist der
-    // einzige Zustand, der Nacht verrät – bei bewölkter Nacht meldet HA
-    // "cloudy", und der Himmel wäre cremefarben. sun.sun ist die Wahrheit.
-    const night   = this._isDark();
+    const night   = w.condition === "clear-night";
     const animate = this._opts?.weather_animate !== false;
     const T       = Date.now() / 1000;
 
@@ -12763,26 +12733,14 @@ _drawDoors() {
     ctx.clip("evenodd");
 
     // ── Himmel ────────────────────────────────────────────────────────
-    const skyDay = {
+    const sky = {
       sun:   ["#cfe8ff", "#eaf5ff"], night: ["#2b3550", "#3d4a6b"],
       clouds:["#dbe3ec", "#eef2f7"], fog:   ["#dfe3e8", "#f0f2f4"],
       rain:  ["#c6d3e2", "#e3eaf2"], pour:  ["#b3c3d6", "#d6e0ec"],
       snow:  ["#dde6f0", "#f2f6fb"], sleet: ["#d2dce8", "#eaf0f7"],
       hail:  ["#c8d4e2", "#e6ecf4"], storm: ["#9fb0c6", "#cfd9e6"],
       wind:  ["#d8e2ec", "#eef3f8"]
-    };
-    // Nachts bekommt jeder Zustand eine eigene dunkle Palette – sonst leuchtet
-    // z. B. bewölkte Nacht in hellem Grau.
-    const skyNight = {
-      sun:   ["#1b2440", "#2c3858"], night: ["#161e38", "#28324f"],
-      clouds:["#1d2742", "#2f3a58"], fog:   ["#222a40", "#333c54"],
-      rain:  ["#161f38", "#26304b"], pour:  ["#111930", "#1f2842"],
-      snow:  ["#212c48", "#33405f"], sleet: ["#1a2440", "#2b3554"],
-      hail:  ["#151e36", "#242e49"], storm: ["#0e1428", "#1b233c"],
-      wind:  ["#1c2540", "#2d3856"]
-    };
-    const sky = (night ? skyNight : skyDay)[fx]
-              || (night ? ["#1a2340", "#2b3454"] : ["#dde5ee", "#eff3f8"]);
+    }[fx] || ["#dde5ee", "#eff3f8"];
 
     const grad = ctx.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, sky[0]);
@@ -12794,16 +12752,9 @@ _drawDoors() {
 
     const tint = night ? "#c7d2ea" : "#7f93ad";
 
-    // Ab hier im Grundriss-Raum zeichnen (zoomt und pant mit)
-    ctx.save();
-    ctx.translate(fr.x, fr.y);
-    ctx.scale(z, z);
-
     // ── Sonne / Mond mit Sternen ──────────────────────────────────────
-    // Nachts immer ein Gestirn zeigen, auch bei Wolken oder Regen –
-    // vorher blieb der Himmel bei "cloudy" leer.
-    if (fx === "sun" || fx === "night" || night) {
-      const cx = DW - 52 * k, cy = 52 * k, r = 17 * k;
+    if (fx === "sun" || fx === "night") {
+      const cx = W - 52 * k, cy = 52 * k, r = 17 * k;
       if (night) {
         // Mond mit weichem Schein
         const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
@@ -12820,8 +12771,8 @@ _drawDoors() {
         ctx.restore();
         // Sterne, langsam pulsierend
         for (let s = 0; s < 18; s++) {
-          const sx = 20 + this._fpRand(s, 3) * (DW - 40);
-          const sy = 16 + this._fpRand(s, 4) * (DH * 0.45);
+          const sx = 20 + this._fpRand(s, 3) * (W - 40);
+          const sy = 16 + this._fpRand(s, 4) * (H * 0.45);
           const per = 2 + this._fpRand(s, 5) * 3;
           const ph  = this._fpRand(s, 6) * per;
           const op  = animate
@@ -12870,12 +12821,12 @@ _drawDoors() {
       ctx.fillStyle = tint;
       for (let c = 0; c < count; c++) {
         const cw  = (60 + this._fpRand(c, 1) * 70) * k;
-        const cy2 = 24 * k + this._fpRand(c, 2) * (DH * 0.3);
+        const cy2 = 24 * k + this._fpRand(c, 2) * (H * 0.3);
         const dur = 50 + c * 17;
-        const base = this._fpRand(c, 7) * DW;
+        const base = this._fpRand(c, 7) * W;
         // Von links nach rechts driften und weich umbrechen
         const prog = animate ? ((T + c * 13) % dur) / dur : 0.5;
-        const cx2  = base - DW * 0.3 + prog * (DW * 0.9 + cw);
+        const cx2  = base - W * 0.3 + prog * (W * 0.9 + cw);
         const sc   = cw / 40;
         ctx.save();
         ctx.translate(cx2 - cw, cy2);
@@ -12901,13 +12852,13 @@ _drawDoors() {
     if (drops) {
       const snowy = fx === "snow";
       for (let d = 0; d < drops; d++) {
-        const x0  = this._fpRand(d, 8) * DW;
+        const x0  = this._fpRand(d, 8) * W;
         const dur = snowy ? 5 + this._fpRand(d, 9) * 4
                           : (fx === "pour" ? 0.7 : 1.1) + this._fpRand(d, 9) * 0.5;
         const ph   = this._fpRand(d, 10) * dur;
         const prog = animate ? ((T + ph) % dur) / dur : this._fpRand(d, 10);
         const dx   = (snowy ? 8 : -14) * prog;
-        const dy   = (DH + 20) * prog - 6;
+        const dy   = (H + 20) * prog - 6;
         // Schnee zusätzlich seitlich pendeln lassen
         const sway = snowy && animate ? Math.sin((T + ph) * 1.4) * 4 : 0;
         const x = x0 + dx + sway;
@@ -12936,15 +12887,15 @@ _drawDoors() {
     // ── Nebelbänder ───────────────────────────────────────────────────
     if (fx === "fog") {
       for (let f = 0; f < 5; f++) {
-        const fy  = 30 + f * (DH / 6);
+        const fy  = 30 + f * (H / 6);
         const bh  = (10 + this._fpRand(f, 11) * 12) * k;
         const dur = 26 + f * 9;
         const prog = animate ? ((T + f * 7) % dur) / dur : 0;
-        const bx = -DW + prog * DW;
+        const bx = -W + prog * W;
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
-        ctx.roundRect(bx, fy, DW * 3, bh, 8 * k);
+        ctx.roundRect(bx, fy, W * 3, bh, 8 * k);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
@@ -12954,22 +12905,19 @@ _drawDoors() {
     if (fx === "wind") {
       ctx.strokeStyle = tint; ctx.lineWidth = 1.6 * k; ctx.lineCap = "round";
       for (let i = 0; i < 14; i++) {
-        const wy  = 20 * k + this._fpRand(i, 12) * DH;
+        const wy  = 20 * k + this._fpRand(i, 12) * H;
         const len = (30 + this._fpRand(i, 13) * 60) * k;
         const dur = 2.2 + this._fpRand(i, 14) * 2;
         const ph  = this._fpRand(i, 15) * 3;
         const prog = animate ? ((T + ph) % dur) / dur : 0.5;
-        const x = -len + prog * (DW + len * 2);
+        const x = -len + prog * (W + len * 2);
         ctx.globalAlpha = 0.45;
         ctx.beginPath(); ctx.moveTo(x - len, wy); ctx.lineTo(x, wy); ctx.stroke();
       }
       ctx.globalAlpha = 1;
     }
 
-    ctx.restore();   // zurück in Canvas-Koordinaten
-
     // ── Blitz ─────────────────────────────────────────────────────────
-    // erhellt bewusst die ganze Fläche, nicht nur den Grundriss
     if (fx === "storm" && animate) {
       const c = (T % 7) / 7;
       // zwei kurze Schläge pro Zyklus
@@ -17472,17 +17420,6 @@ _drawDoors() {
   // ══════════════════════════════════════════════════════════════════════════
   // ── FEATURE: NACHT-MODUS ─────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
-
-  /* Ist es draußen dunkel? Unabhängig vom nightMode-Toggle, weil die
-     Wetter-Kulisse die Tageszeit auch dann braucht, wenn der Nacht-Modus
-     der Karte aus ist. */
-  _isDark() {
-    const s = this._hass?.states?.["sun.sun"]?.state;
-    if (s === "below_horizon") return true;
-    if (s === "above_horizon") return false;
-    const h = new Date().getHours();
-    return h >= 22 || h < 6;
-  }
 
   _checkNightMode() {
     if (!this._opts?.nightMode) {
