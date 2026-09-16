@@ -155,12 +155,11 @@ function makePrecipitation(kind, count, extent, height) {
         vR = aRnd;
         vec3 p = position;
         // Fallen mit Umbruch: mod haelt die Tropfen im Band
-        float fall = uTime * uSpeed * (0.7 + aRnd * 0.6);
-        p.y = mod(p.y - fall, uHeight);
-        if (uSnow > 0.5) {
-          // Schnee pendelt seitlich, Regen faellt gerade
-          p.x += sin(uTime * 0.6 + aRnd * 30.0) * 1.6;
-          p.z += cos(uTime * 0.5 + aRnd * 25.0) * 1.4;
+        // Nur Regen bewegt sich im Shader. Schnee wird auf der CPU
+        // verschoben, sonst wuerde beides gegeneinander laufen.
+        if (uSnow < 0.5) {
+          float fall = uTime * uSpeed * (0.7 + aRnd * 0.6);
+          p.y = mod(p.y - fall, uHeight);
         }
         vec4 mv = modelViewMatrix * vec4(p, 1.0);
         gl_Position = projectionMatrix * mv;
@@ -272,6 +271,7 @@ export class SkyDome {
     }
     if (!this._snow) {
       this._snow = makePrecipitation("snow", 1100, extent, height);
+      this._snowHeight = height;
       this.scene.add(this._snow);
     }
     this._rain.visible = rain;
@@ -382,8 +382,33 @@ export class SkyDome {
 
   /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
   animate(t) {
+    // Regen bleibt im Shader: 2200 Tropfen jedes Bild auf der CPU zu
+    // verschieben waere Verschwendung.
     if (this._rain?.visible) this._rain.material.uniforms.uTime.value = t;
-    if (this._snow?.visible) this._snow.material.uniforms.uTime.value = t;
+
+    // Schnee dagegen auf der CPU. Der Shader-Weg haengt an einer sauber
+    // durchgereichten Zeit; faellt die irgendwo aus, stehen die Flocken
+    // still. Hier faellt jede Flocke sichtbar, egal was sonst passiert –
+    // und der Wind-Drift laesst sich pro Flocke variieren.
+    if (this._snow?.visible) {
+      const g = this._snow.geometry;
+      const pos = g.attributes.position.array;
+      const rnd = g.attributes.aRnd.array;
+      const h = this._snowHeight || 20;
+      const ex = this._precipExtent || 40;
+      for (let i = 0, k = 0; i < pos.length; i += 3, k++) {
+        pos[i + 1] -= 0.05 + rnd[k] * 0.02;            // Fallgeschwindigkeit
+        pos[i]     += Math.sin(t * 0.8 + rnd[k] * 30) * 0.01;  // Wind
+        pos[i + 2] += Math.cos(t * 0.6 + rnd[k] * 25) * 0.006;
+        if (pos[i + 1] < 0) {
+          // Oben neu einsetzen, seitlich neu streuen
+          pos[i + 1] = h;
+          pos[i]     = (Math.random() - 0.5) * ex;
+          pos[i + 2] = (Math.random() - 0.5) * ex;
+        }
+      }
+      g.attributes.position.needsUpdate = true;
+    }
     if (this._clouds) {
       const ex = this._cloudExtent || 60;
       for (const sp of this._clouds.children) {

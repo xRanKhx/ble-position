@@ -193,8 +193,17 @@ export class Neighborhood {
       roof.castShadow = true;
       roof.receiveShadow = true;
       g.add(roof);
-      this._snowTargets = this._snowTargets || [];
-      this._snowTargets.push(roof);
+      // Duenne Schneeschicht auf dem Dach, statt das Dach weiss zu faerben
+      const rcap = new THREE.Mesh(
+        new THREE.BoxGeometry(w + 0.55, 0.12, d + 0.55),
+        new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.92 })
+      );
+      rcap.position.set(x, h + 0.39, z);
+      rcap.castShadow = true;
+      rcap.visible = false;
+      g.add(rcap);
+      this._snowCaps = this._snowCaps || [];
+      this._snowCaps.push(rcap);
       // Haus samt Dach als eine Einheit ein- und ausblenden
       this._blockers.push({ objs: [body, roof], x, z, r: Math.max(w, d) / 2 });
       this._lastHouse = this._blockers[this._blockers.length - 1];
@@ -261,8 +270,21 @@ export class Neighborhood {
         c.receiveShadow = true;
         g.add(c);
         tree.objs.push(c);
-        this._snowTargets = this._snowTargets || [];
-        this._snowTargets.push(c);
+
+        // Schneehaube statt Einfaerbung: eine weisse Kappe auf der
+        // Oberseite. Die Krone selbst bleibt gruen und der Stamm braun –
+        // nur oben liegt etwas, so wie in Wirklichkeit.
+        const cap = new THREE.Mesh(
+          new THREE.SphereGeometry(rad * 1.04, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.42),
+          new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.92, metalness: 0 })
+        );
+        cap.position.copy(c.position);
+        cap.castShadow = true;
+        cap.visible = false;            // erscheint nur bei Schnee
+        g.add(cap);
+        tree.objs.push(cap);
+        this._snowCaps = this._snowCaps || [];
+        this._snowCaps.push(cap);
       }
     }
   }
@@ -310,16 +332,19 @@ export class Neighborhood {
           m.material.color.setHex(snow ? hex : m.userData.baseHex);
         }
       };
-      tint(this._snowTargets, 0xeef3f8);   // Daecher und Baumkronen
-      tint(this._roadTargets, 0xdfe6ee);   // Strassen und Gehwege
+      // Hauben ein- und ausblenden statt Meshes umzufaerben
+      for (const cap of (this._snowCaps || [])) cap.visible = snow;
+      // Strassen werden Schneematsch, nicht Reinweiss: nur so bleiben
+      // Fahrbahnmarkierungen und Bordsteinkanten noch zu erkennen.
+      tint(this._roadTargets, 0x777a80);
       // Schnee streut diffus: rau und ohne Metallanteil, sonst wirkt er
       // wie lackiert.
-      for (const m of [...(this._snowTargets || []), ...(this._roadTargets || [])]) {
+      for (const m of (this._roadTargets || [])) {
         if (m.userData.dryRough == null) {
           m.userData.dryRough = m.material.roughness;
           m.userData.dryMetal = m.material.metalness;
         }
-        if (snow) { m.material.roughness = 0.6; m.material.metalness = 0; }
+        if (snow) { m.material.roughness = 0.95; m.material.metalness = 0; }
         m.material.needsUpdate = true;
       }
     }

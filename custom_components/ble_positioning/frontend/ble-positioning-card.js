@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.5.0";
+const CARD_VERSION = "6.6.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
