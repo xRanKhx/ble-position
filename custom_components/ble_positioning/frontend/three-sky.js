@@ -130,7 +130,7 @@ function makePrecipitation(kind, count, extent, height) {
       uSpeed:  { value: snow ? 1.1 : 9.0 },
       uHeight: { value: height },
       uOpacity:{ value: 0 },
-      uSize:   { value: (snow ? 5.0 : 2.4) * Math.min(window.devicePixelRatio || 1, 2) },
+      uSize:   { value: (snow ? 7.0 : 6.0) * Math.min(window.devicePixelRatio || 1, 2) },
       uSnow:   { value: snow ? 1 : 0 },
     },
     vertexShader: `
@@ -161,10 +161,12 @@ function makePrecipitation(kind, count, extent, height) {
         if (uSnow > 0.5) {
           a = smoothstep(0.5, 0.05, length(d));          // runde Flocke
         } else {
-          // Tropfen: schmal und senkrecht gestreckt
-          a = smoothstep(0.5, 0.0, length(vec2(d.x * 3.5, d.y)));
+          // Tropfen: schmaler, heller Strich. Ein runder Punkt sieht aus
+          // wie ein Stern und geht im Bild unter.
+          a = smoothstep(0.5, 0.0, length(vec2(d.x * 5.0, d.y * 0.85)));
+          a *= smoothstep(0.5, 0.2, abs(d.y));   // oben und unten auslaufen
         }
-        vec3 col = uSnow > 0.5 ? vec3(1.0) : vec3(0.72, 0.82, 0.95);
+        vec3 col = uSnow > 0.5 ? vec3(1.0) : vec3(0.82, 0.90, 1.0);
         gl_FragColor = vec4(col, a * uOpacity);
       }`,
   });
@@ -251,7 +253,7 @@ export class SkyDome {
       }
     }
     if (this._precip) {
-      this._precip.material.uniforms.uOpacity.value = heavy ? 0.85 : 0.6;
+      this._precip.material.uniforms.uOpacity.value = heavy ? 0.95 : 0.78;
     }
 
     // ── Wolken ────────────────────────────────────────────────────────
@@ -290,6 +292,63 @@ export class SkyDome {
       const dim = /fog/.test(c) ? 0.85 : /pouring|storm|lightning/.test(c) ? 0.62 : 1;
       for (const sp of this._clouds.children) sp.material.color.setScalar(dim);
     }
+  }
+
+  /**
+   * Gelaende rings um das Gebaeude. Ohne Boden schwebt das Haus im
+   * Nichts – der Horizont ist es, der dem Bild Tiefe gibt.
+   * Die Flaeche laeuft ueber eine Alpha-Maske zum Rand hin aus, statt
+   * an einer harten Kante zu enden.
+   */
+  setGround(span, night) {
+    const sp = Math.max(8, span || 12);
+    const size = sp * 16;
+    if (!this._ground) {
+      const S = 256, c = document.createElement("canvas");
+      c.width = c.height = S;
+      const x = c.getContext("2d");
+      x.fillStyle = "#6f7d5c";
+      x.fillRect(0, 0, S, S);
+      // Unruhe, damit es nicht wie ein Filzteppich wirkt
+      for (let i = 0; i < 2600; i++) {
+        const r = 1 + Math.random() * 6;
+        x.fillStyle = `rgba(${90 + Math.random()*60|0},${105 + Math.random()*55|0},${60 + Math.random()*45|0},0.5)`;
+        x.beginPath();
+        x.arc(Math.random() * S, Math.random() * S, r, 0, Math.PI * 2);
+        x.fill();
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.repeat.set(24, 24);
+      this._groundTex = tex;
+
+      // Auslaufmaske: in der Mitte deckend, zum Rand durchsichtig
+      const A = 256, ac = document.createElement("canvas");
+      ac.width = ac.height = A;
+      const ax = ac.getContext("2d");
+      const g = ax.createRadialGradient(A/2, A/2, A*0.12, A/2, A/2, A*0.5);
+      g.addColorStop(0, "rgba(255,255,255,1)");
+      g.addColorStop(0.55, "rgba(255,255,255,0.92)");
+      g.addColorStop(1, "rgba(255,255,255,0)");
+      ax.fillStyle = g; ax.fillRect(0, 0, A, A);
+      this._groundAlpha = new THREE.CanvasTexture(ac);
+
+      const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({
+        map: tex, alphaMap: this._groundAlpha, transparent: true,
+        roughness: 0.96, metalness: 0, depthWrite: false,
+      });
+      this._ground = new THREE.Mesh(geo, mat);
+      this._ground.rotation.x = -Math.PI / 2;
+      this._ground.receiveShadow = true;
+      this._ground.renderOrder = -1;
+      this.scene.add(this._ground);
+    }
+    this._ground.scale.set(size, size, 1);
+    if (this._center) this._ground.position.set(this._center.x, -0.14, this._center.z);
+    // Nachts abdunkeln, sonst leuchtet die Wiese heller als das Haus
+    this._ground.material.color.setScalar(night ? 0.22 : 1);
   }
 
   /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
@@ -389,7 +448,11 @@ export class SkyDome {
    * davor – sonst verdeckt die opake Kuppel es wieder.
    * @param {number} phase 0..1, 0 = Neumond, 0.5 = Vollmond
    */
-  setBody(phase, isNight) {
+  setBody(phase, isNight, span) {
+    // Massstab der Szene, nicht der Kuppel: bei orthografischer Projektion
+    // ist das Sichtfenster nur wenige Dutzend Einheiten breit. Auf Radius
+    // 800 stand das Gestirn weit ausserhalb und war nie zu sehen.
+    const sp = Math.max(6, span || 12);
     const want = isNight ? "moon" : "sun";
     if (this._bodyKind !== want || this._bodyPhase !== phase) {
       this._bodyKind = want; this._bodyPhase = phase;
@@ -402,14 +465,21 @@ export class SkyDome {
         blending: isNight ? THREE.NormalBlending : THREE.AdditiveBlending,
       }));
       this._body.renderOrder = -1;
-      this._body.scale.setScalar(RADIUS * (isNight ? 0.13 : 0.17));
       this.scene.add(this._body);
     }
+    this._body.scale.setScalar(sp * (isNight ? 0.34 : 0.42));
     // An den Sonnenstand hängen; nachts gegenüber, wie der echte Mond
     const d = this._sunDir.clone();
-    if (isNight) { d.x = -d.x; d.z = -d.z; d.y = Math.abs(d.y) * 0.8 + 0.25; }
-    this._body.position.copy(d.normalize().multiplyScalar(RADIUS * 0.8));
+    if (isNight) { d.x = -d.x; d.z = -d.z; d.y = Math.abs(d.y) * 0.8 + 0.3; }
+    d.normalize();
+    // Innerhalb des Sichtfensters, aber hinter allem: depthTest ist aus,
+    // das Gestirn wird also nie von einer Wand verdeckt.
+    this._body.position.copy(this._center || new THREE.Vector3())
+      .addScaledVector(d, sp * 1.35);
   }
+
+  /** Bezugspunkt der Szene, damit das Gestirn im Bild bleibt. */
+  setCenter(v) { this._center = v.clone(); }
 
   _bodyCanvas(phase, isNight) {
     const S = 256, c = document.createElement("canvas");
@@ -472,6 +542,8 @@ export class SkyDome {
 
   dispose() {
     if (this._clouds) this.scene.remove(this._clouds);
+    if (this._ground) { this.scene.remove(this._ground);
+      this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
     for (const m of [this.gradient, this.skyMesh, this.stars, this._body, this._precip]) {
       if (!m) continue;

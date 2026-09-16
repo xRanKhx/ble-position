@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.10.0";
+const CARD_VERSION = "5.11.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -4127,6 +4127,22 @@ class BLEPositioningCard extends HTMLElement {
     // Methode weiter unten mit return, dort käme die Prüfung nie an.
     // _canvasXY liefert physische Canvas-Pixel, genau wie die gemerkten
     // Zonen – hier darf nicht nochmal mit dpr multipliziert werden.
+    // ── Lampen in der WebGL-Szene schalten ─────────────────────────────────
+    if (this._gl?.ok && this._glLampHits?.length && !this._musicDidDrag) {
+      const { cx: lx, cy: ly } = this._canvasXY(e);
+      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
+      for (const h of this._glLampHits) {
+        if (!h.entity) continue;
+        if (Math.hypot(lx / dpr - h.x, ly / dpr - h.y) <= h.r) {
+          try {
+            await this._hass.callService("light", "toggle", { entity_id: h.entity });
+          } catch (e2) { this._showToast("Lampe schalten fehlgeschlagen"); }
+          this._markDirty();
+          return;
+        }
+      }
+    }
+
     if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
       // Ein Verschieben endet nicht als Klick
       if (this._musicDidDrag) { this._musicDidDrag = false; return; }
@@ -19996,10 +20012,12 @@ trigger:
         sc.setSkyWeather(cond);
         // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
         // Canvas dahinter vollstaendig verdecken.
-        sc.dome.setBody(this._moonPhase(), this._isDark());
+        sc.dome.setCenter(sc.center);
+        sc.dome.setBody(this._moonPhase(), this._isDark(), sc.span);
         // Wolken und Niederschlag als echte Objekte in der Szene, sonst
         // waere Regen nur in 2D zu sehen.
         sc.dome.setSceneWeather(cond, sc.span || 12);
+        sc.dome.setGround(sc.span || 12, this._isDark());
         sc.dome.animate(Date.now() / 1000);
       }
       // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
@@ -20054,6 +20072,14 @@ trigger:
     });
     const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));
     if (lkey !== this._glLightKey) { sc.updateLights(lamps); this._glLightKey = lkey; }
+
+    // Lampen anklickbar machen: Position auf dem Bildschirm merken.
+    // Ein Raycaster waere genauer, aber die Lampen sind kleine Kugeln –
+    // ein Radius um den projizierten Punkt trifft besser.
+    this._glLampHits = lamps.filter(l => l.x != null && l.y != null).map(l => {
+      const p = sc.projectToScreen(l.x, l.y, l.z ?? ((this._wallHeight ?? 2.5) - 0.35));
+      return { entity: l.entity, x: p.x, y: p.y, r: 16 };
+    });
 
     // Personen wandern staendig – eigener, billiger Pfad ohne Neuaufbau.
     // Quelle sind die getrackten Geraete aus _data.devices; mmWave liefert
