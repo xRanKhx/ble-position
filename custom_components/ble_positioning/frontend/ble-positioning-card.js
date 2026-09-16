@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.2.1";
+const CARD_VERSION = "6.2.2";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -9653,6 +9653,10 @@ draw();
     // GPU-Speicher freigeben: Geometrien, Texturen und der WebGL-Kontext
     // selbst werden sonst erst vom Garbage Collector eingesammelt, und die
     // Zahl gleichzeitiger Kontexte im Browser ist begrenzt.
+    if (this._glVisHook) {
+      document.removeEventListener("visibilitychange", this._glVisHook);
+      this._glVisHook = null;
+    }
     if (this._gl) { try { this._gl.dispose(); } catch (e) {} this._gl = null; this._glDataKey = null; }
     if (this._dekoAnimFrame) { 
       if (typeof this._dekoAnimFrame === 'number') cancelAnimationFrame(this._dekoAnimFrame);
@@ -19879,13 +19883,20 @@ trigger:
       });
       this._gl = sc;
       this._glDataKey = null;
+      this._ensureGlVisibilityHook();
       // Himmelskuppel: Preetham-Shader, mit Verlaufskuppel als Rueckfall
+      // Nach dem Laden direkt zeichnen, nicht nur ein Flag setzen:
+      // _markDirty wirkt erst im naechsten Frame, und
+      // requestAnimationFrame pausiert in Hintergrund-Tabs. Die Szene
+      // bliebe sonst unfertig, bis der Tab wieder sichtbar wird.
+      const kick = () => { try { this._draw(); } catch (e) { /* egal */ } };
       if (this._opts?.sky_dome !== false) {
-        sc.initSky(this._opts?.sky_mode || "sky").then(() => this._markDirty());
+        sc.initSky(this._opts?.sky_mode || "sky").then(kick);
       }
       if (this._opts?.post_fx !== false) {
-        sc.initPostProcessing().then(() => this._markDirty());
+        sc.initPostProcessing().then(kick);
       }
+      kick();
       return sc;
     } catch (err) {
       this._glFailed = true;
@@ -19922,6 +19933,21 @@ trigger:
     el.style.background = night ? "rgba(13,20,38,0.55)" : "rgba(35,48,69,0.45)";
     el.style.color = night ? "#dfe6ff" : "#f2f6ff";
     el.textContent = Math.round(w.temp) + (w.unit || "\u00b0C");
+  }
+
+  /* Kehrt der Tab aus dem Hintergrund zurueck, sofort neu zeichnen.
+     Waehrend er verborgen war, stand die Render-Schleife still und die
+     Szene kann unvollstaendig sein. */
+  _ensureGlVisibilityHook() {
+    if (this._glVisHook) return;
+    this._glVisHook = () => {
+      if (document.visibilityState !== "visible") return;
+      if (!this._gl?.ok) return;
+      this._glDataKey = null;      // Aufbau erzwingen
+      this._glDayKey = null;
+      try { this._draw(); } catch (e) { /* egal */ }
+    };
+    document.addEventListener("visibilitychange", this._glVisHook);
   }
 
   _syncGlVisibility() {
