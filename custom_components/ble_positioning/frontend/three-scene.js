@@ -22,7 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=6";
-import { Neighborhood } from "./three-neighborhood.js?n=2";
+import { Neighborhood } from "./three-neighborhood.js?n=3";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -365,15 +365,21 @@ export class ThreeScene {
     this._dayFactor = night ? 0 : clarity * (0.25 + 0.75 * height);
 
     if (night) {
-      // Mondlicht: sehr schwach, kuehl. Ohne etwas Grundlicht waere die
-      // Szene komplett schwarz und man saehe nicht einmal die Umrisse.
-      this.hemi.intensity = 0.16;
-      this.hemi.color.setHex(0x2a3a5c);
-      this.hemi.groundColor.setHex(0x14171f);
-      this.sun.intensity = 0.12;
-      this.sun.color.setHex(0x9fb6e0);
-      this.sun.castShadow = false;          // Mondschatten waere aufdringlich
+      // Mondlicht: kuehl und schwach. Etwas Grundlicht muss bleiben,
+      // sonst sieht man nicht einmal die Umrisse – aber deutlich weniger
+      // als zuvor, damit die Lampen im Haus die Szene tragen.
+      this.hemi.intensity = 0.15;
+      this.hemi.color.setHex(0x22304e);
+      this.hemi.groundColor.setHex(0x0f1218);
+      this.sun.intensity = 0.6;
+      this.sun.color.setHex(0x88b0d8);
+      // Der Mond wirft Schatten: bei dieser Staerke sind sie zart und
+      // geben dem Bild Tiefe, statt aufdringlich zu wirken.
+      this.sun.castShadow = true;
+      // Dunkler belichten – das ist es, was den Nachtlook ausmacht.
+      this.renderer.toneMappingExposure = 0.7;
     } else {
+      this.renderer.toneMappingExposure = 1.2;
       // Bedeckter Himmel streut: weniger Richtungslicht, mehr Diffuses
       this.hemi.intensity = 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
       this.hemi.color.setHex(0xdce8f5);
@@ -847,7 +853,9 @@ export class ThreeScene {
       // Helligkeit: HA gibt 0..255. Als Lichtstrom gedacht entspricht
       // volle Helligkeit etwa einer 800-lm-Birne. Candela = lm / 4π.
       const frac = Math.max(0, Math.min(255, l.brightness ?? 255)) / 255;
-      const lumen = 800 * frac;
+      // Etwas gedaempft: bei voller Staerke ueberstrahlt eine Lampe den
+      // Holzboden, und Maserung wie Raumkanten verschwinden im Weiss.
+      const lumen = 620 * frac;
       lamp.pl.intensity = lumen / (4 * Math.PI);
       lamp.bulb.material.emissiveIntensity = 0.4 + frac * 0.6;
 
@@ -942,6 +950,7 @@ export class ThreeScene {
     );
     plate.position.set(cx, -0.06, cy);
     plate.receiveShadow = true;
+    plate.castShadow = false;      // die Platte liegt unten, wirft nichts
     group.add(plate);
 
     // ── Raeume ──────────────────────────────────────────────────────────

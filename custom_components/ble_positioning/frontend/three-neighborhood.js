@@ -25,8 +25,10 @@ function rng(seed) {
   };
 }
 
-const HOUSE_COLORS = [0xe8e2d8, 0xdcd3c6, 0xcfc8bd, 0xe3dbd0, 0xd6cec2];
-const ROOF_COLORS  = [0x6b6a68, 0x5a5856, 0x7a6a60, 0x4f4d4c];
+/* Bewusst gedaempft: die Nachbarschaft ist Kulisse. Waeren die Fassaden
+   so hell wie das eigene Gebaeude, zoege der Blick nach aussen. */
+const HOUSE_COLORS = [0x9a958c, 0x8e877c, 0x847d73, 0x938b80, 0x7d776e];
+const ROOF_COLORS  = [0x44433f, 0x3a3836, 0x4a403a, 0x333130];
 
 export class Neighborhood {
   /**
@@ -72,6 +74,17 @@ export class Neighborhood {
     this._addBuildings(g, reach, roadW, ownW, ownD, r);
     this._addTrees(g, reach, roadW, ownW, ownD, r);
 
+    // Sicherheitsnetz: jedes Mesh wirft und empfaengt Schatten. Einzeln
+    // gesetzt wird leicht eines vergessen, und ein fehlender Schatten
+    // faellt erst spaet auf.
+    g.traverse((o) => {
+      if (!o.isMesh) return;
+      o.receiveShadow = true;
+      // Flache Flaechen wie Fensterscheiben und Fahrbahnmarkierungen
+      // sollen keinen eigenen Schatten werfen – das flackert nur.
+      if (!o.geometry?.type?.includes("Plane")) o.castShadow = true;
+    });
+
     this.scene.add(g);
     this.group = g;
   }
@@ -79,11 +92,12 @@ export class Neighborhood {
   /* Straßenkreuz mit Mittelstreifen und Gehwegen. */
   _addRoads(g, reach, roadW, r) {
     const len = reach * 2;
+    // Dunkler gehalten, damit das eigene Gebaeude der Blickanker bleibt
     const asphalt = new THREE.MeshStandardMaterial({
-      color: 0x3a3d42, roughness: 0.93, metalness: 0,
+      color: 0x2a2d33, roughness: 0.6, metalness: 0.02,
     });
     const walk = new THREE.MeshStandardMaterial({
-      color: 0x8c8f94, roughness: 0.9, metalness: 0,
+      color: 0x60646a, roughness: 0.6, metalness: 0,
     });
 
     const strip = (w, d, y, mat) => {
@@ -159,7 +173,7 @@ export class Neighborhood {
         new THREE.BoxGeometry(w, h, d),
         new THREE.MeshStandardMaterial({
           color: HOUSE_COLORS[Math.floor(r() * HOUSE_COLORS.length)],
-          roughness: 0.92, metalness: 0,
+          roughness: 0.6, metalness: 0.05,
         })
       );
       body.position.set(x, h / 2, z);
@@ -172,11 +186,12 @@ export class Neighborhood {
         new THREE.BoxGeometry(w + 0.5, 0.35, d + 0.5),
         new THREE.MeshStandardMaterial({
           color: ROOF_COLORS[Math.floor(r() * ROOF_COLORS.length)],
-          roughness: 0.85, metalness: 0,
+          roughness: 0.6, metalness: 0.05,
         })
       );
       roof.position.set(x, h + 0.17, z);
       roof.castShadow = true;
+      roof.receiveShadow = true;
       g.add(roof);
       this._snowTargets = this._snowTargets || [];
       this._snowTargets.push(roof);
@@ -229,6 +244,7 @@ export class Neighborhood {
       const t = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, hh, 6), trunkMat);
       t.position.set(x, hh / 2, z);
       t.castShadow = true;
+      t.receiveShadow = true;
       g.add(t);
       const tree = { objs: [t], x, z, r: 1.8 };
       this._blockers.push(tree);
@@ -242,6 +258,7 @@ export class Neighborhood {
         const c = new THREE.Mesh(new THREE.SphereGeometry(rad, 10, 8), green);
         c.position.set(x + (r() - 0.5) * 0.7, hh + rad * 0.5 + k * 0.7, z + (r() - 0.5) * 0.7);
         c.castShadow = true;
+        c.receiveShadow = true;
         g.add(c);
         tree.objs.push(c);
         this._snowTargets = this._snowTargets || [];
