@@ -312,6 +312,16 @@ export class Neighborhood {
       };
       tint(this._snowTargets, 0xeef3f8);   // Daecher und Baumkronen
       tint(this._roadTargets, 0xdfe6ee);   // Strassen und Gehwege
+      // Schnee streut diffus: rau und ohne Metallanteil, sonst wirkt er
+      // wie lackiert.
+      for (const m of [...(this._snowTargets || []), ...(this._roadTargets || [])]) {
+        if (m.userData.dryRough == null) {
+          m.userData.dryRough = m.material.roughness;
+          m.userData.dryMetal = m.material.metalness;
+        }
+        if (snow) { m.material.roughness = 0.6; m.material.metalness = 0; }
+        m.material.needsUpdate = true;
+      }
     }
 
     // Nasser Asphalt spiegelt: niedrige Rauheit, etwas Metallanteil.

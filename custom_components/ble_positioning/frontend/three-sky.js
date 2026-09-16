@@ -229,7 +229,8 @@ export class SkyDome {
 
     this.sky = null;
     this.skyMesh = null;
-    this._precip = null;
+    this._rain = null;
+    this._snow = null;
     this._clouds = null;
   }
 
@@ -246,23 +247,31 @@ export class SkyDome {
     // ── Niederschlag ──────────────────────────────────────────────────
     const snow = /snow|sleet|hail/.test(c);
     const rain = /rain|pouring|lightning|storm/.test(c);
-    const kind = snow ? "snow" : rain ? "rain" : null;
     const heavy = /pouring|lightning|storm/.test(c);
-    if (this._precipKind !== kind || this._precipExtent !== extent) {
-      if (this._precip) {
-        this.scene.remove(this._precip);
-        this._precip.geometry.dispose(); this._precip.material.dispose();
-        this._precip = null;
-      }
-      this._precipKind = kind; this._precipExtent = extent;
-      if (kind) {
-        this._precip = makePrecipitation(kind, snow ? 900 : 1600, extent, height);
-        this.scene.add(this._precip);
+
+    // Zwei getrennte Systeme statt eines umgebauten: Regen und Schnee
+    // haben eigene Geschwindigkeit, Form und Dichte. Beim Umschalten
+    // wird nur die Deckkraft gefahren, nichts neu aufgebaut – dadurch
+    // gibt es keinen Ruckler beim Wetterwechsel.
+    if (this._precipExtent !== extent) {
+      this._precipExtent = extent;
+      for (const k of ["_rain", "_snow"]) {
+        if (this[k]) { this.scene.remove(this[k]);
+          this[k].geometry.dispose(); this[k].material.dispose(); this[k] = null; }
       }
     }
-    if (this._precip) {
-      this._precip.material.uniforms.uOpacity.value = heavy ? 0.95 : 0.78;
+    if (!this._rain) {
+      this._rain = makePrecipitation("rain", 2200, extent, height);
+      this.scene.add(this._rain);
     }
+    if (!this._snow) {
+      this._snow = makePrecipitation("snow", 1100, extent, height);
+      this.scene.add(this._snow);
+    }
+    this._rain.visible = rain;
+    this._snow.visible = snow;
+    this._rain.material.uniforms.uOpacity.value = heavy ? 0.95 : 0.78;
+    this._snow.material.uniforms.uOpacity.value = heavy ? 0.9 : 0.72;
 
     // ── Wolken ────────────────────────────────────────────────────────
     const cloudy = /cloud|rain|snow|sleet|hail|pouring|lightning|storm|fog/.test(c);
@@ -364,7 +373,8 @@ export class SkyDome {
 
   /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
   animate(t) {
-    if (this._precip) this._precip.material.uniforms.uTime.value = t;
+    if (this._rain?.visible) this._rain.material.uniforms.uTime.value = t;
+    if (this._snow?.visible) this._snow.material.uniforms.uTime.value = t;
     if (this._clouds) {
       const ex = this._cloudExtent || 60;
       for (const sp of this._clouds.children) {
@@ -578,7 +588,8 @@ export class SkyDome {
     if (this._ground) { this.scene.remove(this._ground);
       this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
-    for (const m of [this.gradient, this.skyMesh, this.stars, this._body, this._precip]) {
+    for (const m of [this.gradient, this.skyMesh, this.stars, this._body,
+                    this._rain, this._snow]) {
       if (!m) continue;
       this.scene.remove(m);
       m.geometry?.dispose();

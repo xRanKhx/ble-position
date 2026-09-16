@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.1.0";
+const CARD_VERSION = "6.2.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20031,7 +20031,9 @@ trigger:
       const cond2 = String(wSt?.condition || "");
       // Schwelle bleibt auch nachts hoch: bei 0.6 fing der beleuchtete
       // Holzboden an zu gluehen und schluckte die Maserung.
-      sc.setBloom(night2 ? 0.6 : 0.3, night2 ? 0.5 : 0.4, 0.85);
+      // Bewusst schwach: Bloom soll Lampen und LEDs hervorheben, nicht
+      // Waende und Boeden weichzeichnen.
+      sc.setBloom(night2 ? 0.3 : 0.15, night2 ? 0.5 : 0.4, 0.85);
       const fog =
         night2                              ? [0x0a1020, 0.0075] :
         /fog/.test(cond2)                   ? [0xd8dde2, 0.045]  :

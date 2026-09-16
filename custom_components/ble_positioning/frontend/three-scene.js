@@ -21,8 +21,8 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=6";
-import { Neighborhood } from "./three-neighborhood.js?n=3";
+import { SkyDome } from "./three-sky.js?s=7";
+import { Neighborhood } from "./three-neighborhood.js?n=4";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -500,6 +500,59 @@ export class ThreeScene {
     if (strength  != null) this.bloomPass.strength  = strength;
     if (radius    != null) this.bloomPass.radius    = radius;
     if (threshold != null) this.bloomPass.threshold = threshold;
+  }
+
+  /**
+   * Zentrale Wettersteuerung. Ein Aufruf setzt Himmel, Licht, Nebel,
+   * Bloom, Partikel, Nachbarschaft und Materialien konsistent.
+   *
+   * Vorher war das ueber mehrere Aufrufe verteilt, und genau dort
+   * entstanden die Fehler: eine Stelle vergessen, und Himmel und Licht
+   * widersprachen sich.
+   *
+   * @param {"tag"|"nacht"|"regen"|"schnee"|string} mode
+   *        Akzeptiert auch HA-Zustaende wie "partlycloudy" oder "fog".
+   * @param {{elevation?:number, azimuth?:number, night?:boolean,
+   *          moonPhase?:number, span?:number}} o
+   */
+  setWeatherMode(mode, o = {}) {
+    if (!this.ok) return;
+    const m = String(mode || "tag").toLowerCase();
+    // Kurzformen auf HA-Zustaende abbilden
+    const cond =
+      m === "tag"    ? "sunny" :
+      m === "nacht"  ? "clear-night" :
+      m === "regen"  ? "rainy" :
+      m === "schnee" ? "snowy" : m;
+    const night = o.night ?? (m === "nacht");
+    const span = o.span ?? this.span ?? 12;
+
+    this.setSun(o.azimuth ?? 170, o.elevation ?? (night ? -25 : 42));
+    this.setDaylight({ elevation: o.elevation ?? (night ? -25 : 42), condition: cond, night });
+
+    if (this.dome) {
+      this.dome.setCenter(this.center);
+      this.dome.setScale(span);
+      this.dome.setWeather(cond);
+      this.dome.setBody(o.moonPhase ?? 0.5, night, span);
+      this.dome.setSceneWeather(cond, span);
+      this.dome.setGround(span, night);
+    }
+    if (this.hood) this.hood.setWeather(cond, night);
+
+    // Nebel je Lage – der Horizont traegt die Stimmung
+    const fog =
+      night                                 ? [0x0a1020, 0.0075] :
+      /fog/.test(cond)                      ? [0xd8dde2, 0.045]  :
+      /pouring|storm|lightning/.test(cond)  ? [0x59626d, 0.020]  :
+      /rain/.test(cond)                     ? [0x77818d, 0.014]  :
+      /snow|sleet|hail/.test(cond)          ? [0xdfe8f2, 0.016]  :
+      /cloudy/.test(cond)                   ? [0xc3ccd6, 0.008]  :
+                                              [0xd0e0f0, 0.005];
+    this.setFog(fog[0], fog[1]);
+    // Glow nur fuer Lichtquellen, nicht fuer Waende und Boeden
+    this.setBloom(night ? 0.3 : 0.15, night ? 0.5 : 0.4, 0.85);
+    return cond;
   }
 
   /** Atmosphaerischer Nebel – gibt dem Horizont Tiefe. */
