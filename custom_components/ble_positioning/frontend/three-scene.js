@@ -22,7 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=7";
-import { Neighborhood } from "./three-neighborhood.js?n=4";
+import { Neighborhood } from "./three-neighborhood.js?n=5";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -394,9 +394,15 @@ export class ThreeScene {
         this.hemi.groundColor.setHex(0xcfdae8);   // Schneeboden statt Erde
         this.hemi.intensity += 0.35;
       }
-      this.sun.castShadow = clarity > 0.45; // diffuses Licht wirft keine harten Schatten
+      // Schatten auch bei Bewoelkung: ganz ohne wirkt die Szene flach und
+      // die Gebaeude scheinen zu schweben. Bei truebem Wetter uebernimmt
+      // der weiche Rand die Rolle des diffusen Lichts.
+      this.sun.castShadow = true;
+      this.sun.shadow.radius = clarity > 0.7 ? 2.0 : 5.0;
     }
     this._applyPortIntensity();
+    // Die Innenlampen haengen am Tageslicht und muessen mitgezogen werden
+    if (this._lastLamps) this.updateLights(this._lastLamps);
   }
 
   /**
@@ -497,7 +503,9 @@ export class ThreeScene {
   /** Bloom-Staerke zur Laufzeit, z. B. nachts kraeftiger. */
   setBloom(strength, radius, threshold) {
     if (!this.bloomPass) return;
-    if (strength  != null) this.bloomPass.strength  = strength;
+    // Harter Deckel: Bloom soll Lichtquellen hervorheben, nicht das Bild
+    // weichzeichnen. Ueber 0.35 faengt der Boden an mitzugluehen.
+    if (strength  != null) this.bloomPass.strength  = Math.min(strength, 0.35);
     if (radius    != null) this.bloomPass.radius    = radius;
     if (threshold != null) this.bloomPass.threshold = threshold;
   }
@@ -862,6 +870,7 @@ export class ThreeScene {
    */
   updateLights(lights) {
     if (!this.ok) return;
+    this._lastLamps = lights;
     this._lamps = this._lamps || new Map();
     const seen = new Set();
     // WebGL bindet Lichter im Shader: jede zusätzliche Lampe kostet in
@@ -908,7 +917,12 @@ export class ThreeScene {
       const frac = Math.max(0, Math.min(255, l.brightness ?? 255)) / 255;
       // Etwas gedaempft: bei voller Staerke ueberstrahlt eine Lampe den
       // Holzboden, und Maserung wie Raumkanten verschwinden im Weiss.
-      const lumen = 620 * frac;
+      //
+      // Am Tag zusaetzlich stark zurueckgenommen: Lampenlicht addiert
+      // sich auf Sonne und Fensterlicht, und der Raum brennt aus. Real
+      // faellt eine Lampe bei Tageslicht ja auch kaum auf.
+      const dayDim = 1 - 0.85 * (this._dayFactor ?? 0);
+      const lumen = 620 * frac * Math.max(0.15, dayDim);
       lamp.pl.intensity = lumen / (4 * Math.PI);
       lamp.bulb.material.emissiveIntensity = 0.4 + frac * 0.6;
 

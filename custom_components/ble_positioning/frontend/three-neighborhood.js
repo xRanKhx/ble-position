@@ -335,8 +335,8 @@ export class Neighborhood {
           m.userData.dryRough = m.material.roughness;
           m.userData.dryMetal = m.material.metalness;
         }
-        m.material.roughness = wet ? 0.1 : m.userData.dryRough;
-        m.material.metalness = wet ? 0.2 : m.userData.dryMetal;
+        m.material.roughness = wet ? 0.1 : 0.7;
+        m.material.metalness = wet ? 0.3 : m.userData.dryMetal;
         m.material.envMapIntensity = wet ? 1.6 : 1.0;
         m.material.needsUpdate = true;
       }
