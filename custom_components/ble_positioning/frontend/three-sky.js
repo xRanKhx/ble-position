@@ -56,6 +56,9 @@ function makeStars(count) {
     },
     transparent: true,
     depthWrite: false,
+    // Sterne stehen jenseits jeder Nebelreichweite – ohne fog:false
+    // ueberzieht der Szenennebel den Himmel mit einem grauen Schleier.
+    fog: false,
     vertexShader: `
       attribute float aSize;
       uniform float uPixelRatio;
@@ -86,6 +89,7 @@ function gradientMaterial() {
   return new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
+    fog: false,          // der Himmel selbst wird nie vernebelt
     uniforms: {
       uColorTop:    { value: new THREE.Color(0x4f86c6) },
       uColorBottom: { value: new THREE.Color(0xdfe8f2) },
@@ -286,7 +290,7 @@ export class SkyDome {
         const g = new THREE.Group();
         for (let i = 0; i < want; i++) {
           const sp = new THREE.Sprite(new THREE.SpriteMaterial({
-            map: this._cloudTex, transparent: true, depthWrite: false,
+            map: this._cloudTex, transparent: true, depthWrite: false, fog: false,
             opacity: 0.55 + Math.random() * 0.25,
           }));
           const sc = extent * (0.22 + Math.random() * 0.2);
@@ -396,6 +400,7 @@ export class SkyDome {
       const mat = sky.material;
       mat.side = THREE.BackSide;
       mat.depthWrite = false;
+      mat.fog = false;
       this.skyMesh = new THREE.Mesh(new THREE.SphereGeometry(RADIUS, 48, 24), mat);
       this.skyMesh.frustumCulled = false;
       this.skyMesh.renderOrder = -2;
@@ -481,7 +486,7 @@ export class SkyDome {
         this._body.material.map?.dispose(); this._body.material.dispose(); }
       this._body = new THREE.Sprite(new THREE.SpriteMaterial({
         map: new THREE.CanvasTexture(this._bodyCanvas(phase, isNight)),
-        transparent: true, depthWrite: false, depthTest: false,
+        transparent: true, depthWrite: false, depthTest: false, fog: false,
         // Additiv: das Gestirn leuchtet, statt den Himmel auszustanzen
         blending: isNight ? THREE.NormalBlending : THREE.AdditiveBlending,
       }));

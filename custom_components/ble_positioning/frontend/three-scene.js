@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=7";
+import { SkyDome } from "./three-sky.js?s=8";
 import { Neighborhood } from "./three-neighborhood.js?n=5";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -368,16 +368,18 @@ export class ThreeScene {
       // Mondlicht: kuehl und schwach. Etwas Grundlicht muss bleiben,
       // sonst sieht man nicht einmal die Umrisse – aber deutlich weniger
       // als zuvor, damit die Lampen im Haus die Szene tragen.
-      this.hemi.intensity = 0.15;
-      this.hemi.color.setHex(0x22304e);
-      this.hemi.groundColor.setHex(0x0f1218);
+      // Kohlengrau statt Grau: ein helles Grundlicht hebt die Schatten an
+      // und nimmt dem Bild den Schwarzpunkt.
+      this.hemi.intensity = 0.1;
+      this.hemi.color.setHex(0x0d1117);
+      this.hemi.groundColor.setHex(0x000000);
       this.sun.intensity = 0.6;
       this.sun.color.setHex(0x88b0d8);
       // Der Mond wirft Schatten: bei dieser Staerke sind sie zart und
       // geben dem Bild Tiefe, statt aufdringlich zu wirken.
       this.sun.castShadow = true;
       // Dunkler belichten – das ist es, was den Nachtlook ausmacht.
-      this.renderer.toneMappingExposure = 0.7;
+      this.renderer.toneMappingExposure = 0.85;
     } else {
       this.renderer.toneMappingExposure = 1.2;
       // Bedeckter Himmel streut: weniger Richtungslicht, mehr Diffuses

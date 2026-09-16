@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.3.0";
+const CARD_VERSION = "6.3.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20062,15 +20062,18 @@ trigger:
       // Eng gezogen: nur wirklich helle Quellen sollen gluehen. Bei 0.85
       // fing der beleuchtete Boden an mitzustrahlen.
       sc.setBloom(night2 ? 0.14 : 0.08, night2 ? 0.45 : 0.4, 0.92);
+      // Nebel deutlich zurueckgenommen. Er lag bei 0.008 bis 0.045 und
+      // legte sich als grauer Schleier ueber die ganze Szene – der
+      // Schwarzpunkt ging verloren. Nur noch dort, wo Nebel wirklich zur
+      // Wetterlage gehoert, und in der Farbe des Himmels, nie neutralgrau.
       const fog =
-        night2                              ? [0x0a1020, 0.0075] :
-        /fog/.test(cond2)                   ? [0xd8dde2, 0.045]  :
-        /pouring|storm|lightning/.test(cond2)? [0x59626d, 0.020] :
-        /rain/.test(cond2)                  ? [0x77818d, 0.014]  :
-        /snow|sleet|hail/.test(cond2)       ? [0xdfe8f2, 0.016]  :
-        /cloudy/.test(cond2)                ? [0xc3ccd6, 0.008]  :
-                                              [0xd0e0f0, 0.005];
-      sc.setFog(fog[0], fog[1]);
+        night2                               ? [0x0a0e17, 0.0008] :
+        /fog/.test(cond2)                    ? [0xc9d2da, 0.016]  :
+        /pouring|storm|lightning/.test(cond2)? [0x4c545e, 0.006]  :
+        /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
+        /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
+                                               null;   // sonst gar keiner
+      if (fog) sc.setFog(fog[0], fog[1]); else sc.setFog(0, 0);
     }
 
     // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
