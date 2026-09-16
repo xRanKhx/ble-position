@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.9.1";
+const CARD_VERSION = "5.10.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -5525,6 +5525,9 @@ class BLEPositioningCard extends HTMLElement {
         // erneut – die Platte stand still.
         const _animDecos = this._pendingDecos?.length
           ? this._pendingDecos : (this._data?.decos || []);
+        // Regen und Wolken in der WebGL-Szene brauchen einen laufenden
+        // Loop, sonst steht der Niederschlag still.
+        const hasGlWeather = !!(this._gl?.dome && this._opts?.show_weather);
         const hasMusicAnim = this._opts?.show_music_bubble &&
           _animDecos.some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
             this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
@@ -5534,7 +5537,7 @@ class BLEPositioningCard extends HTMLElement {
           (this._data?.windows||[]).some(w => w.cover_entity &&
             ["opening","closing"].includes(
               String(this._hass?.states?.[w.cover_entity]?.state||"").toLowerCase()));
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasGlWeather
             || hasElektroAnim || hasWeatherAnim || hasCoverAnim) {
           lastFrame = ts;
           this._dirty = false;
@@ -19989,10 +19992,15 @@ trigger:
       wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.clearRect(0, 0, wx.width, wx.height);
       if (sc.dome) {
-        sc.setSkyWeather(this._weatherState()?.condition);
+        const cond = this._weatherState()?.condition;
+        sc.setSkyWeather(cond);
         // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
         // Canvas dahinter vollstaendig verdecken.
         sc.dome.setBody(this._moonPhase(), this._isDark());
+        // Wolken und Niederschlag als echte Objekte in der Szene, sonst
+        // waere Regen nur in 2D zu sehen.
+        sc.dome.setSceneWeather(cond, sc.span || 12);
+        sc.dome.animate(Date.now() / 1000);
       }
       // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
       // Wolken, Niederschlag und die Temperatur. Nur der Himmelsverlauf

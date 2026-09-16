@@ -103,6 +103,97 @@ function gradientMaterial() {
   });
 }
 
+/* Niederschlag als Partikelwolke ueber der Szene.
+   Die Bewegung laeuft im Vertex-Shader: die CPU muesste sonst jedes Bild
+   tausende Positionen neu schreiben, das ist auf dem Handy spuerbar.
+   Jeder Tropfen bekommt eine eigene Phase, faellt und beginnt oben neu. */
+function makePrecipitation(kind, count, extent, height) {
+  const n = count;
+  const pos = new Float32Array(n * 3);
+  const rnd = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    pos[i*3]   = (Math.random() - 0.5) * extent;
+    pos[i*3+1] = Math.random() * height;
+    pos[i*3+2] = (Math.random() - 0.5) * extent;
+    rnd[i] = Math.random();
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("aRnd", new THREE.BufferAttribute(rnd, 1));
+
+  const snow = kind === "snow";
+  const mat = new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: {
+      uTime:   { value: 0 },
+      uSpeed:  { value: snow ? 1.1 : 9.0 },
+      uHeight: { value: height },
+      uOpacity:{ value: 0 },
+      uSize:   { value: (snow ? 5.0 : 2.4) * Math.min(window.devicePixelRatio || 1, 2) },
+      uSnow:   { value: snow ? 1 : 0 },
+    },
+    vertexShader: `
+      attribute float aRnd;
+      uniform float uTime, uSpeed, uHeight, uSize, uSnow;
+      varying float vR;
+      void main() {
+        vR = aRnd;
+        vec3 p = position;
+        // Fallen mit Umbruch: mod haelt die Tropfen im Band
+        float fall = uTime * uSpeed * (0.7 + aRnd * 0.6);
+        p.y = mod(p.y - fall, uHeight);
+        if (uSnow > 0.5) {
+          // Schnee pendelt seitlich, Regen faellt gerade
+          p.x += sin(uTime * 0.6 + aRnd * 30.0) * 1.6;
+          p.z += cos(uTime * 0.5 + aRnd * 25.0) * 1.4;
+        }
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_Position = projectionMatrix * mv;
+        gl_PointSize = uSize * (0.6 + aRnd * 0.8);
+      }`,
+    fragmentShader: `
+      uniform float uOpacity, uSnow;
+      varying float vR;
+      void main() {
+        vec2 d = gl_PointCoord - vec2(0.5);
+        float a;
+        if (uSnow > 0.5) {
+          a = smoothstep(0.5, 0.05, length(d));          // runde Flocke
+        } else {
+          // Tropfen: schmal und senkrecht gestreckt
+          a = smoothstep(0.5, 0.0, length(vec2(d.x * 3.5, d.y)));
+        }
+        vec3 col = uSnow > 0.5 ? vec3(1.0) : vec3(0.72, 0.82, 0.95);
+        gl_FragColor = vec4(col, a * uOpacity);
+      }`,
+  });
+  const pts = new THREE.Points(geo, mat);
+  pts.frustumCulled = false;
+  return pts;
+}
+
+/* Wolken als Billboards. Weiche Scheiben, die langsam ziehen – in der
+   isometrischen Ansicht genuegt das voellig und kostet fast nichts. */
+function cloudTexture() {
+  const S = 128, c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  for (let i = 0; i < 7; i++) {
+    const r = S * (0.14 + Math.random() * 0.16);
+    const cx = S * (0.25 + Math.random() * 0.5);
+    const cy = S * (0.4 + Math.random() * 0.25);
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, "rgba(255,255,255,0.95)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = g;
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 export class SkyDome {
   /**
    * @param {THREE.Scene} scene
@@ -128,6 +219,89 @@ export class SkyDome {
 
     this.sky = null;
     this.skyMesh = null;
+    this._precip = null;
+    this._clouds = null;
+  }
+
+  /**
+   * Wolken und Niederschlag nach Wetterlage.
+   * @param {string} condition  HA-Wetterzustand
+   * @param {number} span       Ausdehnung der Szene in Metern
+   */
+  setSceneWeather(condition, span) {
+    const c = String(condition || "");
+    const extent = Math.max(24, span * 3);
+    const height = Math.max(14, span * 1.4);
+
+    // ── Niederschlag ──────────────────────────────────────────────────
+    const snow = /snow|sleet|hail/.test(c);
+    const rain = /rain|pouring|lightning|storm/.test(c);
+    const kind = snow ? "snow" : rain ? "rain" : null;
+    const heavy = /pouring|lightning|storm/.test(c);
+    if (this._precipKind !== kind || this._precipExtent !== extent) {
+      if (this._precip) {
+        this.scene.remove(this._precip);
+        this._precip.geometry.dispose(); this._precip.material.dispose();
+        this._precip = null;
+      }
+      this._precipKind = kind; this._precipExtent = extent;
+      if (kind) {
+        this._precip = makePrecipitation(kind, snow ? 900 : 1600, extent, height);
+        this.scene.add(this._precip);
+      }
+    }
+    if (this._precip) {
+      this._precip.material.uniforms.uOpacity.value = heavy ? 0.85 : 0.6;
+    }
+
+    // ── Wolken ────────────────────────────────────────────────────────
+    const cloudy = /cloud|rain|snow|sleet|hail|pouring|lightning|storm|fog/.test(c);
+    const many = /cloudy|rain|pouring|storm|snow|fog/.test(c);
+    const want = cloudy ? (many ? 7 : 4) : 0;
+    if (this._cloudCount !== want || this._cloudExtent !== extent) {
+      if (this._clouds) { this.scene.remove(this._clouds); }
+      this._cloudCount = want; this._cloudExtent = extent;
+      this._clouds = null;
+      if (want > 0) {
+        if (!this._cloudTex) this._cloudTex = cloudTexture();
+        const g = new THREE.Group();
+        for (let i = 0; i < want; i++) {
+          const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: this._cloudTex, transparent: true, depthWrite: false,
+            opacity: 0.55 + Math.random() * 0.25,
+          }));
+          const sc = extent * (0.22 + Math.random() * 0.2);
+          sp.scale.set(sc, sc * 0.55, 1);
+          sp.position.set(
+            (Math.random() - 0.5) * extent,
+            height * (0.72 + Math.random() * 0.3),
+            (Math.random() - 0.5) * extent
+          );
+          sp.userData.drift = 0.25 + Math.random() * 0.5;
+          g.add(sp);
+        }
+        g.frustumCulled = false;
+        this._clouds = g;
+        this.scene.add(g);
+      }
+    }
+    if (this._clouds) {
+      // Bei Nebel und Sturm dichter und dunkler
+      const dim = /fog/.test(c) ? 0.85 : /pouring|storm|lightning/.test(c) ? 0.62 : 1;
+      for (const sp of this._clouds.children) sp.material.color.setScalar(dim);
+    }
+  }
+
+  /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
+  animate(t) {
+    if (this._precip) this._precip.material.uniforms.uTime.value = t;
+    if (this._clouds) {
+      const ex = this._cloudExtent || 60;
+      for (const sp of this._clouds.children) {
+        sp.position.x += sp.userData.drift * 0.02;
+        if (sp.position.x > ex / 2) sp.position.x = -ex / 2;
+      }
+    }
   }
 
   /** Sky.js nachladen. Schlägt es fehl, bleibt die Verlaufskuppel stehen. */
@@ -297,7 +471,9 @@ export class SkyDome {
   }
 
   dispose() {
-    for (const m of [this.gradient, this.skyMesh, this.stars, this._body]) {
+    if (this._clouds) this.scene.remove(this._clouds);
+    this._cloudTex?.dispose();
+    for (const m of [this.gradient, this.skyMesh, this.stars, this._body, this._precip]) {
       if (!m) continue;
       this.scene.remove(m);
       m.geometry?.dispose();
