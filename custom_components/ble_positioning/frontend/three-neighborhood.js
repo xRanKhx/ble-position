@@ -201,6 +201,8 @@ export class Neighborhood {
       rcap.position.set(x, h + 0.39, z);
       rcap.castShadow = true;
       rcap.visible = false;
+      rcap.userData.isSnowCap = true;
+      rcap.userData.weatherOk = false;
       g.add(rcap);
       this._snowCaps = this._snowCaps || [];
       this._snowCaps.push(rcap);
@@ -281,6 +283,8 @@ export class Neighborhood {
         cap.position.copy(c.position);
         cap.castShadow = true;
         cap.visible = false;            // erscheint nur bei Schnee
+        cap.userData.isSnowCap = true;
+        cap.userData.weatherOk = false;
         g.add(cap);
         tree.objs.push(cap);
         this._snowCaps = this._snowCaps || [];
@@ -311,7 +315,19 @@ export class Neighborhood {
       const lat = Math.abs(vx * side.x + vz * side.z);
       // Vor dem Gebaeude und seitlich nah genug, um es zu verdecken
       const blocks = along < 0 && lat < r + b.r;
-      for (const o of b.objs) o.visible = !blocks;
+      // Sichtbarkeit hat zwei unabhaengige Gruende: Wetter (liegt Schnee?)
+      // und Verdeckung (steht es im Weg?). Beide auf dasselbe Flag zu
+      // schreiben hiess, dass der zuletzt laufende gewinnt – deshalb
+      // blieben Schneehauben im Sommer stehen.
+      for (const o of b.objs) {
+        o.userData.occluded = blocks;
+        o.visible = !blocks && (o.userData.weatherOk !== false);
+        // Kinder mitnehmen: Hauben und Aufsaetze haengen an den Eltern
+        o.traverse?.((ch) => {
+          if (ch === o) return;
+          ch.visible = !blocks && (ch.userData.weatherOk !== false);
+        });
+      }
     }
   }
 
@@ -332,8 +348,12 @@ export class Neighborhood {
           m.material.color.setHex(snow ? hex : m.userData.baseHex);
         }
       };
-      // Hauben ein- und ausblenden statt Meshes umzufaerben
-      for (const cap of (this._snowCaps || [])) cap.visible = snow;
+      // Hauben: Wetterzustand getrennt vom Verdeckungszustand fuehren
+      for (const cap of (this._snowCaps || [])) {
+        cap.userData.weatherOk = snow;
+        cap.userData.isSnowCap = true;
+        cap.visible = snow && !cap.userData.occluded;
+      }
       // Strassen werden Schneematsch, nicht Reinweiss: nur so bleiben
       // Fahrbahnmarkierungen und Bordsteinkanten noch zu erkennen.
       tint(this._roadTargets, 0x777a80);

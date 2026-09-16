@@ -22,7 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=10";
-import { Neighborhood } from "./three-neighborhood.js?n=6";
+import { Neighborhood } from "./three-neighborhood.js?n=7";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -280,7 +280,7 @@ export class ThreeScene {
 
     this.scene = new THREE.Scene();
     this.scene.background = null;          // Himmel kommt vom Canvas dahinter
-    this.renderer.setClearColor(0x000000, 0);
+    this.renderer.setClearColor(0x0d131d, 1);   // wird von setBackdrop gefuehrt
 
     // Orthografisch, nicht perspektivisch: das Referenzbild ist eine
     // isometrische Architekturdarstellung, keine Kameraaufnahme.
@@ -571,6 +571,17 @@ export class ThreeScene {
     // Glow nur fuer Lichtquellen, nicht fuer Waende und Boeden
     this.setBloom(night ? 0.3 : 0.15, night ? 0.5 : 0.4, 0.85);
     return cond;
+  }
+
+  /**
+   * Grundton hinter allem. Die Himmelskuppel deckt nur ihren Radius ab;
+   * dahinter – und beim weiten Rauszoomen – blieb sonst Schwarz stehen.
+   */
+  setBackdrop(hex) {
+    if (!this.ok) return;
+    if (this._bgHex === hex) return;
+    this._bgHex = hex;
+    this.renderer.setClearColor(hex, 1);
   }
 
   /** Atmosphaerischer Nebel – gibt dem Horizont Tiefe. */

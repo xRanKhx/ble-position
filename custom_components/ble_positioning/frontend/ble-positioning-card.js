@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.6.0";
+const CARD_VERSION = "6.6.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20075,7 +20075,21 @@ trigger:
         /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
         /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
                                                null;   // sonst gar keiner
-      if (fog) sc.setFog(fog[0], fog[1]); else sc.setFog(0, 0);
+      // Hintergrund: die Kuppel traegt den Himmel, aber wo sie nicht
+      // hinreicht – ausserhalb ihres Radius, beim Rauszoomen – war es
+      // totes Schwarz. Ein passender Grundton dahinter verhindert das.
+      const bg =
+        night2                               ? 0x0d131d :
+        /fog/.test(cond2)                    ? 0xb9c2ca :
+        /pouring|storm|lightning/.test(cond2)? 0x3f474f :
+        /rain/.test(cond2)                   ? 0x5d6772 :
+        /snow|sleet|hail/.test(cond2)        ? 0xc6d2de :
+        /cloudy/.test(cond2)                 ? 0x9fb0c0 :
+                                               0x87ceeb;
+      sc.setBackdrop(bg);
+      // Nebelfarbe exakt auf den Hintergrund ziehen, sonst zeichnet sich
+      // der Horizont als harte Kante ab statt weich auszulaufen.
+      if (fog) sc.setFog(bg, fog[1]); else sc.setFog(0, 0);
     }
 
     // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
