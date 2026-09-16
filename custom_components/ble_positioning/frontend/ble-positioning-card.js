@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.13.0";
+const CARD_VERSION = "5.14.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20135,6 +20135,8 @@ trigger:
       }));
     sc.updatePeople(people);
 
+    // setView aktualisiert auch, was die Sicht verstellt – muss also nach
+    // dem Aufbau der Nachbarschaft laufen.
     sc.setView(this._3dAzimuth ?? 45, this._3dElevation ?? 30, this._3dZoom ?? 1);
     sc.render();
 

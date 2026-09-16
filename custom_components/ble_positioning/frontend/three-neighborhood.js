@@ -63,6 +63,9 @@ export class Neighborhood {
     const g = new THREE.Group();
     // Leicht abgesenkt, damit die Straßen nicht mit dem Boden flimmern
     g.position.set(cx, -0.1, cz);
+    this._origin = new THREE.Vector3(cx, 0, cz);
+    // Alles, was die Sicht auf das eigene Gebaeude verstellen kann
+    this._blockers = [];
 
     const roadW = 7.5;
     this._addRoads(g, reach, roadW, r);
@@ -88,6 +91,8 @@ export class Neighborhood {
       m.position.y = y;
       m.receiveShadow = true;
       g.add(m);
+      this._roadTargets = this._roadTargets || [];
+      this._roadTargets.push(m);
       return m;
     };
     // Gehwege etwas breiter darunter, ergibt eine Bordsteinkante
@@ -175,6 +180,9 @@ export class Neighborhood {
       g.add(roof);
       this._snowTargets = this._snowTargets || [];
       this._snowTargets.push(roof);
+      // Haus samt Dach als eine Einheit ein- und ausblenden
+      this._blockers.push({ objs: [body, roof], x, z, r: Math.max(w, d) / 2 });
+      this._lastHouse = this._blockers[this._blockers.length - 1];
 
       // Fensterraster: dunkle Felder, nachts leuchtet ein Teil
       const winMat = new THREE.MeshStandardMaterial({
@@ -199,6 +207,7 @@ export class Neighborhood {
             p.position.set(x + wx + dx, wy, z + dz);
             p.rotation.y = rot;
             g.add(p);
+            if (this._lastHouse) this._lastHouse.objs.push(p);
           }
         }
       }
@@ -221,6 +230,8 @@ export class Neighborhood {
       t.position.set(x, hh / 2, z);
       t.castShadow = true;
       g.add(t);
+      const tree = { objs: [t], x, z, r: 1.8 };
+      this._blockers.push(tree);
 
       const green = new THREE.MeshStandardMaterial({
         color: new THREE.Color().setHSL(0.26 + r() * 0.06, 0.38, 0.26 + r() * 0.1),
@@ -232,9 +243,36 @@ export class Neighborhood {
         c.position.set(x + (r() - 0.5) * 0.7, hh + rad * 0.5 + k * 0.7, z + (r() - 0.5) * 0.7);
         c.castShadow = true;
         g.add(c);
+        tree.objs.push(c);
         this._snowTargets = this._snowTargets || [];
         this._snowTargets.push(c);
       }
+    }
+  }
+
+  /**
+   * Alles ausblenden, was zwischen Kamera und eigenem Gebaeude steht.
+   * Gleiches Prinzip wie bei den Waenden: was die Sicht verstellt, wird
+   * weggenommen. Ohne das steht man vor der Nachbarfassade statt vor der
+   * eigenen Wohnung.
+   *
+   * @param {THREE.Vector3} camDir  Blickrichtung (von der Kamera weg)
+   * @param {number} keep           Radius um das Gebaeude, der frei bleibt
+   */
+  updateOcclusion(camDir, keep) {
+    if (!this._blockers || !this._origin) return;
+    const d = camDir.clone().setY(0).normalize();
+    // Senkrechte zur Blickrichtung, fuer den seitlichen Abstand
+    const side = new THREE.Vector3(-d.z, 0, d.x);
+    const r = Math.max(6, keep || 12);
+    for (const b of this._blockers) {
+      // Position relativ zum Gebaeudemittelpunkt, in lokalen Koordinaten
+      const vx = b.x, vz = b.z;
+      const along = vx * d.x + vz * d.z;        // negativ = vor dem Gebaeude
+      const lat = Math.abs(vx * side.x + vz * side.z);
+      // Vor dem Gebaeude und seitlich nah genug, um es zu verdecken
+      const blocks = along < 0 && lat < r + b.r;
+      for (const o of b.objs) o.visible = !blocks;
     }
   }
 
@@ -245,11 +283,18 @@ export class Neighborhood {
   setWeather(condition, night) {
     if (!this.group) return;
     const snow = /snow|sleet|hail/.test(String(condition || ""));
-    if (this._snow !== snow && this._snowTargets) {
+    if (this._snow !== snow) {
       this._snow = snow;
-      for (const m of this._snowTargets) {
-        m.material.color.setHex(snow ? 0xe9eef4 : (m.userData.base ?? m.material.color.getHex()));
-      }
+      // Originalfarbe beim ersten Mal sichern – sonst bliebe nach dem
+      // Umschalten alles weiss, weil die Ausgangsfarbe verloren waere.
+      const tint = (list, hex) => {
+        for (const m of (list || [])) {
+          if (m.userData.baseHex == null) m.userData.baseHex = m.material.color.getHex();
+          m.material.color.setHex(snow ? hex : m.userData.baseHex);
+        }
+      };
+      tint(this._snowTargets, 0xeef3f8);   // Daecher und Baumkronen
+      tint(this._roadTargets, 0xdfe6ee);   // Strassen und Gehwege
     }
     // Nachts sind die Fassaden dunkler; das eigene Haus soll herausstechen
     this.group.traverse((o) => {

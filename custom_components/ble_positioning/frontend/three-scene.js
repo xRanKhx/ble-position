@@ -22,7 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=6";
-import { Neighborhood } from "./three-neighborhood.js?n=1";
+import { Neighborhood } from "./three-neighborhood.js?n=2";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -379,7 +379,15 @@ export class ThreeScene {
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
       this.sun.intensity = 2.4 * this._dayFactor;
-      this.sun.color.setHex(clarity > 0.7 ? 0xfff3e0 : 0xeef2f8);
+      // Schnee wirft viel blaues Himmelslicht zurueck – das Licht wird
+      // spuerbar kuehler, nicht nur schwaecher.
+      const snowy = /snow|sleet|hail/.test(cond);
+      this.sun.color.setHex(snowy ? 0xeaf2ff : (clarity > 0.7 ? 0xfff3e0 : 0xeef2f8));
+      if (snowy) {
+        this.hemi.color.setHex(0xe6f0ff);
+        this.hemi.groundColor.setHex(0xcfdae8);   // Schneeboden statt Erde
+        this.hemi.intensity += 0.35;
+      }
       this.sun.castShadow = clarity > 0.45; // diffuses Licht wirft keine harten Schatten
     }
     this._applyPortIntensity();
@@ -1074,6 +1082,12 @@ export class ThreeScene {
     );
     this.camera.lookAt(this.center);
     this._updateWallVisibility();
+    if (this.hood) {
+      const dir = new THREE.Vector3();
+      this.camera.getWorldDirection(dir);
+      // Freizuhaltender Radius: das eigene Gebaeude plus etwas Luft
+      this.hood.updateOcclusion(dir, (this.span || 12) * 0.62);
+    }
     this.resize();
   }
 
