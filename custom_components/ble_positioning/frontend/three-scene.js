@@ -428,8 +428,11 @@ export class ThreeScene {
       const h = ((p.sillH ?? 0.9) + (p.topH ?? 2.1)) / 2;
       const l = new THREE.PointLight(0xffffff, 0, 0, 2);
       l.castShadow = false;
-      // Etwas nach innen versetzt, sonst leuchtet es die Aussenwand an
-      l.position.set(p.x + (p.inx || 0) * 0.35, h, p.y + (p.iny || 0) * 0.35);
+      // Deutlich weiter nach innen. Bei 0.35 m stand das Licht faktisch
+      // auf der Wand: mit quadratischem Abfall ergab ein breites Fenster
+      // dort ueber 2500 lux, und die Flaeche brannte aus. 1.4 m entspricht
+      // eher dem Punkt, an dem das Licht eines Fensters wirklich wirkt.
+      l.position.set(p.x + (p.inx || 0) * 1.4, h, p.y + (p.iny || 0) * 1.4);
       l.userData.area = Math.max(0.3, (p.width || 1) * ((p.topH ?? 2.1) - (p.sillH ?? 0.9)));
       this.scene.add(l);
       this._ports.push({ light: l });
@@ -441,9 +444,14 @@ export class ThreeScene {
     if (!this._ports) return;
     const f = this._dayFactor ?? 0.6;
     for (const p of this._ports) {
-      // Grosse Fenster lassen mehr herein; Candela wie bei den Lampen
-      const lumen = 2600 * f * p.light.userData.area;
-      p.light.intensity = lumen / (4 * Math.PI);
+      // Grosse Fenster lassen mehr herein; Candela wie bei den Lampen.
+      // 2600 lm/m2 war deutlich zu viel – ein Fenster ist kein Scheinwerfer.
+      const lumen = 2200 * f * p.light.userData.area;
+      // Harte Obergrenze: ein einzelnes Fenster darf den Raum nicht
+      // ueberstrahlen, egal wie breit es ist. Der groessere Abstand
+      // erledigt den Rest – ihn UND die Lumen stark zu senken war zu
+      // viel des Guten, danach war der Raum zu dunkel.
+      p.light.intensity = Math.min(150, lumen / (4 * Math.PI));
       p.light.color.setHex(f > 0.55 ? 0xfff4e2 : 0xe8eef7);
     }
   }
@@ -923,8 +931,12 @@ export class ThreeScene {
       // faellt eine Lampe bei Tageslicht ja auch kaum auf.
       const dayDim = 1 - 0.85 * (this._dayFactor ?? 0);
       const lumen = 620 * frac * Math.max(0.15, dayDim);
-      lamp.pl.intensity = lumen / (4 * Math.PI);
-      lamp.bulb.material.emissiveIntensity = 0.4 + frac * 0.6;
+      // Gedeckelt: eine Zimmerlampe soll den Raum ausleuchten, nicht
+      // ueberstrahlen. decay bleibt 2, also physikalischer Abfall.
+      lamp.pl.intensity = Math.min(70, lumen / (4 * Math.PI));
+      lamp.pl.decay = 2;
+      // Die Birne selbst darf leuchten, aber nicht den Bloom fuettern
+      lamp.bulb.material.emissiveIntensity = 0.3 + frac * 0.4;
 
       const h = l.z != null ? l.z : Math.max(0.6, (this._wallH || 2.5) - 0.35);
       lamp.grp.position.set(l.x, h, l.y);

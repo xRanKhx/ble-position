@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.2.2";
+const CARD_VERSION = "6.3.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20059,7 +20059,9 @@ trigger:
       // Holzboden an zu gluehen und schluckte die Maserung.
       // Bewusst schwach: Bloom soll Lampen und LEDs hervorheben, nicht
       // Waende und Boeden weichzeichnen.
-      sc.setBloom(night2 ? 0.3 : 0.15, night2 ? 0.5 : 0.4, 0.85);
+      // Eng gezogen: nur wirklich helle Quellen sollen gluehen. Bei 0.85
+      // fing der beleuchtete Boden an mitzustrahlen.
+      sc.setBloom(night2 ? 0.14 : 0.08, night2 ? 0.45 : 0.4, 0.92);
       const fog =
         night2                              ? [0x0a1020, 0.0075] :
         /fog/.test(cond2)                   ? [0xd8dde2, 0.045]  :
