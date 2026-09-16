@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=2";
+import { SkyDome } from "./three-sky.js?s=3";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und

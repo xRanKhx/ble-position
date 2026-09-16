@@ -209,6 +209,72 @@ export class SkyDome {
     u.uColorBottom.value.copy(botDay).lerp(botNight, night);
   }
 
+  /**
+   * Gestirn als Scheibe am Himmel. Nachts der Mond mit echter Phase,
+   * tagsüber die Sonne. Liegt in der Kuppel, nicht auf einem Canvas
+   * davor – sonst verdeckt die opake Kuppel es wieder.
+   * @param {number} phase 0..1, 0 = Neumond, 0.5 = Vollmond
+   */
+  setBody(phase, isNight) {
+    const want = isNight ? "moon" : "sun";
+    if (this._bodyKind !== want || this._bodyPhase !== phase) {
+      this._bodyKind = want; this._bodyPhase = phase;
+      if (this._body) { this.scene.remove(this._body);
+        this._body.material.map?.dispose(); this._body.material.dispose(); }
+      this._body = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: new THREE.CanvasTexture(this._bodyCanvas(phase, isNight)),
+        transparent: true, depthWrite: false, depthTest: false,
+        // Additiv: das Gestirn leuchtet, statt den Himmel auszustanzen
+        blending: isNight ? THREE.NormalBlending : THREE.AdditiveBlending,
+      }));
+      this._body.renderOrder = -1;
+      this._body.scale.setScalar(RADIUS * (isNight ? 0.13 : 0.17));
+      this.scene.add(this._body);
+    }
+    // An den Sonnenstand hängen; nachts gegenüber, wie der echte Mond
+    const d = this._sunDir.clone();
+    if (isNight) { d.x = -d.x; d.z = -d.z; d.y = Math.abs(d.y) * 0.8 + 0.25; }
+    this._body.position.copy(d.normalize().multiplyScalar(RADIUS * 0.8));
+  }
+
+  _bodyCanvas(phase, isNight) {
+    const S = 256, c = document.createElement("canvas");
+    c.width = c.height = S;
+    const x = c.getContext("2d");
+    const r = S * 0.3, cx = S / 2, cy = S / 2;
+    // Schein ringsum
+    const g = x.createRadialGradient(cx, cy, r * 0.7, cx, cy, S * 0.5);
+    g.addColorStop(0, isNight ? "rgba(200,215,255,0.5)" : "rgba(255,240,190,0.85)");
+    g.addColorStop(1, "rgba(255,255,255,0)");
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+
+    x.fillStyle = isNight ? "#eef2ff" : "#fff6d8";
+    x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.fill();
+
+    if (isNight) {
+      // Terminator wie im 2D-Renderer: Halbkreis plus Ellipsenbogen
+      const term = Math.cos(2 * Math.PI * phase);
+      const waxing = phase < 0.5;
+      if (term > 0.995) {
+        x.globalCompositeOperation = "destination-out";
+        x.beginPath(); x.arc(cx, cy, r * 0.97, 0, Math.PI * 2); x.fill();
+      } else if (term < -0.995) {
+        // Vollmond: nichts ausstanzen
+      } else {
+        x.save();
+        x.translate(cx, cy);
+        if (!waxing) x.scale(-1, 1);
+        x.globalCompositeOperation = "destination-out";
+        x.beginPath();
+        x.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, true);
+        x.ellipse(0, 0, r * Math.abs(term), r, 0, Math.PI / 2, -Math.PI / 2, term > 0);
+        x.closePath(); x.fill();
+        x.restore();
+      }
+    }
+    return c;
+  }
+
   /** Horizont- und Zenitfarbe direkt setzen (Verlaufsmodus). */
   setColors(bottom, top) {
     if (bottom != null) this.gradientMat.uniforms.uColorBottom.value.set(bottom);
@@ -231,7 +297,7 @@ export class SkyDome {
   }
 
   dispose() {
-    for (const m of [this.gradient, this.skyMesh, this.stars]) {
+    for (const m of [this.gradient, this.skyMesh, this.stars, this._body]) {
       if (!m) continue;
       this.scene.remove(m);
       m.geometry?.dispose();

@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.9.0";
+const CARD_VERSION = "5.9.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19846,6 +19846,29 @@ trigger:
     }
   }
 
+  /* Temperatur als DOM-Element statt auf ein Canvas: mit Himmelskuppel
+     liegt kein Canvas mehr hinter der Szene, und vor die Szene gemalt
+     wuerde sie mit dem Gebaeude kollidieren. */
+  _syncWeatherBadge(on) {
+    const wrap = this.shadowRoot?.getElementById("cwrap");
+    if (!wrap) return;
+    let el = this.shadowRoot.getElementById("wxbadge");
+    const w = on ? this._weatherState() : null;
+    if (!w || w.temp == null || !isFinite(w.temp)) { if (el) el.remove(); return; }
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "wxbadge";
+      el.style.cssText = "position:absolute;left:14px;top:14px;z-index:5;" +
+        "padding:5px 10px;border-radius:8px;font:600 13px system-ui,sans-serif;" +
+        "pointer-events:none;backdrop-filter:blur(3px)";
+      wrap.appendChild(el);
+    }
+    const night = this._isDark();
+    el.style.background = night ? "rgba(13,20,38,0.55)" : "rgba(35,48,69,0.45)";
+    el.style.color = night ? "#dfe6ff" : "#f2f6ff";
+    el.textContent = Math.round(w.temp) + (w.unit || "\u00b0C");
+  }
+
   _syncGlVisibility() {
     const cv = this.shadowRoot?.getElementById("gl");
     const c2 = this.shadowRoot?.getElementById("c");
@@ -19853,7 +19876,9 @@ trigger:
     const on = this._webglWanted() && this._gl && !this._glFailed;
     cv.style.display = on ? "block" : "none";
     const wx = this.shadowRoot?.getElementById("wx");
-    if (wx) wx.style.display = on ? "block" : "none";
+    const useDome = on && this._gl?.dome;
+    if (wx) wx.style.display = (on && !useDome) ? "block" : "none";
+    this._syncWeatherBadge(on && !!this._opts?.show_weather);
     // Das 2D-Canvas bleibt sichtbar und liegt oben: es traegt die Overlays
     // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
     // Drehen, Zoomen und der Editor verloren.
@@ -19963,22 +19988,26 @@ trigger:
       const wctx = wx.getContext("2d");
       wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.clearRect(0, 0, wx.width, wx.height);
-      if (sc.dome) sc.setSkyWeather(this._weatherState()?.condition);
+      if (sc.dome) {
+        sc.setSkyWeather(this._weatherState()?.condition);
+        // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
+        // Canvas dahinter vollstaendig verdecken.
+        sc.dome.setBody(this._moonPhase(), this._isDark());
+      }
       // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
       // Wolken, Niederschlag und die Temperatur. Nur der Himmelsverlauf
       // entfaellt, den liefert dann die Kuppel.
-      if (this._opts?.show_weather && this._weatherState()) {
-        if (!sc.dome) sc.setSky(null);       // ohne Kuppel: Himmel von hier
+      if (this._opts?.show_weather && this._weatherState() && !sc.dome) {
+        sc.setSky(null);                     // ohne Kuppel: Himmel von hier
         wctx.save();
         wctx.scale(wdpr, wdpr);
         try {
-          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx,
-                                        skipSky: !!sc.dome });
+          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx });
         } catch (e) {
           if (!this._wxErr) { this._wxErr = true; console.warn("BLE Positioning: Wetter-Kulisse", e); }
         }
         wctx.restore();
-      } else {
+      } else if (!sc.dome) {
         sc.setSky("#e9ecef");                // ohne Wetter ein neutraler Himmel
       }
     }
