@@ -22,6 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=6";
+import { Neighborhood } from "./three-neighborhood.js?n=1";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -1109,6 +1110,14 @@ export class ThreeScene {
   }
 
   /** Himmelsfarbe, z. B. aus dem Wetterzustand. */
+  setNeighborhood(on, condition, night, seed) {
+    if (!this.ok) return;
+    if (!on) { this.hood?.dispose(); this.hood = null; return; }
+    if (!this.hood) this.hood = new Neighborhood(this.scene, { seed: seed || 1337 });
+    if (this.bounds) this.hood.build(this.bounds, this.span);
+    this.hood.setWeather(condition, night);
+  }
+
   setSkyWeather(condition) {
     if (this.dome) this.dome.setWeather(condition);
   }
@@ -1158,6 +1167,7 @@ export class ThreeScene {
       this._lamps.clear();
     }
     this.dome?.dispose();
+    this.hood?.dispose();
     disposeFurnitureCache();
     for (const set of [this.wood, this.plaster]) {
       if (!set) continue;

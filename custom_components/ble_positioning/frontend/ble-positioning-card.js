@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.12.0";
+const CARD_VERSION = "5.13.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -16848,6 +16848,39 @@ _drawDoors() {
       tBox.appendChild(tSel);
       themeSection.appendChild(tBox);
 
+      // ── Nachbarschaft ──────────────────────────────────────────────────
+      const nBox = document.createElement("div");
+      nBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
+      nBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83C\uDFD8\uFE0F Nachbarschaft (WebGL)</span>' +
+        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Stra\u00dfen, H\u00e4user und B\u00e4ume rings um das Geb\u00e4ude</div>';
+      const nRow = document.createElement("div");
+      nRow.style.cssText = "display:flex;gap:6px;margin-top:5px;align-items:center";
+      const nChk = document.createElement("input");
+      nChk.type = "checkbox";
+      nChk.checked = this._opts?.neighborhood !== false;
+      nChk.addEventListener("change", async () => {
+        if (!this._opts) this._opts = {};
+        this._opts.neighborhood = nChk.checked;
+        this._draw(); await this._saveOptions();
+        this._showToast(nChk.checked ? "Nachbarschaft an" : "Nachbarschaft aus");
+      });
+      const nLbl = document.createElement("span");
+      nLbl.style.cssText = "font-size:7.5px;color:var(--text)";
+      nLbl.textContent = "anzeigen";
+      const nNew = document.createElement("button");
+      nNew.textContent = "Neu w\u00fcrfeln";
+      nNew.style.cssText = "margin-left:auto;padding:3px 7px;font-size:7px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer";
+      nNew.addEventListener("click", async () => {
+        if (!this._opts) this._opts = {};
+        this._opts.hood_seed = Math.floor(Math.random() * 100000);
+        if (this._gl?.hood) { this._gl.hood.dispose(); this._gl.hood = null; }
+        this._draw(); await this._saveOptions();
+        this._showToast("Neue Nachbarschaft");
+      });
+      nRow.appendChild(nChk); nRow.appendChild(nLbl); nRow.appendChild(nNew);
+      nBox.appendChild(nRow);
+      themeSection.appendChild(nBox);
+
       wrap.appendChild(themeSection);
     }
 
@@ -20021,6 +20054,10 @@ trigger:
         // waere Regen nur in 2D zu sehen.
         sc.dome.setSceneWeather(cond, sc.span || 12);
         sc.dome.setGround(sc.span || 12, this._isDark());
+        // Nachbarschaft: Strassen, Haeuser, Baeume. Deterministisch aus
+        // dem Grundriss, damit sie nicht bei jedem Neuaufbau umspringt.
+        sc.setNeighborhood(this._opts?.neighborhood !== false, cond,
+                           this._isDark(), this._opts?.hood_seed || 1337);
         sc.dome.animate(Date.now() / 1000);
       }
       // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
