@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.8.1";
+const CARD_VERSION = "5.9.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -12856,6 +12856,12 @@ _drawDoors() {
   }
 
   _weatherState() {
+    // Testmodus: erlaubt das Durchschalten aller Wetterlagen, ohne auf
+    // echtes Wetter warten zu muessen. Nur zum Pruefen gedacht.
+    if (this._wxTest) {
+      return { condition: this._wxTest.condition,
+               temp: this._wxTest.temp ?? 12, unit: "\u00b0C" };
+    }
     const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
     if (!eid) return null;
     const st = this._hass?.states?.[eid];
@@ -12957,6 +12963,11 @@ _drawDoors() {
     const animate = this._opts?.weather_animate !== false;
     const T       = Date.now() / 1000;
 
+    // Mit Himmelskuppel liefert diese den Verlauf. Dann werden hier nur
+    // noch Gestirn, Wolken, Niederschlag und die Temperatur gezeichnet –
+    // sonst laege ein zweiter, flacher Himmel davor.
+    const skipSky = !!o?.skipSky;
+
     ctx.save();
 
     // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert.
@@ -12997,13 +13008,15 @@ _drawDoors() {
     const sky = (night ? skyNight : skyDay)[fx]
               || (night ? ["#1a2340", "#2b3454"] : ["#dde5ee", "#eff3f8"]);
 
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, sky[0]);
-    grad.addColorStop(1, sky[1]);
-    ctx.globalAlpha = night ? 0.55 : 0.5;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
+    if (!skipSky) {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, sky[0]);
+      grad.addColorStop(1, sky[1]);
+      ctx.globalAlpha = night ? 0.55 : 0.5;
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = 1;
+    }
 
     const tint = night ? "#c7d2ea" : "#7f93ad";
 
@@ -16770,6 +16783,52 @@ _drawDoors() {
       envBox.appendChild(envHint);
       themeSection.appendChild(envBox);
 
+      // ── Wetter-Testmodus ───────────────────────────────────────────────
+      // Zum Pruefen der Darstellung, ohne auf echtes Wetter zu warten.
+      const tBox = document.createElement("div");
+      tBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
+      tBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83E\uDDEA Wetter-Testmodus</span>' +
+        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Zeigt eine Lage an, statt der echten. Nur zum Pr\u00fcfen.</div>';
+      const tSel = document.createElement("select");
+      tSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
+      const lagen = [
+        ["", "Aus \u2013 echtes Wetter"],
+        ["sunny|0|24",        "\u2600\uFE0F Sonnig, Tag"],
+        ["partlycloudy|0|19", "\u26C5 Leicht bew\u00f6lkt, Tag"],
+        ["cloudy|0|14",       "\u2601\uFE0F Bew\u00f6lkt, Tag"],
+        ["fog|0|8",           "\uD83C\uDF2B\uFE0F Nebel, Tag"],
+        ["rainy|0|11",        "\uD83C\uDF27\uFE0F Regen, Tag"],
+        ["pouring|0|9",       "\u26C8\uFE0F Starkregen, Tag"],
+        ["snowy|0|-2",        "\u2744\uFE0F Schnee, Tag"],
+        ["clear-night|1|7",   "\uD83C\uDF19 Klar, Nacht"],
+        ["cloudy|1|6",        "\u2601\uFE0F Bew\u00f6lkt, Nacht"],
+        ["rainy|1|4",         "\uD83C\uDF27\uFE0F Regen, Nacht"],
+        ["snowy|1|-4",        "\u2744\uFE0F Schnee, Nacht"],
+      ];
+      for (const [v, lbl] of lagen) {
+        const o = document.createElement("option");
+        o.value = v; o.textContent = lbl;
+        if ((this._wxTestKey || "") === v) o.selected = true;
+        tSel.appendChild(o);
+      }
+      tSel.addEventListener("change", () => {
+        this._wxTestKey = tSel.value;
+        if (!tSel.value) {
+          this._wxTest = null;
+        } else {
+          const [cond, n, t] = tSel.value.split("|");
+          this._wxTest = { condition: cond, night: n === "1", temp: +t };
+        }
+        // Erzwingt Neuaufbau: Sonnenstand und Himmel haengen daran
+        this._glDayKey = null; this._glDataKey = null; this._skyTestKey = null;
+        if (this._gl?.dome) this._gl.dome.setWeather(this._wxTest?.condition);
+        this._markDirty(); this._draw();
+        this._showToast(tSel.value ? "Test: " + tSel.options[tSel.selectedIndex].textContent
+                                   : "Testmodus aus");
+      });
+      tBox.appendChild(tSel);
+      themeSection.appendChild(tBox);
+
       wrap.appendChild(themeSection);
     }
 
@@ -17931,6 +17990,7 @@ _drawDoors() {
      Wetter-Kulisse die Tageszeit auch dann braucht, wenn der Nacht-Modus
      der Karte aus ist. */
   _isDark() {
+    if (this._wxTest) return !!this._wxTest.night;
     const s = this._hass?.states?.["sun.sun"]?.state;
     if (s === "below_horizon") return true;
     if (s === "above_horizon") return false;
@@ -19839,7 +19899,12 @@ trigger:
       furniture.map(f => [f.type, f.x, f.y, f.rotation, f.state, f.level]),
       this._data?.floor_w, this._data?.floor_h, this._wallHeight,
     ]);
-    const att = this._hass?.states?.["sun.sun"]?.attributes || {};
+    let att = this._hass?.states?.["sun.sun"]?.attributes || {};
+    if (this._wxTest) {
+      // Zur Nacht eine Sonne unter dem Horizont, sonst mittags hoch
+      att = { azimuth: this._wxTest.night ? 20 : 170,
+              elevation: this._wxTest.night ? -25 : 42 };
+    }
     if (key !== this._glDataKey) {
       sc.build({
         rooms,
@@ -19899,14 +19964,16 @@ trigger:
       wctx.setTransform(1, 0, 0, 1, 0, 0);
       wctx.clearRect(0, 0, wx.width, wx.height);
       if (sc.dome) sc.setSkyWeather(this._weatherState()?.condition);
-      // Mit Kuppel traegt diese den Himmel; die flache Kulisse waere
-      // dann ein zweiter, widersprechender Horizont.
-      if (this._opts?.show_weather && this._weatherState() && !sc.dome) {
-        sc.setSky(null);                     // Himmel kommt von der Kulisse
+      // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
+      // Wolken, Niederschlag und die Temperatur. Nur der Himmelsverlauf
+      // entfaellt, den liefert dann die Kuppel.
+      if (this._opts?.show_weather && this._weatherState()) {
+        if (!sc.dome) sc.setSky(null);       // ohne Kuppel: Himmel von hier
         wctx.save();
         wctx.scale(wdpr, wdpr);
         try {
-          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx });
+          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx,
+                                        skipSky: !!sc.dome });
         } catch (e) {
           if (!this._wxErr) { this._wxErr = true; console.warn("BLE Positioning: Wetter-Kulisse", e); }
         }
