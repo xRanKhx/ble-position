@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=11";
+import { SkyDome } from "./three-sky.js?s=12";
 import { Neighborhood } from "./three-neighborhood.js?n=8";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -1358,11 +1358,14 @@ export class ThreeScene {
     );
     this.camera.lookAt(this.center);
     this._updateWallVisibility();
-    if (this.hood) {
+    if (this.hood || this.dome) {
       const dir = new THREE.Vector3();
       this.camera.getWorldDirection(dir);
       // Freizuhaltender Radius: das eigene Gebaeude plus etwas Luft
-      this.hood.updateOcclusion(dir, (this.span || 12) * 0.62);
+      const keep = (this.span || 12) * 0.62;
+      this.hood?.updateOcclusion(dir, keep);
+      // Auch Wolken und Gestirn duerfen die Wohnung nicht verdecken
+      this.dome?.updateOcclusion(dir, keep);
     }
     this.resize();
   }

@@ -215,7 +215,7 @@ function cloudTexture() {
 function makeRainLines(count, extent, height) {
   const pos = new Float32Array(count * 6);     // zwei Punkte je Tropfen
   const rnd = new Float32Array(count);
-  const len = 0.55;
+  const len = 0.9;        // laenger, dafuer deutlich unauffaelliger
   for (let i = 0; i < count; i++) {
     const x = (Math.random() - 0.5) * extent;
     const y = Math.random() * height;
@@ -230,7 +230,9 @@ function makeRainLines(count, extent, height) {
   geo.userData.rnd = rnd;
   geo.userData.len = len;
   const mat = new THREE.LineBasicMaterial({
-    color: 0xbcd0e8, transparent: true, opacity: 0.55, fog: false,
+    // Halbtransparentes Blaugrau statt massivem Weiss: Regen soll die
+    // Szene ueberziehen, nicht zustellen.
+    color: 0xaaccff, transparent: true, opacity: 0.35, fog: false,
   });
   const m = new THREE.LineSegments(geo, mat);
   m.frustumCulled = false;
@@ -305,7 +307,7 @@ export class SkyDome {
     }
     this._rain.visible = rain;
     this._snow.visible = snow;
-    this._rain.material.opacity = heavy ? 0.75 : 0.5;
+    this._rain.material.opacity = heavy ? 0.42 : 0.3;
     this._snow.material.uniforms.uOpacity.value = heavy ? 0.9 : 0.72;
 
     // ── Wolken ────────────────────────────────────────────────────────
@@ -316,6 +318,33 @@ export class SkyDome {
       this._flash.position.set(0, 60, 20);
       this.scene.add(this._flash);
     }
+
+    // Geschlossene Decke statt Einzelwolken, sobald es regnet: bei
+    // Niederschlag steht keine Schoenwetterwolke mehr am Himmel.
+    const overcast = /rain|pouring|lightning|storm|snow|sleet|hail/.test(c);
+    if (overcast && !this._stormLayer) {
+      const geo = new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.46);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x2a2f38, roughness: 1, metalness: 0, side: THREE.BackSide,
+        transparent: true, opacity: 0.94, fog: false,
+        emissive: 0x000000, emissiveIntensity: 0,
+      });
+      this._stormLayer = new THREE.Mesh(geo, mat);
+      this._stormLayer.frustumCulled = false;
+      this._stormLayer.renderOrder = -1;
+      this.scene.add(this._stormLayer);
+    }
+    if (this._stormLayer) {
+      this._stormLayer.visible = overcast;
+      const r = (this._radius || 24) * 0.9;
+      this._stormLayer.scale.setScalar(r);
+      if (this._center) this._stormLayer.position.set(this._center.x, 0, this._center.z);
+      // Bei Schnee heller als bei Gewitter
+      this._stormLayer.material.color.setHex(
+        /snow|sleet|hail/.test(c) ? 0x6b7381 : this._storm ? 0x20242c : 0x39404b);
+    }
+    // Gestirn hinter geschlossener Decke: es waere ohnehin nicht zu sehen
+    if (this._body) this._body.visible = !overcast;
 
     const cloudy = /cloud|rain|snow|sleet|hail|pouring|lightning|storm|fog/.test(c);
     const many = /cloudy|rain|pouring|storm|snow|fog/.test(c);
@@ -352,7 +381,8 @@ export class SkyDome {
       const dim = /fog/.test(c) ? 0.85 : /pouring|storm|lightning/.test(c) ? 0.62 : 1;
       for (const sp of this._clouds.children) {
         sp.material.color.setScalar(dim);
-        sp.visible = true;      // Wolken gehoeren auch nachts dazu
+        // Einzelwolken verschwinden unter der geschlossenen Decke
+        sp.visible = !overcast;
       }
     }
   }
@@ -451,12 +481,22 @@ export class SkyDome {
       if (!this._nextFlash) this._nextFlash = now + 2 + Math.random() * 5;
       if (now >= this._nextFlash) {
         this._flash.intensity = 4 + Math.random() * 3;
+        // Entladung IN der Wolke: die Decke leuchtet kurz selbst auf.
+        // Ohne das wirkt der Blitz wie ein Scheinwerfer von aussen.
+        if (this._stormLayer) {
+          this._stormLayer.material.emissive.setHex(0xd8e8ff);
+          this._stormLayer.material.emissiveIntensity = 0.5 + Math.random() * 0.5;
+        }
         this._flashOff = now + 0.05 + Math.random() * 0.1;
         this._nextFlash = now + 2 + Math.random() * 6;
       }
       if (this._flashOff && now >= this._flashOff) {
         this._flash.intensity = 0;
         this._flashOff = 0;
+        if (this._stormLayer) {
+          this._stormLayer.material.emissive.setHex(0x000000);
+          this._stormLayer.material.emissiveIntensity = 0;
+        }
       }
     } else if (this._flash) {
       this._flash.intensity = 0;
@@ -620,6 +660,33 @@ export class SkyDome {
   setCenter(v) { this._center = v.clone(); }
 
   /**
+   * Wolken und Gestirn aus der Sichtlinie nehmen. Dasselbe Prinzip wie
+   * bei den Nachbarhaeusern: was zwischen Kamera und Wohnung schwebt,
+   * wird durchsichtig geschaltet.
+   */
+  updateOcclusion(camDir, keep) {
+    const d = camDir.clone().setY(0).normalize();
+    const side = new THREE.Vector3(-d.z, 0, d.x);
+    const r = Math.max(6, keep || 12);
+    const cx = this._center?.x || 0, cz = this._center?.z || 0;
+    const test = (obj, baseOpacity) => {
+      if (!obj) return;
+      const vx = obj.position.x - cx, vz = obj.position.z - cz;
+      const along = vx * d.x + vz * d.z;
+      const lat = Math.abs(vx * side.x + vz * side.z);
+      const blocks = along < 0 && lat < r * 1.3;
+      if (obj.material) {
+        obj.material.transparent = true;
+        obj.material.opacity = blocks ? 0.1 : baseOpacity;
+      }
+    };
+    if (this._clouds) for (const sp of this._clouds.children) {
+      test(sp, sp.userData.baseOpacity ?? (sp.userData.baseOpacity = sp.material.opacity));
+    }
+    test(this._body, 1);
+  }
+
+  /**
    * Kuppel auf die Szene skalieren. Der Faktor entscheidet, ab wann man
    * sie von aussen sieht: knapp ueber der Gebaeudegroesse wirkt sie wie
    * eine Kugel auf dem Tisch, sehr gross wie echter Himmel.
@@ -699,6 +766,8 @@ export class SkyDome {
 
   dispose() {
     if (this._clouds) this.scene.remove(this._clouds);
+    if (this._stormLayer) { this.scene.remove(this._stormLayer);
+      this._stormLayer.geometry.dispose(); this._stormLayer.material.dispose(); }
     if (this._ground) { this.scene.remove(this._ground);
       this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
