@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.11.0";
+const CARD_VERSION = "5.12.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20013,6 +20013,9 @@ trigger:
         // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
         // Canvas dahinter vollstaendig verdecken.
         sc.dome.setCenter(sc.center);
+        // Kuppel an die Szene koppeln: beim Rauszoomen wird sie als
+        // Kugel sichtbar, beim Hineinzoomen steht man darin.
+        sc.dome.setScale(sc.span);
         sc.dome.setBody(this._moonPhase(), this._isDark(), sc.span);
         // Wolken und Niederschlag als echte Objekte in der Szene, sonst
         // waere Regen nur in 2D zu sehen.

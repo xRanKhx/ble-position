@@ -1,6 +1,6 @@
 # BLE Positioning — WebGL-Renderer: Übergabestand
 
-Stand: 5.4.0 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
+Stand: 5.12.0 · Projekt `ha-ble-positioning` · Karte `ble-positioning-card.js`
 
 Dieses Dokument beschreibt den zweiten Renderer (Three.js) so, dass man
 ohne die vorherige Sitzung weiterarbeiten kann. Es ersetzt kein Lesen des
@@ -206,8 +206,41 @@ jemand schaut, und das ist bei Anwesenheitsdaten die halbe Aussage.
 Figuren werden verschoben statt neu gebaut; nur ein Haltungswechsel
 erzwingt neue Geometrie.
 
+## 6c. Himmel, Wetter, Umgebung (`three-sky.js`)
+
+`SkyDome` trägt alles, was zum Himmel gehört. Zwei Varianten:
+`"sky"` nutzt das Preetham-Modell aus `vendor/Sky.js` (Turbidity und
+Rayleigh kommen aus dem Wetterzustand), `"gradient"` ist ein eigenes
+ShaderMaterial mit `uColorBottom`/`uColorTop`. Unter etwa −2° Sonnenhöhe
+wird auf den Verlauf umgeblendet — Preetham kennt keine Nacht.
+
+Dazu: Sterne mit Milchstraßenband, Gestirn als Sprite mit echter
+Mondphase, Wolken als Billboards, Niederschlag als Partikel (Bewegung im
+Vertex-Shader, nicht auf der CPU), und ein rundes Gelände mit
+Alpha-Auslauf als Horizont.
+
+**Schneekugel-Effekt.** Der Kuppelradius ist *nicht* fest, sondern
+`span × 1.75`. Dadurch steht man beim Hineinzoomen darin und sieht sie
+beim Rauszoomen als Kugel. Der Übergang liegt bei Zoom ≈ 0,4; das
+Zoom-Minimum ist 0,3, der Effekt ist also erreichbar. Ein fester Radius
+(anfangs 1000) wäre immer nur Innenraum gewesen.
+
+## 6d. Beleuchtungsmodell
+
+Tageslicht wird **nicht global** in die Räume gegeben. Die
+Grundhelligkeit bleibt niedrig; das Licht kommt über eigene Punktlichter
+an Fenstern und offenen Türen herein (`updateDaylightPorts`). Ein
+fensterloser Raum ist dadurch von selbst dunkel, und eine Lampe wirkt
+dort auch tagsüber — ohne Sonderregel.
+
+Stärke = Trübung (Wetter) × Sonnenhöhe. Sonnig bei 45° ergibt 0,78,
+bedeckt 0,39, nachts 0. Fensterfläche geht ein. Bei bedecktem Himmel
+schaltet die Sonne ihre Schatten ab, weil diffuses Licht keine harten
+Schatten wirft.
+
 ## 7. Noch nicht in der WebGL-Szene
 
+- Nachbarschaft: Straßen, Nachbarhäuser, Bäume (Zielbild liegt vor)
 - Scanner-Marker, mmWave-Rohdaten
 - Musik-Bubbles (in 2D auf Canvas gezeichnet)
 - Wetter-Kulisse und Himmel
@@ -224,6 +257,14 @@ aus, brauchen aber einen Katalog, Lizenzklärung und deutlich mehr Speicher.
 echtes HTML über der Szene werden, statt auf die Canvas gemalt zu werden.
 Damit entfiele die gesamte Treffer-Zonen-Rechnerei samt der
 Koordinatenumrechnung zwischen physischen und CSS-Pixeln.
+
+**Canvas-Ebenen entwirren.** `#c` ist zugleich 2D-Renderer, Overlay-Ebene
+und Träger aller Eingabe-Handler. Daraus kamen mehrere Fehler (verstecktes
+Canvas ⇒ kein Drehen und kein Editor; opake Kuppel ⇒ Kulisse dahinter
+unsichtbar). Sauber wäre: `#c` nur 2D, `#gl` nur WebGL, `#ov` nur
+Overlays — und **die Eingaben an `#cwrap` statt ans Canvas**. Dann ist
+egal, welches Canvas gerade sichtbar ist. Nicht dringend, aber der Fix,
+der diese Fehlerklasse beendet.
 
 **Bedienung.** Noch offen. Zu klären: ein Finger dreht, zwei Finger zoomen,
 und wie sich das mit dem Verschieben der Musik-Bubble verträgt.

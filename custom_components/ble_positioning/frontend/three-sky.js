@@ -21,7 +21,11 @@
 
 import * as THREE from "./vendor/three.module.js";
 
-const RADIUS = 1000;
+/* Basisradius der Kuppel. Sie wird zur Laufzeit auf die Szene skaliert:
+   ist sie nur wenig groesser als das Gebaeude, sieht man sie beim
+   Rauszoomen als Kugel – wie eine Schneekugel –, und beim Hineinzoomen
+   steht man darin. Ein fester Radius von 1000 waere immer nur Innenraum. */
+const RADIUS = 1;
 
 /* Sterne als eigene Punktwolke. Nur nachts sichtbar, Helligkeit wird
    über die Dämmerung eingeblendet. */
@@ -29,8 +33,12 @@ function makeStars(count) {
   const pos = new Float32Array(count * 3);
   const size = new Float32Array(count);
   for (let i = 0; i < count; i++) {
-    // Gleichverteilt auf der oberen Halbkugel
-    const u = Math.random(), v = Math.random() * 0.5;
+    // Gleichverteilt auf der oberen Halbkugel, ein Drittel jedoch
+    // entlang eines Bandes – das liest sich als Milchstrasse.
+    const band = i % 3 === 0;
+    const u = Math.random();
+    let v = Math.random() * 0.5;
+    if (band) v = 0.12 + Math.abs((Math.random() + Math.random()) / 2 - 0.5) * 0.4;
     const th = 2 * Math.PI * u, ph = Math.acos(1 - 2 * v);
     const r = RADIUS * 0.92;
     pos[i*3]   = r * Math.sin(ph) * Math.cos(th);
@@ -334,7 +342,8 @@ export class SkyDome {
       ax.fillStyle = g; ax.fillRect(0, 0, A, A);
       this._groundAlpha = new THREE.CanvasTexture(ac);
 
-      const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
+      // Runde Scheibe: passt zur Kuppel und laeuft ohne Ecken aus
+      const geo = new THREE.CircleGeometry(0.5, 64);
       const mat = new THREE.MeshStandardMaterial({
         map: tex, alphaMap: this._groundAlpha, transparent: true,
         roughness: 0.96, metalness: 0, depthWrite: false,
@@ -345,7 +354,9 @@ export class SkyDome {
       this._ground.renderOrder = -1;
       this.scene.add(this._ground);
     }
-    this._ground.scale.set(size, size, 1);
+    // Etwas kleiner als die Kuppel, damit sie nicht durchstoesst
+    const gsize = Math.min(size, (this._radius || size) * 1.92);
+    this._ground.scale.set(gsize, gsize, 1);
     if (this._center) this._ground.position.set(this._center.x, -0.14, this._center.z);
     // Nachts abdunkeln, sonst leuchtet die Wiese heller als das Haus
     this._ground.material.color.setScalar(night ? 0.22 : 1);
@@ -474,12 +485,34 @@ export class SkyDome {
     d.normalize();
     // Innerhalb des Sichtfensters, aber hinter allem: depthTest ist aus,
     // das Gestirn wird also nie von einer Wand verdeckt.
+    // Knapp innerhalb der Kuppel, damit es beim Rauszoomen mit ihr
+    // zusammen im Bild bleibt
+    const rr = (this._radius || sp * 1.75) * 0.8;
     this._body.position.copy(this._center || new THREE.Vector3())
-      .addScaledVector(d, sp * 1.35);
+      .addScaledVector(d, rr);
   }
 
   /** Bezugspunkt der Szene, damit das Gestirn im Bild bleibt. */
   setCenter(v) { this._center = v.clone(); }
+
+  /**
+   * Kuppel auf die Szene skalieren. Der Faktor entscheidet, ab wann man
+   * sie von aussen sieht: knapp ueber der Gebaeudegroesse wirkt sie wie
+   * eine Kugel auf dem Tisch, sehr gross wie echter Himmel.
+   */
+  setScale(span) {
+    const r = Math.max(9, (span || 12) * 1.75);
+    if (this._radius === r) return;
+    this._radius = r;
+    for (const m of [this.gradient, this.skyMesh, this.stars]) {
+      if (m) m.scale.setScalar(r);
+    }
+    if (this._center) {
+      for (const m of [this.gradient, this.skyMesh, this.stars]) {
+        if (m) m.position.set(this._center.x, 0, this._center.z);
+      }
+    }
+  }
 
   _bodyCanvas(phase, isNight) {
     const S = 256, c = document.createElement("canvas");
