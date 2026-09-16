@@ -78,7 +78,9 @@ function makeStars(count) {
         // Runder, weich auslaufender Punkt statt Quadrat
         vec2 d = gl_PointCoord - vec2(0.5);
         float a = smoothstep(0.5, 0.1, length(d));
-        gl_FragColor = vec4(vec3(1.0, 0.98, 0.92), a * uOpacity);
+        // Etwas ueberstrahlen lassen, sonst gehen die Sterne gegen den
+        // dunklen Himmel unter
+        gl_FragColor = vec4(vec3(1.0, 0.98, 0.92) * 1.35, a * uOpacity);
       }`,
   });
   return new THREE.Points(geo, mat);
@@ -311,7 +313,10 @@ export class SkyDome {
     if (this._clouds) {
       // Bei Nebel und Sturm dichter und dunkler
       const dim = /fog/.test(c) ? 0.85 : /pouring|storm|lightning/.test(c) ? 0.62 : 1;
-      for (const sp of this._clouds.children) sp.material.color.setScalar(dim);
+      for (const sp of this._clouds.children) {
+        sp.material.color.setScalar(dim);
+        sp.visible = true;      // Wolken gehoeren auch nachts dazu
+      }
     }
   }
 
@@ -463,7 +468,10 @@ export class SkyDome {
     const u = this.gradientMat.uniforms;
     // Tagfarben als Ausgangspunkt, nachts tief abgedunkelt
     const topDay = new THREE.Color(0x4f86c6), botDay = new THREE.Color(0xdfe8f2);
-    const topNight = new THREE.Color(0x070b16), botNight = new THREE.Color(0x1b2338);
+    // Vorher 0x070b16 – praktisch schwarz, dadurch verschwand die Kuppel
+    // optisch und die Szene schien im Nichts zu schweben. Ein sichtbarer
+    // Verlauf gibt ihr wieder Form, ohne den Schwarzpunkt zu ruinieren.
+    const topNight = new THREE.Color(0x11182c), botNight = new THREE.Color(0x2c3a58);
     u.uColorTop.value.copy(topDay).lerp(topNight, night);
     u.uColorBottom.value.copy(botDay).lerp(botNight, night);
   }

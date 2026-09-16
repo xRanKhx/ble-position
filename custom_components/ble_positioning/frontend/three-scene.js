@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=8";
+import { SkyDome } from "./three-sky.js?s=9";
 import { Neighborhood } from "./three-neighborhood.js?n=5";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -428,7 +428,7 @@ export class ThreeScene {
 
     for (const p of list) {
       const h = ((p.sillH ?? 0.9) + (p.topH ?? 2.1)) / 2;
-      const l = new THREE.PointLight(0xffffff, 0, 0, 2);
+      const l = new THREE.PointLight(0xffffff, 0, 18, 2);
       l.castShadow = false;
       // Deutlich weiter nach innen. Bei 0.35 m stand das Licht faktisch
       // auf der Wand: mit quadratischem Abfall ergab ein breites Fenster
@@ -896,7 +896,9 @@ export class ThreeScene {
       seen.add(key);
       let lamp = this._lamps.get(key);
       if (!lamp) {
-        const pl = new THREE.PointLight(0xffffff, 1, 0, 2);   // decay 2
+        // distance 15: ohne Begrenzung leuchtet eine Lampe rechnerisch
+        // unendlich weit und hellt auch Nachbarraeume auf.
+        const pl = new THREE.PointLight(0xffffff, 1, 15, 2);   // decay 2
         pl.castShadow = false;      // Punktschatten sind teuer; die Sonne reicht
         const bulb = new THREE.Mesh(
           new THREE.SphereGeometry(0.05, 12, 8),
@@ -935,8 +937,9 @@ export class ThreeScene {
       const lumen = 620 * frac * Math.max(0.15, dayDim);
       // Gedeckelt: eine Zimmerlampe soll den Raum ausleuchten, nicht
       // ueberstrahlen. decay bleibt 2, also physikalischer Abfall.
-      lamp.pl.intensity = Math.min(70, lumen / (4 * Math.PI));
+      lamp.pl.intensity = Math.min(45, lumen / (4 * Math.PI));
       lamp.pl.decay = 2;
+      lamp.pl.distance = 15;
       // Die Birne selbst darf leuchten, aber nicht den Bloom fuettern
       lamp.bulb.material.emissiveIntensity = 0.3 + frac * 0.4;
 
@@ -1057,9 +1060,11 @@ export class ThreeScene {
         normalMap: mk(this.wood.normalMap),
         normalScale: new THREE.Vector2(0.8, 0.8),
         roughnessMap: mk(this.wood.roughnessMap),
+        color: 0xcccccc,          // dito fuer den Boden
         roughness: 1, metalness: 0,
         aoMap: this._roomAO(rw, rh), aoMapIntensity: 1,
         envMapIntensity: 0.55,
+        emissive: 0x000000, emissiveIntensity: 0,
       }));
       floor.rotation.x = -Math.PI / 2;
       floor.position.set(rx1 + rw / 2, 0.001, ry1 + rh / 2);
@@ -1071,7 +1076,10 @@ export class ThreeScene {
       const wallMat = new THREE.MeshStandardMaterial({
         map: this.plaster.map, normalMap: this.plaster.normalMap,
         normalScale: new THREE.Vector2(0.35, 0.35),
-        color: 0xffffff, roughness: 0.94, metalness: 0, envMapIntensity: 0.4,
+        // Kein Reinweiss: eine Flaeche mit 1.0 reflektiert alles und
+        // clippt sofort. Abgetoent bleibt Zeichnung in den Lichtern.
+        color: 0xd0d0d0, roughness: 0.94, metalness: 0, envMapIntensity: 0.4,
+        emissive: 0x000000, emissiveIntensity: 0,
       });
       // Alle vier Wände bauen. Nur Nord und West zu zeichnen war zu
       // einfach gedacht: Fenster an der Süd- oder Ostwand hatten dann
