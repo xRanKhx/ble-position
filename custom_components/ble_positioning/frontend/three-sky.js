@@ -323,22 +323,29 @@ export class SkyDome {
     // Niederschlag steht keine Schoenwetterwolke mehr am Himmel.
     const overcast = /rain|pouring|lightning|storm|snow|sleet|hail/.test(c);
     if (overcast && !this._stormLayer) {
-      const geo = new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.46);
+      // Flache Decke statt Kuppel. Eine Halbkugel mit dem Radius der
+      // Himmelskuppel sass mitten ueber der Insel und wirkte wie eine
+      // Kaeseglocke – eine waagerechte Flaeche hoch oben liest sich
+      // dagegen als geschlossene Wolkendecke.
+      const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x2a2f38, roughness: 1, metalness: 0, side: THREE.BackSide,
-        transparent: true, opacity: 0.94, fog: false,
+        color: 0x222730, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.9, fog: false,
         emissive: 0x000000, emissiveIntensity: 0,
       });
       this._stormLayer = new THREE.Mesh(geo, mat);
+      this._stormLayer.rotation.x = -Math.PI / 2;    // waagerecht
       this._stormLayer.frustumCulled = false;
       this._stormLayer.renderOrder = -1;
       this.scene.add(this._stormLayer);
     }
     if (this._stormLayer) {
       this._stormLayer.visible = overcast;
-      const r = (this._radius || 24) * 0.9;
-      this._stormLayer.scale.setScalar(r);
-      if (this._center) this._stormLayer.position.set(this._center.x, 0, this._center.z);
+      // Weit ausgedehnt und hoch genug, dass die Kante nie ins Bild kommt
+      this._stormLayer.scale.set(extent * 4, extent * 4, 1);
+      this._stormLayer.position.set(this._center?.x || 0,
+                                    Math.max(26, height * 1.6),
+                                    this._center?.z || 0);
       // Bei Schnee heller als bei Gewitter
       this._stormLayer.material.color.setHex(
         /snow|sleet|hail/.test(c) ? 0x6b7381 : this._storm ? 0x20242c : 0x39404b);
@@ -463,6 +470,22 @@ export class SkyDome {
         const fall = 0.8 + rnd[k] * 0.4;
         pos[i+1] -= fall;  pos[i+4] -= fall;      // beide Enden
         pos[i]   += 0.05;  pos[i+3] += 0.05;      // Windschraege
+        // Sichtfenster ueber der Wohnung freihalten: Tropfen, die in den
+        // Kernbereich geraten, werden nach aussen versetzt. Sonst liegt
+        // staendig ein Schleier vor dem Grundriss.
+        const cr = this._clearRadius || 0;
+        if (cr > 0) {
+          const dx = pos[i] - (this._center?.x || 0);
+          const dz = pos[i+2] - (this._center?.z || 0);
+          const dd = Math.hypot(dx, dz);
+          if (dd < cr) {
+            const sc2 = (cr + 1.5) / Math.max(dd, 0.001);
+            const nx2 = (this._center?.x || 0) + dx * sc2;
+            const nz2 = (this._center?.z || 0) + dz * sc2;
+            pos[i] = nx2;        pos[i+2] = nz2;
+            pos[i+3] = nx2 - 0.12; pos[i+5] = nz2;
+          }
+        }
         if (pos[i+1] < 0) {
           const nx = (Math.random() - 0.5) * ex;
           const nz = (Math.random() - 0.5) * ex;
@@ -665,6 +688,8 @@ export class SkyDome {
    * wird durchsichtig geschaltet.
    */
   updateOcclusion(camDir, keep) {
+    // Radius, in dem Niederschlag ausgespart wird
+    this._clearRadius = Math.max(3, (keep || 8) * 0.55);
     const d = camDir.clone().setY(0).normalize();
     const side = new THREE.Vector3(-d.z, 0, d.x);
     const r = Math.max(6, keep || 12);

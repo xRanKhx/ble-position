@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.8.0";
+const CARD_VERSION = "6.8.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20071,7 +20071,7 @@ trigger:
       const fog =
         night2                               ? [0x0a0e17, 0.0008] :
         /fog/.test(cond2)                    ? [0xc9d2da, 0.016]  :
-        /pouring|storm|lightning/.test(cond2)? [0x4c545e, 0.006]  :
+        /pouring|storm|lightning/.test(cond2)? [0x222730, 0.020]  :
         /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
         /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
                                                null;   // sonst gar keiner
@@ -20082,7 +20082,7 @@ trigger:
         night2                               ? 0x0d131d :
         /fog/.test(cond2)                    ? 0xb9c2ca :
         // Gewitter deutlich bedrohlicher als ein normaler Regentag
-        /pouring|storm|lightning/.test(cond2)? 0x181c24 :
+        /pouring|storm|lightning/.test(cond2)? 0x222730 :
         /rain/.test(cond2)                   ? 0x5a636e :
         /snow|sleet|hail/.test(cond2)        ? 0xc6d2de :
         /cloudy/.test(cond2)                 ? 0x9fb0c0 :
