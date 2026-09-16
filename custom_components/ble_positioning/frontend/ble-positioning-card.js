@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.4.0";
+const CARD_VERSION = "6.4.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20061,7 +20061,9 @@ trigger:
       // Waende und Boeden weichzeichnen.
       // Eng gezogen: nur wirklich helle Quellen sollen gluehen. Bei 0.85
       // fing der beleuchtete Boden an mitzustrahlen.
-      sc.setBloom(night2 ? 0.14 : 0.08, night2 ? 0.45 : 0.4, 0.92);
+      // Sehr eng: unbeleuchtete helle Flaechen duerfen keinen Glow mehr
+      // ausloesen, nur echte Lichtquellen.
+      sc.setBloom(night2 ? 0.1 : 0.05, night2 ? 0.45 : 0.4, 0.95);
       // Nebel deutlich zurueckgenommen. Er lag bei 0.008 bis 0.045 und
       // legte sich als grauer Schleier ueber die ganze Szene – der
       // Schwarzpunkt ging verloren. Nur noch dort, wo Nebel wirklich zur

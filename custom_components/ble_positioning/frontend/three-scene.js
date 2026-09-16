@@ -765,7 +765,8 @@ export class ThreeScene {
     g.add(pivot);
 
     // Zarge
-    const fr = new THREE.MeshStandardMaterial({ color: 0xe8e4dc, roughness: 0.8 });
+    const fr = new THREE.MeshStandardMaterial({ color: 0xa5a29b, roughness: 0.8,
+                                                emissive: 0x000000, emissiveIntensity: 0 });
     const t = 0.05;
     const jamb = (dx, dz, w, h, d) => {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fr);
@@ -789,7 +790,8 @@ export class ThreeScene {
   _windowUnit(axis, pos, fixed, width, sillH, topH, wd, state) {
     const g = new THREE.Group();
     const h = topH - sillH;
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xf0f2f5, roughness: 0.55 });
+    const frameMat = new THREE.MeshStandardMaterial({ color: 0xa8acb2, roughness: 0.55,
+                                                      emissive: 0x000000, emissiveIntensity: 0 });
     // Echtes Fensterglas ist farblos – gruenlich wird es nur an der
     // Schnittkante. Die fruehere Blaufaerbung kam aus einem eingefaerbten
     // color-Wert. Ausserdem schliessen sich transmission und
@@ -797,13 +799,15 @@ export class ThreeScene {
     // eigene Durchsicht mit, opacity daneben macht es milchig.
     const glassMat = this.lowQuality
       ? new THREE.MeshPhysicalMaterial({
-          color: 0xffffff, roughness: 0.06, metalness: 0,
-          transparent: true, opacity: 0.22, envMapIntensity: 1.4,
+          color: 0xdfe7ef, roughness: 0.06, metalness: 0,
+          transparent: true, opacity: 0.22, envMapIntensity: 1.0,
         })
       : new THREE.MeshPhysicalMaterial({
           color: 0xffffff, roughness: 0.02, metalness: 0,
           transmission: 1.0, thickness: 0.012, ior: 1.52,
-          specularIntensity: 1.0, envMapIntensity: 1.5,
+          // envMapIntensity war 1.5 – Glas spiegelte heller als die
+          // Umgebung selbst und trieb den Bloom.
+          specularIntensity: 0.8, envMapIntensity: 0.9,
           transparent: false,
         });
     const put = (mesh, a, y, d) => {
@@ -1030,7 +1034,10 @@ export class ThreeScene {
     const pw = (x2 - x1) + pad * 2, ph = (y2 - y1) + pad * 2;
     const plate = new THREE.Mesh(
       new THREE.BoxGeometry(pw, 0.12, ph),
-      new THREE.MeshStandardMaterial({ color: 0xf6f7f9, roughness: 0.92, metalness: 0 })
+      // War 0xf6f7f9 – eine grosse, fast weisse Flaeche direkt unter dem
+      // Gebaeude. Genau solche Flaechen clippen zuerst.
+      new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.92, metalness: 0,
+                                       emissive: 0x000000, emissiveIntensity: 0 })
     );
     plate.position.set(cx, -0.06, cy);
     plate.receiveShadow = true;
@@ -1060,7 +1067,7 @@ export class ThreeScene {
         normalMap: mk(this.wood.normalMap),
         normalScale: new THREE.Vector2(0.8, 0.8),
         roughnessMap: mk(this.wood.roughnessMap),
-        color: 0xcccccc,          // dito fuer den Boden
+        color: 0x999999,          // dito fuer den Boden
         roughness: 1, metalness: 0,
         aoMap: this._roomAO(rw, rh), aoMapIntensity: 1,
         envMapIntensity: 0.55,
@@ -1078,7 +1085,7 @@ export class ThreeScene {
         normalScale: new THREE.Vector2(0.35, 0.35),
         // Kein Reinweiss: eine Flaeche mit 1.0 reflektiert alles und
         // clippt sofort. Abgetoent bleibt Zeichnung in den Lichtern.
-        color: 0xd0d0d0, roughness: 0.94, metalness: 0, envMapIntensity: 0.4,
+        color: 0xaaaaaa, roughness: 0.94, metalness: 0, envMapIntensity: 0.4,
         emissive: 0x000000, emissiveIntensity: 0,
       });
       // Alle vier Wände bauen. Nur Nord und West zu zeichnen war zu
@@ -1128,7 +1135,8 @@ export class ThreeScene {
       }
 
       // Sockelleiste: klein, aber sie macht den Uebergang glaubwuerdig
-      const skMat = new THREE.MeshStandardMaterial({ color: 0xf8f8f6, roughness: 0.6 });
+      const skMat = new THREE.MeshStandardMaterial({ color: 0xb4b4b0, roughness: 0.6,
+                                                     emissive: 0x000000, emissiveIntensity: 0 });
       const sk1 = new THREE.Mesh(new THREE.BoxGeometry(rw, 0.09, 0.025), skMat);
       sk1.position.set(rx1 + rw / 2, 0.045, ry1 + 0.012);
       group.add(sk1);
@@ -1161,6 +1169,25 @@ export class ThreeScene {
       return { ...o, inx, iny, open: o.kind === "door" && (o.openAmount || 0) > 0.1 };
     });
     this.updateDaylightPorts(ports);
+
+    // Sicherheitsnetz gegen Ausbrennen: kein Material im Grundriss darf
+    // emissiv sein oder heller als 0xcccccc. Einzeln gesetzt wird leicht
+    // eines uebersehen – und eine einzige weisse Flaeche reicht, um den
+    // Bloom zu uebersteuern.
+    group.traverse((o) => {
+      if (!o.isMesh || !o.material) return;
+      for (const m of (Array.isArray(o.material) ? o.material : [o.material])) {
+        if (m.emissive && m.emissiveIntensity > 0 && !m.userData.keepEmissive) {
+          m.emissive.setHex(0x000000);
+          m.emissiveIntensity = 0;
+        }
+        if (m.color && !m.transmission) {
+          const hsl = { h: 0, s: 0, l: 0 };
+          m.color.getHSL(hsl);
+          if (hsl.l > 0.8) m.color.setHSL(hsl.h, hsl.s, 0.8);
+        }
+      }
+    });
 
     this.scene.add(group);
     this._objects.push(group);
