@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.14.0";
+const CARD_VERSION = "6.0.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19883,6 +19883,9 @@ trigger:
       if (this._opts?.sky_dome !== false) {
         sc.initSky(this._opts?.sky_mode || "sky").then(() => this._markDirty());
       }
+      if (this._opts?.post_fx !== false) {
+        sc.initPostProcessing().then(() => this._markDirty());
+      }
       return sc;
     } catch (err) {
       this._glFailed = true;
@@ -20021,6 +20024,21 @@ trigger:
         night: this._isDark(),
       });
       this._glDayKey = lkeyDay;
+
+      // Bloom und Nebel folgen der Wetterlage: nachts leuchten Lampen
+      // kraeftiger, tagsueber soll nichts ueberstrahlen.
+      const night2 = this._isDark();
+      const cond2 = String(wSt?.condition || "");
+      sc.setBloom(night2 ? 0.75 : 0.3, night2 ? 0.55 : 0.4, night2 ? 0.6 : 0.88);
+      const fog =
+        night2                              ? [0x0a1020, 0.0075] :
+        /fog/.test(cond2)                   ? [0xd8dde2, 0.045]  :
+        /pouring|storm|lightning/.test(cond2)? [0x59626d, 0.020] :
+        /rain/.test(cond2)                  ? [0x77818d, 0.014]  :
+        /snow|sleet|hail/.test(cond2)       ? [0xdfe8f2, 0.016]  :
+        /cloudy/.test(cond2)                ? [0xc3ccd6, 0.008]  :
+                                              [0xd0e0f0, 0.005];
+      sc.setFog(fog[0], fog[1]);
     }
 
     // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────

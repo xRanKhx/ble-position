@@ -276,7 +276,7 @@ export class ThreeScene {
     this.renderer.shadowMap.autoUpdate = true;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
+    this.renderer.toneMappingExposure = 1.2;
 
     this.scene = new THREE.Scene();
     this.scene.background = null;          // Himmel kommt vom Canvas dahinter
@@ -444,6 +444,68 @@ export class ThreeScene {
     this.scene.background = null;     // die Kuppel traegt den Himmel
     this._skyHex = "__dome__";
     return used;
+  }
+
+  /**
+   * Post-Processing: Bloom fuer Lampen und leuchtende Flaechen.
+   * Wird nachgeladen, damit die Szene auch ohne die Addons laeuft –
+   * schlaegt es fehl, rendert weiterhin der direkte Weg.
+   */
+  async initPostProcessing(opts = {}) {
+    if (!this.ok || this.composer) return false;
+    try {
+      const [{ EffectComposer }, { RenderPass }, { UnrealBloomPass }, { OutputPass }] =
+        await Promise.all([
+          import("./vendor/pp/EffectComposer.js"),
+          import("./vendor/pp/RenderPass.js"),
+          import("./vendor/pp/UnrealBloomPass.js"),
+          import("./vendor/pp/OutputPass.js"),
+        ]);
+      const w = this.canvas.clientWidth || 800, h = this.canvas.clientHeight || 600;
+      const c = new EffectComposer(this.renderer);
+      c.addPass(new RenderPass(this.scene, this.camera));
+      const bloom = new UnrealBloomPass(
+        new THREE.Vector2(w, h),
+        opts.strength ?? 0.35,
+        opts.radius ?? 0.4,
+        opts.threshold ?? 0.85
+      );
+      c.addPass(bloom);
+      // OutputPass uebernimmt Tone Mapping und Farbraum. Der Renderer darf
+      // das dann nicht noch einmal tun, sonst wird das Bild doppelt
+      // korrigiert und flau.
+      c.addPass(new OutputPass());
+      this.composer = c;
+      this.bloomPass = bloom;
+      this._rendererToneMapping = this.renderer.toneMapping;
+      this.renderer.toneMapping = THREE.NoToneMapping;
+      this.resize();
+      return true;
+    } catch (err) {
+      console.warn("BLE Positioning: Post-Processing nicht ladbar", err);
+      this.composer = null;
+      return false;
+    }
+  }
+
+  /** Bloom-Staerke zur Laufzeit, z. B. nachts kraeftiger. */
+  setBloom(strength, radius, threshold) {
+    if (!this.bloomPass) return;
+    if (strength  != null) this.bloomPass.strength  = strength;
+    if (radius    != null) this.bloomPass.radius    = radius;
+    if (threshold != null) this.bloomPass.threshold = threshold;
+  }
+
+  /** Atmosphaerischer Nebel – gibt dem Horizont Tiefe. */
+  setFog(colorHex, density) {
+    if (!this.ok) return;
+    if (!density) { this.scene.fog = null; return; }
+    if (this.scene.fog && this.scene.fog.isFogExp2) {
+      this.scene.fog.color.setHex(colorHex);
+      this.scene.fog.density = density;
+    } else {
+      this.scene.fog = new THREE.FogExp2(colorHex, density);
+    }
   }
 
   onContextLost(fn) { this._onLost = fn; }
@@ -1159,11 +1221,15 @@ export class ThreeScene {
     const c = this.camera;
     c.left = -hw; c.right = hw; c.top = hh; c.bottom = -hh;
     c.updateProjectionMatrix();
+    // Composer und Bloom brauchen dieselbe Groesse wie der Renderer
+    if (this.composer) this.composer.setSize(w, h);
+    if (this.bloomPass) this.bloomPass.resolution.set(w, h);
   }
 
   render() {
     if (!this.ok || this.disposed) return;
-    this.renderer.render(this.scene, this.camera);
+    if (this.composer) this.composer.render();
+    else this.renderer.render(this.scene, this.camera);
   }
 
   dispose() {
@@ -1180,6 +1246,7 @@ export class ThreeScene {
       for (const l of this._lamps.values()) this.scene.remove(l.grp);
       this._lamps.clear();
     }
+    this.composer?.dispose?.();
     this.dome?.dispose();
     this.hood?.dispose();
     disposeFurnitureCache();

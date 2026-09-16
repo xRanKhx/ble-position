@@ -271,10 +271,15 @@ def _copy_js_files(hass: HomeAssistant) -> None:
     vendor_dst = os.path.join(www_dir, "vendor")
     if vendor_src.is_dir():
         os.makedirs(vendor_dst, exist_ok=True)
-        for vf in vendor_src.glob("*.js"):
+        # rglob statt glob: vendor/pp/ enthaelt die Post-Processing-Module.
+        # Eine einzige fehlende Datei laesst den ganzen Import scheitern.
+        for vf in vendor_src.rglob("*.js"):
             try:
-                shutil.copy2(str(vf), os.path.join(vendor_dst, vf.name))
-                _LOGGER.info("BLE Positioning: vendor/%s kopiert", vf.name)
+                rel = vf.relative_to(vendor_src)
+                dst = os.path.join(vendor_dst, *rel.parts)
+                os.makedirs(os.path.dirname(dst), exist_ok=True)
+                shutil.copy2(str(vf), dst)
+                _LOGGER.info("BLE Positioning: vendor/%s kopiert", rel.as_posix())
             except Exception as exc:
                 _LOGGER.warning("BLE Positioning: Konnte vendor/%s nicht kopieren: %s", vf.name, exc)
 

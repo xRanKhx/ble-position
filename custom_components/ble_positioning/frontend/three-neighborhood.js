@@ -296,6 +296,24 @@ export class Neighborhood {
       tint(this._snowTargets, 0xeef3f8);   // Daecher und Baumkronen
       tint(this._roadTargets, 0xdfe6ee);   // Strassen und Gehwege
     }
+
+    // Nasser Asphalt spiegelt: niedrige Rauheit, etwas Metallanteil.
+    // Das ist der Effekt, der Regenbilder ueberhaupt erst glaubwuerdig
+    // macht – mehr noch als die Tropfen selbst.
+    const wet = /rain|pouring|lightning|storm/.test(String(condition || ""));
+    if (this._wet !== wet) {
+      this._wet = wet;
+      for (const m of (this._roadTargets || [])) {
+        if (m.userData.dryRough == null) {
+          m.userData.dryRough = m.material.roughness;
+          m.userData.dryMetal = m.material.metalness;
+        }
+        m.material.roughness = wet ? 0.1 : m.userData.dryRough;
+        m.material.metalness = wet ? 0.2 : m.userData.dryMetal;
+        m.material.envMapIntensity = wet ? 1.6 : 1.0;
+        m.material.needsUpdate = true;
+      }
+    }
     // Nachts sind die Fassaden dunkler; das eigene Haus soll herausstechen
     this.group.traverse((o) => {
       if (o.isMesh && o.material && o.material.emissiveIntensity != null &&
