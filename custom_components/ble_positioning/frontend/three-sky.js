@@ -209,6 +209,34 @@ function cloudTexture() {
   return t;
 }
 
+/* Regen als LineSegments: jeder Tropfen ist eine kurze, leicht schraege
+   Strecke. Punkte wirken bei Regen wie Schnee – erst die Streckung liest
+   sich als fallendes Wasser. */
+function makeRainLines(count, extent, height) {
+  const pos = new Float32Array(count * 6);     // zwei Punkte je Tropfen
+  const rnd = new Float32Array(count);
+  const len = 0.55;
+  for (let i = 0; i < count; i++) {
+    const x = (Math.random() - 0.5) * extent;
+    const y = Math.random() * height;
+    const z = (Math.random() - 0.5) * extent;
+    rnd[i] = Math.random();
+    const k = i * 6;
+    pos[k] = x;             pos[k+1] = y;              pos[k+2] = z;
+    pos[k+3] = x - 0.12;    pos[k+4] = y + len;        pos[k+5] = z;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.userData.rnd = rnd;
+  geo.userData.len = len;
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xbcd0e8, transparent: true, opacity: 0.55, fog: false,
+  });
+  const m = new THREE.LineSegments(geo, mat);
+  m.frustumCulled = false;
+  return m;
+}
+
 export class SkyDome {
   /**
    * @param {THREE.Scene} scene
@@ -266,7 +294,8 @@ export class SkyDome {
       }
     }
     if (!this._rain) {
-      this._rain = makePrecipitation("rain", 2200, extent, height);
+      this._rain = makeRainLines(1800, extent, height);
+      this._rainHeight = height;
       this.scene.add(this._rain);
     }
     if (!this._snow) {
@@ -276,10 +305,18 @@ export class SkyDome {
     }
     this._rain.visible = rain;
     this._snow.visible = snow;
-    this._rain.material.uniforms.uOpacity.value = heavy ? 0.95 : 0.78;
+    this._rain.material.opacity = heavy ? 0.75 : 0.5;
     this._snow.material.uniforms.uOpacity.value = heavy ? 0.9 : 0.72;
 
     // ── Wolken ────────────────────────────────────────────────────────
+    // Gewitter vom normalen Regentag unterscheiden
+    this._storm = /pouring|lightning|storm/.test(c);
+    if (this._storm && !this._flash) {
+      this._flash = new THREE.DirectionalLight(0xd8e8ff, 0);
+      this._flash.position.set(0, 60, 20);
+      this.scene.add(this._flash);
+    }
+
     const cloudy = /cloud|rain|snow|sleet|hail|pouring|lightning|storm|fog/.test(c);
     const many = /cloudy|rain|pouring|storm|snow|fog/.test(c);
     const want = cloudy ? (many ? 7 : 4) : 0;
@@ -382,9 +419,48 @@ export class SkyDome {
 
   /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
   animate(t) {
-    // Regen bleibt im Shader: 2200 Tropfen jedes Bild auf der CPU zu
-    // verschieben waere Verschwendung.
-    if (this._rain?.visible) this._rain.material.uniforms.uTime.value = t;
+    // Regen: beide Endpunkte jedes Tropfens verschieben. Etwas teurer
+    // als der Shader-Weg, aber die Bewegung laeuft sichtbar und der
+    // Schraegzug laesst sich frei steuern.
+    if (this._rain?.visible) {
+      const g = this._rain.geometry;
+      const pos = g.attributes.position.array;
+      const rnd = g.userData.rnd;
+      const len = g.userData.len;
+      const h = this._rainHeight || 20;
+      const ex = this._precipExtent || 40;
+      for (let i = 0, k = 0; i < pos.length; i += 6, k++) {
+        const fall = 0.8 + rnd[k] * 0.4;
+        pos[i+1] -= fall;  pos[i+4] -= fall;      // beide Enden
+        pos[i]   += 0.05;  pos[i+3] += 0.05;      // Windschraege
+        if (pos[i+1] < 0) {
+          const nx = (Math.random() - 0.5) * ex;
+          const nz = (Math.random() - 0.5) * ex;
+          pos[i]   = nx;        pos[i+1] = h;         pos[i+2] = nz;
+          pos[i+3] = nx - 0.12; pos[i+4] = h + len;   pos[i+5] = nz;
+        }
+      }
+      g.attributes.position.needsUpdate = true;
+    }
+
+    // ── Blitze bei Gewitter ─────────────────────────────────────────
+    // Zeitbasiert, nicht pro Frame: eine Wahrscheinlichkeit je Bild
+    // haengt sonst an der Bildrate – bei 120 Hz blitzt es doppelt so oft.
+    if (this._storm && this._flash) {
+      const now = t;
+      if (!this._nextFlash) this._nextFlash = now + 2 + Math.random() * 5;
+      if (now >= this._nextFlash) {
+        this._flash.intensity = 4 + Math.random() * 3;
+        this._flashOff = now + 0.05 + Math.random() * 0.1;
+        this._nextFlash = now + 2 + Math.random() * 6;
+      }
+      if (this._flashOff && now >= this._flashOff) {
+        this._flash.intensity = 0;
+        this._flashOff = 0;
+      }
+    } else if (this._flash) {
+      this._flash.intensity = 0;
+    }
 
     // Schnee dagegen auf der CPU. Der Shader-Weg haengt an einer sauber
     // durchgereichten Zeit; faellt die irgendwo aus, stehen die Flocken
@@ -626,6 +702,7 @@ export class SkyDome {
     if (this._ground) { this.scene.remove(this._ground);
       this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
+    if (this._flash) this.scene.remove(this._flash);
     for (const m of [this.gradient, this.skyMesh, this.stars, this._body,
                     this._rain, this._snow]) {
       if (!m) continue;

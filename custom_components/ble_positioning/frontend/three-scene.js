@@ -21,8 +21,8 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=10";
-import { Neighborhood } from "./three-neighborhood.js?n=7";
+import { SkyDome } from "./three-sky.js?s=11";
+import { Neighborhood } from "./three-neighborhood.js?n=8";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
@@ -383,7 +383,13 @@ export class ThreeScene {
     } else {
       this.renderer.toneMappingExposure = 1.2;
       // Bedeckter Himmel streut: weniger Richtungslicht, mehr Diffuses
-      this.hemi.intensity = 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
+      // Gewitter druckt das Grundlicht deutlich staerker als ein
+      // Regentag – sonst sieht beides gleich aus.
+      const storm = /pouring|lightning|storm/.test(cond);
+      const rainy = /rain/.test(cond) && !storm;
+      this.hemi.intensity = storm ? 0.15
+                          : rainy ? 0.4
+                          : 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
       this.sun.intensity = 2.4 * this._dayFactor;
