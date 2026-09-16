@@ -902,12 +902,23 @@ export class ThreeScene {
       if (!lamp) {
         // distance 15: ohne Begrenzung leuchtet eine Lampe rechnerisch
         // unendlich weit und hellt auch Nachbarraeume auf.
-        const pl = new THREE.PointLight(0xffffff, 1, 15, 2);   // decay 2
-        pl.castShadow = false;      // Punktschatten sind teuer; die Sonne reicht
+        // distance 5: eine Zimmerlampe leuchtet einen Raum aus, nicht die
+        // Nachbarwohnung. Zusammen mit den Schatten bleibt das Licht drin.
+        const pl = new THREE.PointLight(0xffffff, 1, 5, 2);   // decay 2
+        // Punktschatten kosten sechs Durchlaeufe pro Lampe – aber ohne sie
+        // scheint das Licht durch die Waende. 512er Maps halten das im
+        // Rahmen, die Sonne bleibt bei voller Aufloesung.
+        pl.castShadow = true;
+        pl.shadow.mapSize.set(512, 512);
+        pl.shadow.bias = -0.004;
+        pl.shadow.camera.near = 0.08;
         const bulb = new THREE.Mesh(
-          new THREE.SphereGeometry(0.05, 12, 8),
-          new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xffffff })
+          // Klein genug, um nicht durch Waende oder Decken zu stossen
+          new THREE.SphereGeometry(0.04, 10, 8),
+          new THREE.MeshStandardMaterial({ color: 0xfff4e0, emissive: 0xfff4e0 })
         );
+        bulb.castShadow = false;    // die Birne selbst darf nicht schatten
+        bulb.userData.keepEmissive = true;
         const grp = new THREE.Group();
         grp.add(pl); grp.add(bulb);
         this.scene.add(grp);
@@ -943,7 +954,8 @@ export class ThreeScene {
       // ueberstrahlen. decay bleibt 2, also physikalischer Abfall.
       lamp.pl.intensity = Math.min(45, lumen / (4 * Math.PI));
       lamp.pl.decay = 2;
-      lamp.pl.distance = 15;
+      lamp.pl.distance = 5;
+      lamp.pl.shadow.camera.far = 6;
       // Die Birne selbst darf leuchten, aber nicht den Bloom fuettern
       lamp.bulb.material.emissiveIntensity = 0.3 + frac * 0.4;
 
@@ -1117,6 +1129,21 @@ export class ThreeScene {
                                             wallH, wd, ops, wallMat);
         // Normale merken, damit die Sichtbarkeit später vom Blickwinkel
         // abhängen kann statt fest verdrahtet zu sein.
+        // Dunklere Abdeckkante oben: definiert die Wandoberkante scharf,
+        // sonst verlaeuft sie im Licht und die Geometrie wirkt weich.
+        {
+          const capLen = sd.a1 - sd.a0;
+          const cap = new THREE.Mesh(
+            sd.axis === "x" ? new THREE.BoxGeometry(capLen, 0.035, wd * 1.04)
+                            : new THREE.BoxGeometry(wd * 1.04, 0.035, capLen),
+            new THREE.MeshStandardMaterial({ color: 0x8b8e93, roughness: 0.7 })
+          );
+          const ac = (sd.a0 + sd.a1) / 2;
+          cap.position.set(sd.axis === "x" ? ac : sd.fixed, wallH + 0.017,
+                           sd.axis === "x" ? sd.fixed : ac);
+          cap.castShadow = true; cap.receiveShadow = true;
+          wall.add(cap);
+        }
         wall.userData.normal = new THREE.Vector3(sd.nx, 0, sd.nz);
         wall.userData.isWall = true;
         group.add(wall);
@@ -1143,6 +1170,51 @@ export class ThreeScene {
       const sk2 = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.09, rh), skMat);
       sk2.position.set(rx1 + 0.012, 0.045, ry1 + rh / 2);
       group.add(sk2);
+    }
+
+    // ── Platzhalter-Moebel ──────────────────────────────────────────────
+    // Leere Raeume wirken wie ein Architekturmodell, nicht wie eine
+    // Wohnung. Die Auswahl richtet sich nach dem Raumnamen, sonst nach
+    // der Groesse – und nur dort, wo nicht ohnehin eigene Deko steht.
+    if (d.autoFurnish !== false) {
+      const taken = (d.furniture || []).filter(f => f.x != null);
+      for (const r of rooms) {
+        if (r.x1 == null || r.x2 == null) continue;
+        const rx1 = Math.min(r.x1, r.x2), rx2 = Math.max(r.x1, r.x2);
+        const ry1 = Math.min(r.y1, r.y2), ry2 = Math.max(r.y1, r.y2);
+        const rw = rx2 - rx1, rh = ry2 - ry1;
+        if (rw < 1.8 || rh < 1.8) continue;
+        const mx = rx1 + rw / 2, my = ry1 + rh / 2;
+        // Raum ueberspringen, wenn dort schon etwas des Nutzers steht
+        if (taken.some(f => f.x >= rx1 && f.x <= rx2 && f.y >= ry1 && f.y <= ry2)) continue;
+
+        const name = String(r.name || "").toLowerCase();
+        const area = rw * rh;
+        let plan;
+        if (/schlaf|bed|kinder/.test(name)) {
+          plan = [["bed", mx, my, 0]];
+        } else if (/wohn|living|couch/.test(name)) {
+          plan = [["sofa", mx, ry1 + rh * 0.3, 0], ["armchair", rx1 + rw * 0.22, my, 90],
+                  ["tv", mx, ry2 - rh * 0.16, 180]];
+        } else if (/kueche|küche|kitchen/.test(name)) {
+          plan = [["wardrobe", mx, ry1 + 0.5, 0]];
+        } else if (/bad|bath|wc/.test(name)) {
+          plan = [];
+        } else if (/buero|büro|office|arbeit/.test(name)) {
+          plan = [["wardrobe", rx1 + rw * 0.25, ry1 + 0.5, 0], ["armchair", mx, my, 0]];
+        } else {
+          // Ohne sprechenden Namen nach Flaeche entscheiden
+          plan = area > 16 ? [["sofa", mx, ry1 + rh * 0.3, 0], ["armchair", rx1 + rw * 0.25, my, 90]]
+               : area > 8  ? [["bed", mx, my, 0]]
+               :             [["armchair", mx, my, 0]];
+        }
+        for (const [type, px, py, rot] of plan) {
+          const obj = makeFurniture(type, { type, x: px, y: py, rotation: rot });
+          if (!obj) continue;
+          obj.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+          group.add(obj);
+        }
+      }
     }
 
     // ── Moebel und Geraete ──────────────────────────────────────────────
