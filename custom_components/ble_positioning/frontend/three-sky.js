@@ -239,6 +239,36 @@ function makeRainLines(count, extent, height) {
   return m;
 }
 
+/* Sichtbarer Blitz als Zick-Zack-Linie. Ein blosses Aufleuchten des
+   Lichts wirkt wie ein Wetterleuchten – erst die gezeichnete Entladung
+   liest sich als Blitzschlag. */
+function createLightningBolt(height, spread) {
+  const pts = [];
+  let x = (Math.random() - 0.5) * spread;
+  let z = (Math.random() - 0.5) * spread;
+  let y = height;
+  const steps = 7 + Math.floor(Math.random() * 5);
+  const drop = height / steps;
+  for (let i = 0; i <= steps; i++) {
+    pts.push(new THREE.Vector3(x, y, z));
+    // Seitlicher Versatz nimmt nach unten zu – Blitze fransen aus
+    const jag = 0.6 + (i / steps) * 1.8;
+    x += (Math.random() - 0.5) * jag;
+    z += (Math.random() - 0.5) * jag * 0.6;
+    y -= drop * (0.7 + Math.random() * 0.6);
+    if (y < height * 0.12) break;
+  }
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xffffff, transparent: true, opacity: 0, fog: false,
+    depthWrite: false, depthTest: false,
+  });
+  const line = new THREE.Line(geo, mat);
+  line.renderOrder = 10;
+  line.frustumCulled = false;
+  return line;
+}
+
 export class SkyDome {
   /**
    * @param {THREE.Scene} scene
@@ -335,8 +365,10 @@ export class SkyDome {
         // Kuehles Dunkelgrau. Entscheidend ist envMapIntensity 0: mit
         // Rauheit 1 spiegelte die Flaeche diffus die Umgebungsmap, und
         // deren Bodenhaelfte ist warmes Braun – daher der braune Block.
-        color: 0x1e242d, roughness: 1, metalness: 0, side: THREE.BackSide,
-        transparent: true, opacity: 0.85, fog: false,
+        // Heller und durchlaessiger: bei 0.85 schluckte die Kuppel so viel
+        // Licht, dass man die beleuchteten Raeume nicht mehr sah.
+        color: 0x384252, roughness: 1, metalness: 0, side: THREE.BackSide,
+        transparent: true, opacity: 0.48, fog: false,
         envMapIntensity: 0,
         emissive: 0x000000, emissiveIntensity: 0,
         // Ohne depthWrite:false blockiert die Decke den Tiefenpuffer und
@@ -360,7 +392,8 @@ export class SkyDome {
       this._cloudBase = rr * 0.55;
       // Bei Schnee heller als bei Gewitter
       this._stormLayer.material.color.setHex(
-        /snow|sleet|hail/.test(c) ? 0x5e6773 : this._storm ? 0x1e242d : 0x2b323c);
+        /snow|sleet|hail/.test(c) ? 0x6e7885 : this._storm ? 0x384252 : 0x46515f);
+      this._stormLayer.material.opacity = this._storm ? 0.5 : 0.45;
     }
     // Gestirn hinter geschlossener Decke: es waere ohnehin nicht zu sehen
     if (this._body) this._body.visible = !overcast;
@@ -401,8 +434,11 @@ export class SkyDome {
       const dim = /fog/.test(c) ? 0.85 : /pouring|storm|lightning/.test(c) ? 0.62 : 1;
       for (const sp of this._clouds.children) {
         sp.material.color.setScalar(dim);
-        // Einzelwolken verschwinden unter der geschlossenen Decke
-        sp.visible = !overcast;
+        // Wolken bleiben auch bei Regen sichtbar – nur so sieht man,
+        // dass sich am Himmel etwas bewegt. Unter der Decke werden sie
+        // dunkler, statt zu verschwinden.
+        sp.visible = true;
+        if (overcast) sp.material.color.setHex(0x444d5a);
       }
     }
   }
@@ -523,6 +559,13 @@ export class SkyDome {
         // meist ein schwaecherer Nachschlag. Ein einzelnes Aufleuchten
         // wirkt dagegen wie ein Lichtschalter.
         const peak = 4 + Math.random() * 6;
+        // Sichtbare Entladung erzeugen und an den Himmel setzen
+        if (this._bolt) { this.scene.remove(this._bolt);
+          this._bolt.geometry.dispose(); this._bolt.material.dispose(); }
+        const rr2 = (this._radius || 24);
+        this._bolt = createLightningBolt(rr2 * 0.62, rr2 * 1.1);
+        if (this._center) this._bolt.position.set(this._center.x, 0, this._center.z);
+        this.scene.add(this._bolt);
         this._flashSeq = [
           [now,                       peak],
           [now + 0.08,                0],
@@ -543,6 +586,11 @@ export class SkyDome {
         while (this._flashSeq.length && now >= this._flashSeq[0][0]) {
           const v = this._flashSeq.shift()[1];
           this._flash.intensity = v;
+          // Blitzlinie synchron zur Lichtintensitaet ein- und ausblenden
+          if (this._bolt) {
+            this._bolt.material.opacity = v > 0 ? Math.min(1, 0.45 + v * 0.08) : 0;
+            this._bolt.material.color.setHex(v > 3 ? 0xffffff : 0x88aaff);
+          }
           if (this._stormLayer) {
             // Entladung IN der Wolke, nicht davor
             this._stormLayer.material.emissive.setHex(v > 0 ? 0x88aaff : 0x000000);
@@ -552,6 +600,7 @@ export class SkyDome {
       }
     } else if (this._flash) {
       this._flash.intensity = 0;
+      if (this._bolt) this._bolt.material.opacity = 0;
     }
 
     // Schnee dagegen auf der CPU. Der Shader-Weg haengt an einer sauber
@@ -827,6 +876,8 @@ export class SkyDome {
       this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
     if (this._flash) this.scene.remove(this._flash);
+    if (this._bolt) { this.scene.remove(this._bolt);
+      this._bolt.geometry.dispose(); this._bolt.material.dispose(); }
     for (const m of [this.gradient, this.skyMesh, this.stars, this._body,
                     this._rain, this._snow]) {
       if (!m) continue;
