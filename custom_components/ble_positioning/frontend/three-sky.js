@@ -503,22 +503,35 @@ export class SkyDome {
       const now = t;
       if (!this._nextFlash) this._nextFlash = now + 2 + Math.random() * 5;
       if (now >= this._nextFlash) {
-        this._flash.intensity = 4 + Math.random() * 3;
-        // Entladung IN der Wolke: die Decke leuchtet kurz selbst auf.
-        // Ohne das wirkt der Blitz wie ein Scheinwerfer von aussen.
-        if (this._stormLayer) {
-          this._stormLayer.material.emissive.setHex(0xd8e8ff);
-          this._stormLayer.material.emissiveIntensity = 0.5 + Math.random() * 0.5;
+        // Echter Blitzschlag flackert: Hauptentladung, kurze Pause,
+        // meist ein schwaecherer Nachschlag. Ein einzelnes Aufleuchten
+        // wirkt dagegen wie ein Lichtschalter.
+        const peak = 4 + Math.random() * 6;
+        this._flashSeq = [
+          [now,                       peak],
+          [now + 0.08,                0],
+        ];
+        if (Math.random() > 0.4) {
+          this._flashSeq.push([now + 0.14, peak * 0.6]);
+          this._flashSeq.push([now + 0.19, 0]);
+          if (Math.random() > 0.65) {
+            this._flashSeq.push([now + 0.26, peak * 0.35]);
+            this._flashSeq.push([now + 0.30, 0]);
+          }
         }
-        this._flashOff = now + 0.05 + Math.random() * 0.1;
         this._nextFlash = now + 2 + Math.random() * 6;
       }
-      if (this._flashOff && now >= this._flashOff) {
-        this._flash.intensity = 0;
-        this._flashOff = 0;
-        if (this._stormLayer) {
-          this._stormLayer.material.emissive.setHex(0x000000);
-          this._stormLayer.material.emissiveIntensity = 0;
+      // Sequenz abarbeiten – zeitgesteuert, nicht ueber setTimeout, damit
+      // sie mit dem Rendern synchron laeuft und nichts haengen bleibt.
+      if (this._flashSeq && this._flashSeq.length) {
+        while (this._flashSeq.length && now >= this._flashSeq[0][0]) {
+          const v = this._flashSeq.shift()[1];
+          this._flash.intensity = v;
+          if (this._stormLayer) {
+            // Entladung IN der Wolke, nicht davor
+            this._stormLayer.material.emissive.setHex(v > 0 ? 0xd8e8ff : 0x000000);
+            this._stormLayer.material.emissiveIntensity = v > 0 ? 0.35 + v * 0.06 : 0;
+          }
         }
       }
     } else if (this._flash) {

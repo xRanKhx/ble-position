@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=13";
+import { SkyDome } from "./three-sky.js?s=14";
 import { Neighborhood } from "./three-neighborhood.js?n=8";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -1061,8 +1061,9 @@ export class ThreeScene {
     // ── Sockelplatte ────────────────────────────────────────────────────
     const pad = 0.45;
     const pw = (x2 - x1) + pad * 2, ph = (y2 - y1) + pad * 2;
+    // Runde Platte: trifft den Insel-Look und passt zum runden Gelaende
     const plate = new THREE.Mesh(
-      new THREE.BoxGeometry(pw, 0.12, ph),
+      new THREE.CylinderGeometry(Math.max(pw, ph) / 2, Math.max(pw, ph) / 2, 0.12, 64),
       // War 0xf6f7f9 – eine grosse, fast weisse Flaeche direkt unter dem
       // Gebaeude. Genau solche Flaechen clippen zuerst.
       new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.92, metalness: 0,
