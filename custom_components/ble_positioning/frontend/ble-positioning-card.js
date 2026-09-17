@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.12.2";
+const CARD_VERSION = "6.12.3";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -9715,6 +9715,20 @@ draw();
   }
 
   connectedCallback() {
+    // Module erst hier vorladen, nicht auf Modulebene: sie greifen beim
+    // Initialisieren auf this._opts der Card zu, und die existiert dort
+    // noch nicht ("Cannot read properties of undefined"). Zusaetzlich
+    // verzoegert, damit die Optionen vom Server gesetzt sind.
+    if (!this._modPreloaded) {
+      this._modPreloaded = true;
+      setTimeout(() => {
+        try {
+          if (!this._opts) this._opts = this._opts || {};
+          BLEModuleRegistry.preloadKnown?.().catch(() => {});
+        } catch (e) { /* bei Bedarf wird trotzdem geladen */ }
+      }, 1200);
+    }
+
     // FIX: Page Visibility API – Animationen pausieren wenn Tab versteckt
     if (!this._visibilityHandler) {
       this._visibilityHandler = () => {
@@ -21885,11 +21899,9 @@ trigger:
 // ── Register ──────────────────────────────────────────────────────────────
 // Inline-Module registrieren (Registry + Klassen jetzt vollständig)
 _registerInlineModules();
-// Module gleich holen, damit ihre Reiter Inhalt haben. Fehlschlaege
-// sind unkritisch: jedes Modul wird einzeln behandelt.
-try {
-  BLEModuleRegistry.preloadKnown().catch(() => {});
-} catch (e) { /* Registry noch nicht bereit – dann laedt es bei Bedarf */ }
+// KEIN Preload hier: auf Modulebene existiert noch keine Card, und die
+// Module greifen beim Initialisieren auf deren _opts zu. Das Vorladen
+// passiert in connectedCallback, sobald die Optionen stehen.
 
 if (!customElements.get("ble-positioning-card")) {
   customElements.define("ble-positioning-card", BLEPositioningCard);
