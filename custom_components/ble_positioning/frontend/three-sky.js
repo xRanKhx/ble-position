@@ -327,13 +327,16 @@ export class SkyDome {
       // Himmelskuppel sass mitten ueber der Insel und wirkte wie eine
       // Kaeseglocke – eine waagerechte Flaeche hoch oben liest sich
       // dagegen als geschlossene Wolkendecke.
-      const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
+      // Halbkugel statt Ebene: eine Platte hat immer vier Kanten, und
+      // sobald die Kamera schraeg steht, sieht man sie als Brett im Raum.
+      // Von innen betrachtet ist eine Kuppel dagegen randlos.
+      const geo = new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
       const mat = new THREE.MeshStandardMaterial({
         // Kuehles Dunkelgrau. Entscheidend ist envMapIntensity 0: mit
         // Rauheit 1 spiegelte die Flaeche diffus die Umgebungsmap, und
         // deren Bodenhaelfte ist warmes Braun – daher der braune Block.
-        color: 0x1a1d24, roughness: 1, metalness: 0, side: THREE.DoubleSide,
-        transparent: true, opacity: 0.88, fog: false,
+        color: 0x1e242d, roughness: 1, metalness: 0, side: THREE.BackSide,
+        transparent: true, opacity: 0.85, fog: false,
         envMapIntensity: 0,
         emissive: 0x000000, emissiveIntensity: 0,
         // Ohne depthWrite:false blockiert die Decke den Tiefenpuffer und
@@ -341,7 +344,6 @@ export class SkyDome {
         depthWrite: false,
       });
       this._stormLayer = new THREE.Mesh(geo, mat);
-      this._stormLayer.rotation.x = -Math.PI / 2;    // waagerecht
       this._stormLayer.frustumCulled = false;
       this._stormLayer.renderOrder = -3;   // ganz hinten, vor der Kuppel
       this.scene.add(this._stormLayer);
@@ -349,16 +351,16 @@ export class SkyDome {
     if (this._stormLayer) {
       this._stormLayer.visible = overcast;
       // Weit ausgedehnt und hoch genug, dass die Kante nie ins Bild kommt
-      // Innerhalb der Kuppel bleiben: eine Flaeche, die darueber
-      // hinausragt, schneidet den Himmel an und wird selbst zur Wand.
-      const rr = (this._radius || 24);
-      this._stormLayer.scale.set(rr * 1.7, rr * 1.7, 1);
-      this._stormLayer.position.set(this._center?.x || 0,
-                                    Math.min(rr * 0.62, Math.max(26, height * 1.4)),
-                                    this._center?.z || 0);
+      // Knapp innerhalb der Himmelskuppel, damit sie diese verdeckt,
+      // ohne sie zu durchstossen.
+      const rr = (this._radius || 24) * 0.94;
+      this._stormLayer.scale.setScalar(rr);
+      this._stormLayer.position.set(this._center?.x || 0, 0, this._center?.z || 0);
+      // Unterkante der Wolken: hier beginnt der Regen
+      this._cloudBase = rr * 0.55;
       // Bei Schnee heller als bei Gewitter
       this._stormLayer.material.color.setHex(
-        /snow|sleet|hail/.test(c) ? 0x5e6773 : this._storm ? 0x1a1d24 : 0x2b323c);
+        /snow|sleet|hail/.test(c) ? 0x5e6773 : this._storm ? 0x1e242d : 0x2b323c);
     }
     // Gestirn hinter geschlossener Decke: es waere ohnehin nicht zu sehen
     if (this._body) this._body.visible = !overcast;
@@ -500,8 +502,11 @@ export class SkyDome {
         if (pos[i+1] < 0) {
           const nx = (Math.random() - 0.5) * ex;
           const nz = (Math.random() - 0.5) * ex;
-          pos[i]   = nx;        pos[i+1] = h;         pos[i+2] = nz;
-          pos[i+3] = nx - 0.12; pos[i+4] = h + len;   pos[i+5] = nz;
+          // Knapp unter der Wolkenunterkante einsetzen – Tropfen im
+          // leeren Raum oberhalb der Wolken ergeben keinen Sinn.
+          const top = this._cloudBase ? this._cloudBase - 2 : h;
+          pos[i]   = nx;        pos[i+1] = top;         pos[i+2] = nz;
+          pos[i+3] = nx - 0.12; pos[i+4] = top + len;   pos[i+5] = nz;
         }
       }
       g.attributes.position.needsUpdate = true;
@@ -564,8 +569,9 @@ export class SkyDome {
         pos[i]     += Math.sin(t * 0.8 + rnd[k] * 30) * 0.01;  // Wind
         pos[i + 2] += Math.cos(t * 0.6 + rnd[k] * 25) * 0.006;
         if (pos[i + 1] < 0) {
-          // Oben neu einsetzen, seitlich neu streuen
-          pos[i + 1] = h;
+          // Oben neu einsetzen, seitlich neu streuen – ebenfalls unter
+          // der Wolkendecke
+          pos[i + 1] = this._cloudBase ? this._cloudBase - 2 : h;
           pos[i]     = (Math.random() - 0.5) * ex;
           pos[i + 2] = (Math.random() - 0.5) * ex;
         }
