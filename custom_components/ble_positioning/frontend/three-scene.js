@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=17";
+import { SkyDome } from "./three-sky.js?s=18";
 import { Neighborhood } from "./three-neighborhood.js?n=8";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -387,9 +387,16 @@ export class ThreeScene {
       // Regentag – sonst sieht beides gleich aus.
       const storm = /pouring|lightning|storm/.test(cond);
       const rainy = /rain/.test(cond) && !storm;
-      this.hemi.intensity = storm ? 0.15
-                          : rainy ? 0.4
+      // Untergrenze bei Sturm: 0.15 war stimmungsvoll, aber das Gebaeude
+      // wurde zur schwarzen Silhouette – Raumstatus und Lampen waren
+      // nicht mehr ablesbar, und genau darum geht es in dieser Karte.
+      this.hemi.intensity = storm ? 0.4
+                          : rainy ? 0.45
                           : 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
+      if (storm || rainy) {
+        this.hemi.color.setHex(0x556075);      // kuehle Daemmerung
+        this.hemi.groundColor.setHex(0x2a3038);
+      }
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
       this.sun.intensity = 2.4 * this._dayFactor;
@@ -408,6 +415,7 @@ export class ThreeScene {
       this.sun.castShadow = true;
       this.sun.shadow.radius = clarity > 0.7 ? 2.0 : 5.0;
     }
+    this._stormy = /pouring|lightning|storm|rain/.test(cond);
     this._applyPortIntensity();
     // Die Innenlampen haengen am Tageslicht und muessen mitgezogen werden
     if (this._lastLamps) this.updateLights(this._lastLamps);
@@ -965,7 +973,9 @@ export class ThreeScene {
       // Am Tag zusaetzlich stark zurueckgenommen: Lampenlicht addiert
       // sich auf Sonne und Fensterlicht, und der Raum brennt aus. Real
       // faellt eine Lampe bei Tageslicht ja auch kaum auf.
-      const dayDim = 1 - 0.85 * (this._dayFactor ?? 0);
+      // Bei Sturm weniger heruntergedimmt: die Lampe zeigt an, ob ein
+      // Raum belegt ist, und darf nicht im Dunkel verschwinden.
+      const dayDim = 1 - 0.85 * (this._dayFactor ?? 0) * (this._stormy ? 0.45 : 1);
       const lumen = 620 * frac * Math.max(0.15, dayDim);
       // Gedeckelt: eine Zimmerlampe soll den Raum ausleuchten, nicht
       // ueberstrahlen. decay bleibt 2, also physikalischer Abfall.
@@ -974,7 +984,9 @@ export class ThreeScene {
       lamp.pl.distance = 5;
       lamp.pl.shadow.camera.far = 6;
       // Die Birne selbst darf leuchten, aber nicht den Bloom fuettern
-      lamp.bulb.material.emissiveIntensity = 0.3 + frac * 0.4;
+      // Emissiv und damit unabhaengig von der Umgebungshelligkeit: die
+      // Birne bleibt auch im Gewitter als Statuspunkt sichtbar.
+      lamp.bulb.material.emissiveIntensity = (0.5 + frac * 0.6) * (this._stormy ? 1.6 : 1);
 
       const h = l.z != null ? l.z : Math.max(0.6, (this._wallH || 2.5) - 0.35);
       lamp.grp.position.set(l.x, h, l.y);

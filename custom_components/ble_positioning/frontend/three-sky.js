@@ -353,36 +353,55 @@ export class SkyDome {
     // Niederschlag steht keine Schoenwetterwolke mehr am Himmel.
     const overcast = /rain|pouring|lightning|storm|snow|sleet|hail/.test(c);
     if (overcast && !this._stormLayer) {
-      // Flache Decke statt Kuppel. Eine Halbkugel mit dem Radius der
-      // Himmelskuppel sass mitten ueber der Insel und wirkte wie eine
-      // Kaeseglocke – eine waagerechte Flaeche hoch oben liest sich
-      // dagegen als geschlossene Wolkendecke.
       // Halbkugel statt Ebene: eine Platte hat immer vier Kanten, und
       // sobald die Kamera schraeg steht, sieht man sie als Brett im Raum.
       // Von innen betrachtet ist eine Kuppel dagegen randlos.
       const geo = new THREE.SphereGeometry(1, 40, 20, 0, Math.PI * 2, 0, Math.PI * 0.5);
-      const mat = new THREE.MeshStandardMaterial({
-        // Kuehles Dunkelgrau. Entscheidend ist envMapIntensity 0: mit
-        // Rauheit 1 spiegelte die Flaeche diffus die Umgebungsmap, und
-        // deren Bodenhaelfte ist warmes Braun – daher der braune Block.
-        // Heller und durchlaessiger: bei 0.85 schluckte die Kuppel so viel
-        // Licht, dass man die beleuchteten Raeume nicht mehr sah.
-        color: 0x384252, roughness: 1, metalness: 0, side: THREE.BackSide,
-        transparent: true, opacity: 0.48, fog: false,
-        envMapIntensity: 0,
-        emissive: 0x000000, emissiveIntensity: 0,
-        // Ohne depthWrite:false blockiert die Decke den Tiefenpuffer und
-        // verdeckt alles, was danach gezeichnet wird.
+      // Eigener Shader statt MeshStandardMaterial: die Kuppel soll nach
+      // unten hin ausblenden. Mit einem festen Alpha zeichnet sich ihre
+      // Unterkante als scharfer Ring gegen den Horizont ab.
+      const mat = new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        transparent: true,
         depthWrite: false,
+        fog: false,
+        uniforms: {
+          uColor:   { value: new THREE.Color(0x5a6678) },
+          uOpacity: { value: 0.35 },
+          uFlash:   { value: 0.0 },
+        },
+        vertexShader: `
+          varying float vY;
+          void main() {
+            // Normierte Hoehe der Kuppel, 0 am Horizont, 1 im Zenit
+            vY = normalize(position).y;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }`,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uOpacity;
+          uniform float uFlash;
+          varying float vY;
+          void main() {
+            // Weicher Auslauf zum Horizont: unten ganz durchsichtig
+            float a = smoothstep(0.02, 0.42, vY) * uOpacity;
+            // Entladung in der Wolke hellt die Decke kurz auf
+            vec3 col = mix(uColor, vec3(0.62, 0.72, 1.0), clamp(uFlash, 0.0, 1.0));
+            a = min(1.0, a + uFlash * 0.35);
+            gl_FragColor = vec4(col, a);
+          }`,
       });
       this._stormLayer = new THREE.Mesh(geo, mat);
       this._stormLayer.frustumCulled = false;
       this._stormLayer.renderOrder = -3;   // ganz hinten, vor der Kuppel
+      // Eine Wolkendecke wirft keine Schatten und empfaengt keine – sonst
+      // legt sie das ganze Gebaeude in Dunkelheit.
+      this._stormLayer.castShadow = false;
+      this._stormLayer.receiveShadow = false;
       this.scene.add(this._stormLayer);
     }
     if (this._stormLayer) {
       this._stormLayer.visible = overcast;
-      // Weit ausgedehnt und hoch genug, dass die Kante nie ins Bild kommt
       // Knapp innerhalb der Himmelskuppel, damit sie diese verdeckt,
       // ohne sie zu durchstossen.
       const rr = (this._radius || 24) * 0.94;
@@ -390,10 +409,10 @@ export class SkyDome {
       this._stormLayer.position.set(this._center?.x || 0, 0, this._center?.z || 0);
       // Unterkante der Wolken: hier beginnt der Regen
       this._cloudBase = rr * 0.55;
-      // Bei Schnee heller als bei Gewitter
-      this._stormLayer.material.color.setHex(
-        /snow|sleet|hail/.test(c) ? 0x6e7885 : this._storm ? 0x384252 : 0x46515f);
-      this._stormLayer.material.opacity = this._storm ? 0.5 : 0.45;
+      const u = this._stormLayer.material.uniforms;
+      u.uColor.value.setHex(
+        /snow|sleet|hail/.test(c) ? 0x8a94a4 : this._storm ? 0x5a6678 : 0x6b7688);
+      u.uOpacity.value = this._storm ? 0.35 : 0.3;
     }
     // Gestirn hinter geschlossener Decke: es waere ohnehin nicht zu sehen
     if (this._body) this._body.visible = !overcast;
@@ -503,6 +522,17 @@ export class SkyDome {
     this._ground.material.color.setScalar(night ? 0.22 : 1);
   }
 
+  /* Blitz-Mesh sauber abraeumen. Geometrie und Material liegen im
+     GPU-Speicher und werden nicht vom Garbage Collector eingesammelt –
+     bei einem Blitz alle paar Sekunden summiert sich das. */
+  _disposeBolt() {
+    if (!this._bolt) return;
+    this.scene.remove(this._bolt);
+    this._bolt.geometry.dispose();
+    this._bolt.material.dispose();
+    this._bolt = null;
+  }
+
   /** Muss pro Bild laufen, damit Regen faellt und Wolken ziehen. */
   animate(t) {
     // Regen: beide Endpunkte jedes Tropfens verschieben. Etwas teurer
@@ -560,8 +590,7 @@ export class SkyDome {
         // wirkt dagegen wie ein Lichtschalter.
         const peak = 4 + Math.random() * 6;
         // Sichtbare Entladung erzeugen und an den Himmel setzen
-        if (this._bolt) { this.scene.remove(this._bolt);
-          this._bolt.geometry.dispose(); this._bolt.material.dispose(); }
+        this._disposeBolt();
         const rr2 = (this._radius || 24);
         this._bolt = createLightningBolt(rr2 * 0.62, rr2 * 1.1);
         if (this._center) this._bolt.position.set(this._center.x, 0, this._center.z);
@@ -591,16 +620,21 @@ export class SkyDome {
             this._bolt.material.opacity = v > 0 ? Math.min(1, 0.45 + v * 0.08) : 0;
             this._bolt.material.color.setHex(v > 3 ? 0xffffff : 0x88aaff);
           }
-          if (this._stormLayer) {
+          if (this._stormLayer?.material?.uniforms) {
             // Entladung IN der Wolke, nicht davor
-            this._stormLayer.material.emissive.setHex(v > 0 ? 0x88aaff : 0x000000);
-            this._stormLayer.material.emissiveIntensity = v > 0 ? 0.35 + v * 0.06 : 0;
+            this._stormLayer.material.uniforms.uFlash.value = v > 0 ? Math.min(1, v * 0.14) : 0;
           }
         }
       }
     } else if (this._flash) {
       this._flash.intensity = 0;
-      if (this._bolt) this._bolt.material.opacity = 0;
+      this._disposeBolt();
+    }
+    // Ausgeblendete Blitze unverzueglich abraeumen statt bis zum
+    // naechsten Schlag liegen zu lassen
+    if (this._bolt && this._bolt.material.opacity <= 0 &&
+        (!this._flashSeq || !this._flashSeq.length)) {
+      this._disposeBolt();
     }
 
     // Schnee dagegen auf der CPU. Der Shader-Weg haengt an einer sauber
@@ -876,8 +910,7 @@ export class SkyDome {
       this._groundTex?.dispose(); this._groundAlpha?.dispose(); }
     this._cloudTex?.dispose();
     if (this._flash) this.scene.remove(this._flash);
-    if (this._bolt) { this.scene.remove(this._bolt);
-      this._bolt.geometry.dispose(); this._bolt.material.dispose(); }
+    this._disposeBolt();
     for (const m of [this.gradient, this.skyMesh, this.stars, this._body,
                     this._rain, this._snow]) {
       if (!m) continue;
