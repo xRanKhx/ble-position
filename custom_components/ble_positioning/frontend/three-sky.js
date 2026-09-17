@@ -232,7 +232,9 @@ function makeRainLines(count, extent, height) {
   const mat = new THREE.LineBasicMaterial({
     // Halbtransparentes Blaugrau statt massivem Weiss: Regen soll die
     // Szene ueberziehen, nicht zustellen.
-    color: 0xaaccff, transparent: true, opacity: 0.35, fog: false,
+    // Dezentes Blaugrau statt Weiss, deutlich durchsichtiger: der Regen
+    // soll die Szene ueberziehen, nicht zudecken.
+    color: 0x88aacc, transparent: true, opacity: 0.22, fog: false,
   });
   const m = new THREE.LineSegments(geo, mat);
   m.frustumCulled = false;
@@ -337,7 +339,7 @@ export class SkyDome {
     }
     this._rain.visible = rain;
     this._snow.visible = snow;
-    this._rain.material.opacity = heavy ? 0.42 : 0.3;
+    this._rain.material.opacity = heavy ? 0.25 : 0.2;
     this._snow.material.uniforms.uOpacity.value = heavy ? 0.9 : 0.72;
 
     // ── Wolken ────────────────────────────────────────────────────────
@@ -548,7 +550,10 @@ export class SkyDome {
       for (let i = 0, k = 0; i < pos.length; i += 6, k++) {
         const fall = 0.8 + rnd[k] * 0.4;
         pos[i+1] -= fall;  pos[i+4] -= fall;      // beide Enden
-        pos[i]   += 0.05;  pos[i+3] += 0.05;      // Windschraege
+        // Deutlichere Schraege in beiden Achsen – Regen faellt selten
+        // senkrecht, und die Neigung liest sich als Wind.
+        pos[i]   += 0.15;  pos[i+3] += 0.15;
+        pos[i+2] += 0.08;  pos[i+5] += 0.08;
         // Sichtfenster ueber der Wohnung freihalten: Tropfen, die in den
         // Kernbereich geraten, werden nach aussen versetzt. Sonst liegt
         // staendig ein Schleier vor dem Grundriss.
@@ -748,7 +753,7 @@ export class SkyDome {
     // Vorher 0x070b16 – praktisch schwarz, dadurch verschwand die Kuppel
     // optisch und die Szene schien im Nichts zu schweben. Ein sichtbarer
     // Verlauf gibt ihr wieder Form, ohne den Schwarzpunkt zu ruinieren.
-    const topNight = new THREE.Color(0x11182c), botNight = new THREE.Color(0x2c3a58);
+    const topNight = new THREE.Color(0x161d28), botNight = new THREE.Color(0x3d4a5c);
     u.uColorTop.value.copy(topDay).lerp(topNight, night);
     u.uColorBottom.value.copy(botDay).lerp(botNight, night);
   }

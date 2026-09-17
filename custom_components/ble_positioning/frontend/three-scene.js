@@ -21,7 +21,7 @@ import * as THREE from "./vendor/three.module.js";
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
-import { SkyDome } from "./three-sky.js?s=18";
+import { SkyDome } from "./three-sky.js?s=19";
 import { Neighborhood } from "./three-neighborhood.js?n=8";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
@@ -394,8 +394,16 @@ export class ThreeScene {
                           : rainy ? 0.45
                           : 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
       if (storm || rainy) {
-        this.hemi.color.setHex(0x556075);      // kuehle Daemmerung
-        this.hemi.groundColor.setHex(0x2a3038);
+        // Kuehles Himmelslicht von oben, dunkler Grund von unten: so
+        // bleiben Hauskanten und Strassenstrukturen ablesbar, statt in
+        // einer gleichmaessigen Dunkelheit zu verschwinden.
+        this.hemi.color.setHex(0x607890);
+        this.hemi.groundColor.setHex(0x1d2430);
+        this.hemi.intensity = 0.65;
+        // Gerichtetes Licht von schraeg oben zeichnet die Kanten nach
+        this.sun.color.setHex(0x88aaff);
+        this.sun.intensity = 0.4;
+        this.sun.castShadow = true;
       }
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
@@ -986,7 +994,10 @@ export class ThreeScene {
       // Die Birne selbst darf leuchten, aber nicht den Bloom fuettern
       // Emissiv und damit unabhaengig von der Umgebungshelligkeit: die
       // Birne bleibt auch im Gewitter als Statuspunkt sichtbar.
-      lamp.bulb.material.emissiveIntensity = (0.5 + frac * 0.6) * (this._stormy ? 1.6 : 1);
+      // Bei Unwetter deutlich kraeftiger: die leuchtenden Raeume sollen
+      // durch das Wetter hindurch sichtbar bleiben. emissiveIntensity
+      // haengt nicht an der Umgebungshelligkeit.
+      lamp.bulb.material.emissiveIntensity = (0.5 + frac * 0.6) * (this._stormy ? 2.0 : 1);
 
       const h = l.z != null ? l.z : Math.max(0.6, (this._wallH || 2.5) - 0.35);
       lamp.grp.position.set(l.x, h, l.y);
