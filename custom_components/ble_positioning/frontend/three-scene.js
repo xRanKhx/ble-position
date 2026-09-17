@@ -393,18 +393,6 @@ export class ThreeScene {
       this.hemi.intensity = storm ? 0.4
                           : rainy ? 0.45
                           : 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
-      if (storm || rainy) {
-        // Kuehles Himmelslicht von oben, dunkler Grund von unten: so
-        // bleiben Hauskanten und Strassenstrukturen ablesbar, statt in
-        // einer gleichmaessigen Dunkelheit zu verschwinden.
-        this.hemi.color.setHex(0x607890);
-        this.hemi.groundColor.setHex(0x1d2430);
-        this.hemi.intensity = 0.65;
-        // Gerichtetes Licht von schraeg oben zeichnet die Kanten nach
-        this.sun.color.setHex(0x88aaff);
-        this.sun.intensity = 0.4;
-        this.sun.castShadow = true;
-      }
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
       this.sun.intensity = 2.4 * this._dayFactor;
@@ -422,6 +410,21 @@ export class ThreeScene {
       // der weiche Rand die Rolle des diffusen Lichts.
       this.sun.castShadow = true;
       this.sun.shadow.radius = clarity > 0.7 ? 2.0 : 5.0;
+
+      // MUSS am Ende stehen: die Zeilen darueber setzen Farbe und
+      // Intensitaet auf die Tageswerte, und ein weiter oben gesetzter
+      // Sturmwert wurde dadurch sofort wieder ueberschrieben.
+      if (storm || rainy) {
+        // Kuehles Himmelslicht von oben, dunkler Grund von unten: so
+        // bleiben Hauskanten und Strassenstrukturen ablesbar.
+        this.hemi.color.setHex(0x607890);
+        this.hemi.groundColor.setHex(0x1d2430);
+        this.hemi.intensity = storm ? 0.85 : 0.75;
+        this.sun.color.setHex(0x88aaff);
+        this.sun.intensity = storm ? 0.55 : 0.7;
+        this.sun.castShadow = true;
+        this.sun.shadow.radius = 5.0;
+      }
     }
     this._stormy = /pouring|lightning|storm|rain/.test(cond);
     this._applyPortIntensity();

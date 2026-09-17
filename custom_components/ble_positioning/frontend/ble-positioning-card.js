@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.12.0";
+const CARD_VERSION = "6.12.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20071,7 +20071,7 @@ trigger:
       const fog =
         night2                               ? [0x0a0e17, 0.0008] :
         /fog/.test(cond2)                    ? [0xc9d2da, 0.016]  :
-        /pouring|storm|lightning/.test(cond2)? [0x1a1e29, 0.028]  :
+        /pouring|storm|lightning/.test(cond2)? [0x5a6678, 0.012]  :
         /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
         /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
                                                null;   // sonst gar keiner
@@ -20090,7 +20090,17 @@ trigger:
       sc.setBackdrop(bg);
       // Nebelfarbe exakt auf den Hintergrund ziehen, sonst zeichnet sich
       // der Horizont als harte Kante ab statt weich auszulaufen.
-      if (fog) sc.setFog(bg, fog[1]); else sc.setFog(0, 0);
+      // Nebelfarbe am HIMMEL ausrichten, nicht am Hintergrund. Mit dem
+      // dunklen Hintergrundton faerbte der Nebel jedes entfernte Objekt
+      // fast schwarz, waehrend der Himmel (fog:false) hell blieb – daher
+      // die pechschwarzen Silhouetten.
+      const fogCol =
+        night2                               ? 0x1a2334 :
+        /pouring|storm|lightning/.test(cond2)? 0x5a6678 :
+        /rain/.test(cond2)                   ? 0x6b7681 :
+        /snow|sleet|hail/.test(cond2)        ? 0xc3ced9 :
+                                               bg;
+      if (fog) sc.setFog(fogCol, fog[1]); else sc.setFog(0, 0);
     }
 
     // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
