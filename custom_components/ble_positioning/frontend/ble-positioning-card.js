@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.13.0";
+const CARD_VERSION = "6.13.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1439,7 +1439,17 @@ class BLEPositioningCard extends HTMLElement {
       case "deko":       sb.appendChild(this._sidebarDeko());        break;
       case "design":     sb.appendChild(this._sidebarDesign());      break;
       case "screensaver": sb.appendChild(this._sidebarScreensaver()); break;
-      case "mmwave":     sb.appendChild(this._sidebarMmwave());      break;
+      // mmwave liegt als Modul vor: seine Sidebar-Methode haengt am
+      // Modulobjekt, nicht an der Card. Der fruehere Aufruf
+      // this._sidebarMmwave() zielte auf eine Methode, die es hier seit
+      // dem Auslagern nicht mehr gibt – daher der leere Reiter.
+      case "mmwave": {
+        const _mm = BLEModuleRegistry._modules?.mmwave;
+        const _el = _mm?.renderSidebar ? _mm.renderSidebar(this)
+                  : (typeof this._sidebarMmwave === "function" ? this._sidebarMmwave() : null);
+        if (_el) sb.appendChild(_el);
+        break;
+      }
       case "analytics":  sb.appendChild(this._sidebarAnalytics());    break;
       case "ptz":        sb.appendChild(this._sidebarPtz());           break;
       default: {
