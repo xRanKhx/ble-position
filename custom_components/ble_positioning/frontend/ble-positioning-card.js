@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.12.1";
+const CARD_VERSION = "5.0.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -1204,8 +1204,6 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
-      <canvas id="wx" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
-      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
@@ -3812,12 +3810,6 @@ class BLEPositioningCard extends HTMLElement {
     // Canvas-Größe für _draw3DScene merken (CSS-Pixel)
     this._canvasCssW = cssW;
     this._canvasCssH = cssH;
-    // _applyCanvasScale ueberspringt gleiche Werte. Nach einem Resize ist
-    // die Canvas wieder auf voller Aufloesung, der Cache wuerde sonst eine
-    // Skalierung melden, die gar nicht mehr anliegt.
-    this._currentCanvasScale = 1;
-    // Der WebGL-Renderer hat ein eigenes Canvas und braucht die Groesse selbst
-    if (this._gl && this._gl.ok) { try { this._gl.resize(); } catch (e) {} }
   }
 
   _attachCanvasEvents() {
@@ -4127,22 +4119,6 @@ class BLEPositioningCard extends HTMLElement {
     // Methode weiter unten mit return, dort käme die Prüfung nie an.
     // _canvasXY liefert physische Canvas-Pixel, genau wie die gemerkten
     // Zonen – hier darf nicht nochmal mit dpr multipliziert werden.
-    // ── Lampen in der WebGL-Szene schalten ─────────────────────────────────
-    if (this._gl?.ok && this._glLampHits?.length && !this._musicDidDrag) {
-      const { cx: lx, cy: ly } = this._canvasXY(e);
-      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
-      for (const h of this._glLampHits) {
-        if (!h.entity) continue;
-        if (Math.hypot(lx / dpr - h.x, ly / dpr - h.y) <= h.r) {
-          try {
-            await this._hass.callService("light", "toggle", { entity_id: h.entity });
-          } catch (e2) { this._showToast("Lampe schalten fehlgeschlagen"); }
-          this._markDirty();
-          return;
-        }
-      }
-    }
-
     if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
       // Ein Verschieben endet nicht als Klick
       if (this._musicDidDrag) { this._musicDidDrag = false; return; }
@@ -5541,9 +5517,6 @@ class BLEPositioningCard extends HTMLElement {
         // erneut – die Platte stand still.
         const _animDecos = this._pendingDecos?.length
           ? this._pendingDecos : (this._data?.decos || []);
-        // Regen und Wolken in der WebGL-Szene brauchen einen laufenden
-        // Loop, sonst steht der Niederschlag still.
-        const hasGlWeather = !!(this._gl?.dome && this._opts?.show_weather);
         const hasMusicAnim = this._opts?.show_music_bubble &&
           _animDecos.some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
             this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
@@ -5553,7 +5526,7 @@ class BLEPositioningCard extends HTMLElement {
           (this._data?.windows||[]).some(w => w.cover_entity &&
             ["opening","closing"].includes(
               String(this._hass?.states?.[w.cover_entity]?.state||"").toLowerCase()));
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasGlWeather
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim
             || hasElektroAnim || hasWeatherAnim || hasCoverAnim) {
           lastFrame = ts;
           this._dirty = false;
@@ -9650,14 +9623,6 @@ draw();
 
   disconnectedCallback() {
     if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
-    // GPU-Speicher freigeben: Geometrien, Texturen und der WebGL-Kontext
-    // selbst werden sonst erst vom Garbage Collector eingesammelt, und die
-    // Zahl gleichzeitiger Kontexte im Browser ist begrenzt.
-    if (this._glVisHook) {
-      document.removeEventListener("visibilitychange", this._glVisHook);
-      this._glVisHook = null;
-    }
-    if (this._gl) { try { this._gl.dispose(); } catch (e) {} this._gl = null; this._glDataKey = null; }
     if (this._dekoAnimFrame) { 
       if (typeof this._dekoAnimFrame === 'number') cancelAnimationFrame(this._dekoAnimFrame);
       else clearTimeout(this._dekoAnimFrame);
@@ -9913,16 +9878,6 @@ draw();
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
-      // ── WebGL-Renderer, falls das Theme ihn verlangt ──────────────────
-      // Schlaegt er fehl, laeuft der Canvas-Pfad unveraendert weiter.
-      if (this._webglWanted() && !this._glFailed) {
-        if (!this._gl) { this._ensureWebGL().then(() => this._markDirty()); }
-        this._syncGlVisibility();
-        if (this._gl && this._drawWebGL()) return;
-      } else if (this._gl || this._glFailed) {
-        this._syncGlVisibility();
-      }
-
       const _3dLights = this._mode === "lights"
         ? (this._pendingLights || []).map(l => ({...l, on: true, brightness: 200, rgb: null}))
         : (this._data?.lights || []);
@@ -12830,7 +12785,7 @@ _drawDoors() {
       // Trefferfläche merken. Zonen werden einheitlich in physischen
       // Canvas-Pixeln gehalten, weil _canvasXY in dieser Einheit misst.
       {
-        const zd = this._3dCtxScale || window.devicePixelRatio || 1;
+        const zd = window.devicePixelRatio || 1;
         (this._musicClickZones ||= []).push({
           entity: deco.entity, kind: "bubble",
           x: bx * zd, y: by * zd, w: bw * zd, h: bh * zd,
@@ -12879,12 +12834,6 @@ _drawDoors() {
   }
 
   _weatherState() {
-    // Testmodus: erlaubt das Durchschalten aller Wetterlagen, ohne auf
-    // echtes Wetter warten zu muessen. Nur zum Pruefen gedacht.
-    if (this._wxTest) {
-      return { condition: this._wxTest.condition,
-               temp: this._wxTest.temp ?? 12, unit: "\u00b0C" };
-    }
     const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
     if (!eid) return null;
     const st = this._hass?.states?.[eid];
@@ -12986,11 +12935,6 @@ _drawDoors() {
     const animate = this._opts?.weather_animate !== false;
     const T       = Date.now() / 1000;
 
-    // Mit Himmelskuppel liefert diese den Verlauf. Dann werden hier nur
-    // noch Gestirn, Wolken, Niederschlag und die Temperatur gezeichnet –
-    // sonst laege ein zweiter, flacher Himmel davor.
-    const skipSky = !!o?.skipSky;
-
     ctx.save();
 
     // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert.
@@ -13031,15 +12975,13 @@ _drawDoors() {
     const sky = (night ? skyNight : skyDay)[fx]
               || (night ? ["#1a2340", "#2b3454"] : ["#dde5ee", "#eff3f8"]);
 
-    if (!skipSky) {
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, sky[0]);
-      grad.addColorStop(1, sky[1]);
-      ctx.globalAlpha = night ? 0.55 : 0.5;
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 1;
-    }
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, sky[0]);
+    grad.addColorStop(1, sky[1]);
+    ctx.globalAlpha = night ? 0.55 : 0.5;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
 
     const tint = night ? "#c7d2ea" : "#7f93ad";
 
@@ -13477,7 +13419,7 @@ _drawDoors() {
   _drawMediaControls(ctx, x, y, w, h, entity, st, iso) {
     // iso: in 3D rechnet der Kontext in CSS-Pixeln, die Zonen müssen aber
     // wie in 2D in physischen Canvas-Pixeln abgelegt werden.
-    const zd = iso ? (this._3dCtxScale || window.devicePixelRatio || 1) : 1;
+    const zd = iso ? (window.devicePixelRatio || 1) : 1;
     const playing = st?.state === "playing";
     const btns = [
       { id: "prev", sym: "\u23ee" },
@@ -16725,7 +16667,6 @@ _drawDoors() {
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
         { id:"studio",     label:"Studio",           icon:"🏛", desc:"Wandvolumen, Sockelplatte, Architektur-Look" },
-        { id:"webgl",      label:"Studio WebGL",     icon:"✨", desc:"Echte 3D-Beschleunigung mit Schatten und Texturen (neuere Geräte)" },
         { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
@@ -16750,141 +16691,6 @@ _drawDoors() {
       };
       renderThemeBtns();
       themeSection.appendChild(themeGrid);
-
-      // ── Umgebungsmap (nur fuer den WebGL-Renderer sinnvoll) ────────────
-      // Reflexionen brauchen etwas zum Spiegeln. Ohne Umgebung wirkt Glas
-      // flach und Metall wie grauer Kunststoff.
-      const envBox = document.createElement("div");
-      envBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      const envHead = document.createElement("div");
-      envHead.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\u2728 Spiegelungen (WebGL)</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Umgebung, die sich in Glas und Metall spiegelt</div>';
-      envBox.appendChild(envHead);
-
-      const envSel = document.createElement("select");
-      envSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
-      const envOpts = [
-        ["studio",  "Studio (hell) \u2013 Standard"],
-        ["warm",    "Abendlicht"],
-        ["neutral", "Neutral grau"],
-        ["outdoor", "Freier Himmel"],
-        ["off",     "Aus (matt)"],
-      ];
-      for (const [v, lbl] of envOpts) {
-        const o = document.createElement("option");
-        o.value = v; o.textContent = lbl;
-        if ((this._opts?.env_preset || "studio") === v) o.selected = true;
-        envSel.appendChild(o);
-      }
-      envSel.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.env_preset = envSel.value;
-        this._draw();
-        await this._saveOptions();
-        this._showToast("Spiegelungen: " + envSel.options[envSel.selectedIndex].textContent);
-      });
-      envBox.appendChild(envSel);
-
-      const envUrl = document.createElement("input");
-      envUrl.type = "text";
-      envUrl.placeholder = "Eigenes Panoramabild, z. B. /local/env.jpg (optional)";
-      envUrl.value = this._opts?.env_url || "";
-      envUrl.style.cssText = "width:100%;margin-top:4px;padding:4px;font-size:7.5px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;box-sizing:border-box";
-      envUrl.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.env_url = envUrl.value.trim();
-        this._draw();
-        await this._saveOptions();
-        this._showToast(envUrl.value.trim()
-          ? "Eigenes Umgebungsbild gesetzt"
-          : "Zurueck auf Standard-Umgebung");
-      });
-      envBox.appendChild(envUrl);
-      const envHint = document.createElement("div");
-      envHint.style.cssText = "font-size:6px;color:#445566;margin-top:3px";
-      envHint.textContent = "Bild muss equirectangular sein (2:1). Laedt es nicht, bleibt das Preset aktiv.";
-      envBox.appendChild(envHint);
-      themeSection.appendChild(envBox);
-
-      // ── Wetter-Testmodus ───────────────────────────────────────────────
-      // Zum Pruefen der Darstellung, ohne auf echtes Wetter zu warten.
-      const tBox = document.createElement("div");
-      tBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      tBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83E\uDDEA Wetter-Testmodus</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Zeigt eine Lage an, statt der echten. Nur zum Pr\u00fcfen.</div>';
-      const tSel = document.createElement("select");
-      tSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
-      const lagen = [
-        ["", "Aus \u2013 echtes Wetter"],
-        ["sunny|0|24",        "\u2600\uFE0F Sonnig, Tag"],
-        ["partlycloudy|0|19", "\u26C5 Leicht bew\u00f6lkt, Tag"],
-        ["cloudy|0|14",       "\u2601\uFE0F Bew\u00f6lkt, Tag"],
-        ["fog|0|8",           "\uD83C\uDF2B\uFE0F Nebel, Tag"],
-        ["rainy|0|11",        "\uD83C\uDF27\uFE0F Regen, Tag"],
-        ["pouring|0|9",       "\u26C8\uFE0F Starkregen, Tag"],
-        ["snowy|0|-2",        "\u2744\uFE0F Schnee, Tag"],
-        ["clear-night|1|7",   "\uD83C\uDF19 Klar, Nacht"],
-        ["cloudy|1|6",        "\u2601\uFE0F Bew\u00f6lkt, Nacht"],
-        ["rainy|1|4",         "\uD83C\uDF27\uFE0F Regen, Nacht"],
-        ["snowy|1|-4",        "\u2744\uFE0F Schnee, Nacht"],
-      ];
-      for (const [v, lbl] of lagen) {
-        const o = document.createElement("option");
-        o.value = v; o.textContent = lbl;
-        if ((this._wxTestKey || "") === v) o.selected = true;
-        tSel.appendChild(o);
-      }
-      tSel.addEventListener("change", () => {
-        this._wxTestKey = tSel.value;
-        if (!tSel.value) {
-          this._wxTest = null;
-        } else {
-          const [cond, n, t] = tSel.value.split("|");
-          this._wxTest = { condition: cond, night: n === "1", temp: +t };
-        }
-        // Erzwingt Neuaufbau: Sonnenstand und Himmel haengen daran
-        this._glDayKey = null; this._glDataKey = null; this._skyTestKey = null;
-        if (this._gl?.dome) this._gl.dome.setWeather(this._wxTest?.condition);
-        this._markDirty(); this._draw();
-        this._showToast(tSel.value ? "Test: " + tSel.options[tSel.selectedIndex].textContent
-                                   : "Testmodus aus");
-      });
-      tBox.appendChild(tSel);
-      themeSection.appendChild(tBox);
-
-      // ── Nachbarschaft ──────────────────────────────────────────────────
-      const nBox = document.createElement("div");
-      nBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      nBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83C\uDFD8\uFE0F Nachbarschaft (WebGL)</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Stra\u00dfen, H\u00e4user und B\u00e4ume rings um das Geb\u00e4ude</div>';
-      const nRow = document.createElement("div");
-      nRow.style.cssText = "display:flex;gap:6px;margin-top:5px;align-items:center";
-      const nChk = document.createElement("input");
-      nChk.type = "checkbox";
-      nChk.checked = this._opts?.neighborhood !== false;
-      nChk.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.neighborhood = nChk.checked;
-        this._draw(); await this._saveOptions();
-        this._showToast(nChk.checked ? "Nachbarschaft an" : "Nachbarschaft aus");
-      });
-      const nLbl = document.createElement("span");
-      nLbl.style.cssText = "font-size:7.5px;color:var(--text)";
-      nLbl.textContent = "anzeigen";
-      const nNew = document.createElement("button");
-      nNew.textContent = "Neu w\u00fcrfeln";
-      nNew.style.cssText = "margin-left:auto;padding:3px 7px;font-size:7px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer";
-      nNew.addEventListener("click", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.hood_seed = Math.floor(Math.random() * 100000);
-        if (this._gl?.hood) { this._gl.hood.dispose(); this._gl.hood = null; }
-        this._draw(); await this._saveOptions();
-        this._showToast("Neue Nachbarschaft");
-      });
-      nRow.appendChild(nChk); nRow.appendChild(nLbl); nRow.appendChild(nNew);
-      nBox.appendChild(nRow);
-      themeSection.appendChild(nBox);
-
       wrap.appendChild(themeSection);
     }
 
@@ -18046,7 +17852,6 @@ _drawDoors() {
      Wetter-Kulisse die Tageszeit auch dann braucht, wenn der Nacht-Modus
      der Karte aus ist. */
   _isDark() {
-    if (this._wxTest) return !!this._wxTest.night;
     const s = this._hass?.states?.["sun.sun"]?.state;
     if (s === "below_horizon") return true;
     if (s === "above_horizon") return false;
@@ -19543,10 +19348,7 @@ trigger:
   // 3D THEMES – jedes Theme definiert alle visuellen Parameter
   // ══════════════════════════════════════════════════════════════════════════
   _get3DTheme(forceId) {
-    // "webgl" hat kein eigenes 2D-Aussehen: faellt der WebGL-Renderer aus,
-    // soll der Canvas-Pfad wie "studio" zeichnen und nicht wie "default".
-    let id = forceId || this._3dTheme || "default";
-    if (id === "webgl") id = "studio";
+    const id = forceId || this._3dTheme || "default";
     const THEMES = {
 
       // ── Standard (aktuell) ──────────────────────────────────────────────
@@ -19648,13 +19450,9 @@ trigger:
         decoTint: null,
         aoCorners: true,
         wallShading: "directional",
-        // Durchgehender Holzboden: Theme-Grundton statt Raumfarbe
-        floorBase: true,
-        floorTint: 0.05,
-        hideGrid: true,
         // Neu in 5.0: Wandstärke in Metern und Sockelplatte
         wallDepth: 0.14,
-        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.35,
+        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.9,
                      shadow:"rgba(60,72,92,0.22)" },
         lightWarm: true,
       },
@@ -19832,445 +19630,7 @@ trigger:
   }
 
 
-  /* ── WebGL-Renderer (Three.js) ─────────────────────────────────────────
-     Zweiter Renderer neben der Canvas-2D-Szene, aktiv im Theme "webgl".
-     Faellt bei fehlendem WebGL oder Kontextverlust auf 2D zurueck, damit
-     aeltere Geraete weiterhin ein Bild bekommen. */
-  /* HS nach RGB. HA liefert Farbton 0..360 und Saettigung 0..100. */
-  _hsToRgb(h, sPct) {
-    const sat = Math.max(0, Math.min(100, sPct)) / 100;
-    const hh = ((h % 360) + 360) % 360 / 60;
-    const c = sat, x = c * (1 - Math.abs((hh % 2) - 1));
-    let r = 0, g = 0, b = 0;
-    if      (hh < 1) { r = c; g = x; }
-    else if (hh < 2) { r = x; g = c; }
-    else if (hh < 3) { g = c; b = x; }
-    else if (hh < 4) { g = x; b = c; }
-    else if (hh < 5) { r = x; b = c; }
-    else             { r = c; b = x; }
-    const m = 1 - c;
-    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
-  }
-
-  _webglWanted() {
-    return (this._3dTheme === "webgl") &&
-           (this._mode === "view" || this._mode === "screensaver") &&
-           !!this._opts?.show3D;
-  }
-
-  async _ensureWebGL() {
-    if (this._glFailed) return null;
-    if (this._gl) return this._gl;
-    if (this._glLoading) return null;           // Import laeuft noch
-    this._glLoading = true;
-    try {
-      // Version an die URL haengen, damit ein frueher gecachter 404 oder
-      // eine alte Fassung den Import nicht dauerhaft blockiert.
-      const mod = await import("/local/ble_positioning/three-scene.js?v=" + CARD_VERSION);
-      const cv = this.shadowRoot.getElementById("gl");
-      const sc = new mod.ThreeScene(cv, {
-        envPreset: this._opts?.env_preset || "studio",
-        envUrl: this._opts?.env_url || null,
-      });
-      if (!sc.ok) throw sc.error || new Error("WebGL nicht verfuegbar");
-      sc.onContextLost(() => {
-        // Kontextverlust ist in WebViews normal. Nicht endlos neu versuchen:
-        // einmal zurueck auf 2D, der Nutzer kann bewusst neu laden.
-        this._glFailed = true;
-        this._showToast("3D-Beschleunigung verloren, zurueck auf Standard");
-        this._syncGlVisibility();
-        this._markDirty();
-      });
-      this._gl = sc;
-      this._glDataKey = null;
-      this._ensureGlVisibilityHook();
-      // Himmelskuppel: Preetham-Shader, mit Verlaufskuppel als Rueckfall
-      // Nach dem Laden direkt zeichnen, nicht nur ein Flag setzen:
-      // _markDirty wirkt erst im naechsten Frame, und
-      // requestAnimationFrame pausiert in Hintergrund-Tabs. Die Szene
-      // bliebe sonst unfertig, bis der Tab wieder sichtbar wird.
-      const kick = () => { try { this._draw(); } catch (e) { /* egal */ } };
-      if (this._opts?.sky_dome !== false) {
-        sc.initSky(this._opts?.sky_mode || "sky").then(kick);
-      }
-      if (this._opts?.post_fx !== false) {
-        sc.initPostProcessing().then(kick);
-      }
-      kick();
-      return sc;
-    } catch (err) {
-      this._glFailed = true;
-      // Sichtbar machen: der Rueckfall auf Canvas sieht fast normal aus,
-      // ein stiller Fehlschlag wird sonst als "WebGL sieht halt so aus"
-      // missverstanden. Genau das ist mit einer fehlenden Moebel-Datei
-      // passiert – 404 beim Modul-Import, kein Hinweis in der Oberflaeche.
-      console.warn("BLE Positioning: WebGL nicht nutzbar, nutze Canvas-Renderer", err);
-      this._showToast("WebGL konnte nicht starten \u2013 Standard-3D aktiv");
-      return null;
-    } finally {
-      this._glLoading = false;
-    }
-  }
-
-  /* Temperatur als DOM-Element statt auf ein Canvas: mit Himmelskuppel
-     liegt kein Canvas mehr hinter der Szene, und vor die Szene gemalt
-     wuerde sie mit dem Gebaeude kollidieren. */
-  _syncWeatherBadge(on) {
-    const wrap = this.shadowRoot?.getElementById("cwrap");
-    if (!wrap) return;
-    let el = this.shadowRoot.getElementById("wxbadge");
-    const w = on ? this._weatherState() : null;
-    if (!w || w.temp == null || !isFinite(w.temp)) { if (el) el.remove(); return; }
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "wxbadge";
-      el.style.cssText = "position:absolute;left:14px;top:14px;z-index:5;" +
-        "padding:5px 10px;border-radius:8px;font:600 13px system-ui,sans-serif;" +
-        "pointer-events:none;backdrop-filter:blur(3px)";
-      wrap.appendChild(el);
-    }
-    const night = this._isDark();
-    el.style.background = night ? "rgba(13,20,38,0.55)" : "rgba(35,48,69,0.45)";
-    el.style.color = night ? "#dfe6ff" : "#f2f6ff";
-    el.textContent = Math.round(w.temp) + (w.unit || "\u00b0C");
-  }
-
-  /* Kehrt der Tab aus dem Hintergrund zurueck, sofort neu zeichnen.
-     Waehrend er verborgen war, stand die Render-Schleife still und die
-     Szene kann unvollstaendig sein. */
-  _ensureGlVisibilityHook() {
-    if (this._glVisHook) return;
-    this._glVisHook = () => {
-      if (document.visibilityState !== "visible") return;
-      if (!this._gl?.ok) return;
-      this._glDataKey = null;      // Aufbau erzwingen
-      this._glDayKey = null;
-      try { this._draw(); } catch (e) { /* egal */ }
-    };
-    document.addEventListener("visibilitychange", this._glVisHook);
-  }
-
-  _syncGlVisibility() {
-    const cv = this.shadowRoot?.getElementById("gl");
-    const c2 = this.shadowRoot?.getElementById("c");
-    if (!cv || !c2) return;
-    const on = this._webglWanted() && this._gl && !this._glFailed;
-    cv.style.display = on ? "block" : "none";
-    const wx = this.shadowRoot?.getElementById("wx");
-    const useDome = on && this._gl?.dome;
-    if (wx) wx.style.display = (on && !useDome) ? "block" : "none";
-    this._syncWeatherBadge(on && !!this._opts?.show_weather);
-    // Das 2D-Canvas bleibt sichtbar und liegt oben: es traegt die Overlays
-    // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
-    // Drehen, Zoomen und der Editor verloren.
-    c2.style.position = on ? "relative" : "";
-    c2.style.zIndex = on ? "3" : "";
-    if (c2.style.visibility === "hidden") c2.style.visibility = "";
-  }
-
-  /* Baut die Szene nur neu auf, wenn sich die Geometrie geaendert hat.
-     Kamera und Sonne sind billig und laufen jeden Frame. */
-  _drawWebGL() {
-    const sc = this._gl;
-    if (!sc || !sc.ok) return false;
-    const rooms = this._data?.rooms || [];
-    const doors   = this._data?.doors   || [];
-    const windows = this._data?.windows || [];
-    const decos   = this._data?.decos   || [];
-    // Deko-Eintraege, fuer die es ein 3D-Moebel gibt. TV und Lautsprecher
-    // tragen ihren Entity-Zustand mit: ein laufender Fernseher soll
-    // leuchten, ein spielender Lautsprecher seinen Ring zeigen.
-    const furniture = decos.map(dc => {
-      const st = dc.entity ? this._hass?.states?.[dc.entity] : null;
-      const at = st?.attributes || {};
-      // Deko liegt in Kartenkoordinaten mx/my, nicht x/y – mit x/y wurde
-      // bisher alles herausgefiltert und nichts erschien.
-      return {
-        type: dc.type, x: dc.mx ?? dc.x, y: dc.my ?? dc.y, z: dc.mz ?? dc.z,
-        rotation: dc.rotation ?? dc.angle ?? 0,
-        scale: dc.size || 1,
-        width: dc.width, depth: dc.depth, height: dc.height,
-        color: dc.color, wallMounted: dc.wall_mounted,
-        state: st?.state,
-        level: at.volume_level,
-      };
-    }).filter(f => f.x != null && f.y != null);
-    // Der Schlüssel deckt nur Geometrie ab. Zustände von Türen, Fenstern
-    // und Lampen ändern sich ständig und dürfen keinen Neuaufbau auslösen.
-    const key = JSON.stringify([
-      rooms.map(r => [r.x1, r.y1, r.x2, r.y2, r.color]),
-      doors.map(o => [o.x, o.y, o.width, o.height,
-                      o.entity ? this._hass?.states?.[o.entity]?.state : o.state]),
-      windows.map(o => [o.x, o.y, o.width, o.height, o.sill]),
-      furniture.map(f => [f.type, f.x, f.y, f.rotation, f.state, f.level]),
-      this._data?.floor_w, this._data?.floor_h, this._wallHeight,
-    ]);
-    let att = this._hass?.states?.["sun.sun"]?.attributes || {};
-    if (this._wxTest) {
-      // Zur Nacht eine Sonne unter dem Horizont, sonst mittags hoch
-      att = { azimuth: this._wxTest.night ? 20 : 170,
-              elevation: this._wxTest.night ? -25 : 42 };
-    }
-    if (key !== this._glDataKey) {
-      sc.build({
-        rooms,
-        doors: doors.map(o => {
-          const st2 = o.entity ? this._hass?.states?.[o.entity]?.state : o.state;
-          // Offene Tueren lassen Tageslicht herein, geschlossene nicht
-          return { ...o, state: st2,
-                   open_amount: (st2 === "open" || st2 === "on") ? 1 : (o.open_amount ?? 0) };
-        }),
-        windows: windows.map(o => ({
-          ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
-        })),
-        floorW: this._data?.floor_w || 10,
-        floorH: this._data?.floor_h || 10,
-        wallHeight: this._wallHeight ?? 2.5,
-        wallDepth: 0.14,
-        furniture,
-        sunAzimuth: parseFloat(att.azimuth),
-        sunElevation: parseFloat(att.elevation),
-      });
-      this._glDataKey = key;
-      this._glLightKey = null;
-    }
-    sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
-
-    // ── Tageslicht nach Sonnenstand und Wetter ────────────────────────
-    // Nachts bleibt der Innenraum dunkel, damit eine Lampe ueberhaupt
-    // etwas bewirkt; bei Bewoelkung kommt weniger und weicheres Licht.
-    // Das Licht faellt durch Fenster und offene Tueren ein, deshalb
-    // bleibt ein Raum ohne Oeffnung von selbst dunkel.
-    const wSt = this._weatherState();
-    const lkeyDay = [this._isDark(), wSt?.condition, Math.round(parseFloat(att.elevation) || 0)].join("|");
-    if (lkeyDay !== this._glDayKey) {
-      sc.setDaylight({
-        elevation: parseFloat(att.elevation),
-        condition: wSt?.condition,
-        night: this._isDark(),
-      });
-      this._glDayKey = lkeyDay;
-
-      // Bloom und Nebel folgen der Wetterlage: nachts leuchten Lampen
-      // kraeftiger, tagsueber soll nichts ueberstrahlen.
-      const night2 = this._isDark();
-      const cond2 = String(wSt?.condition || "");
-      // Schwelle bleibt auch nachts hoch: bei 0.6 fing der beleuchtete
-      // Holzboden an zu gluehen und schluckte die Maserung.
-      // Bewusst schwach: Bloom soll Lampen und LEDs hervorheben, nicht
-      // Waende und Boeden weichzeichnen.
-      // Eng gezogen: nur wirklich helle Quellen sollen gluehen. Bei 0.85
-      // fing der beleuchtete Boden an mitzustrahlen.
-      // Sehr eng: unbeleuchtete helle Flaechen duerfen keinen Glow mehr
-      // ausloesen, nur echte Lichtquellen.
-      sc.setBloom(night2 ? 0.1 : 0.05, night2 ? 0.45 : 0.4, 0.95);
-      // Nebel deutlich zurueckgenommen. Er lag bei 0.008 bis 0.045 und
-      // legte sich als grauer Schleier ueber die ganze Szene – der
-      // Schwarzpunkt ging verloren. Nur noch dort, wo Nebel wirklich zur
-      // Wetterlage gehoert, und in der Farbe des Himmels, nie neutralgrau.
-      const fog =
-        night2                               ? [0x0a0e17, 0.0008] :
-        /fog/.test(cond2)                    ? [0xc9d2da, 0.016]  :
-        /pouring|storm|lightning/.test(cond2)? [0x5a6678, 0.012]  :
-        /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
-        /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
-                                               null;   // sonst gar keiner
-      // Hintergrund: die Kuppel traegt den Himmel, aber wo sie nicht
-      // hinreicht – ausserhalb ihres Radius, beim Rauszoomen – war es
-      // totes Schwarz. Ein passender Grundton dahinter verhindert das.
-      const bg =
-        night2                               ? 0x0d131d :
-        /fog/.test(cond2)                    ? 0xb9c2ca :
-        // Gewitter deutlich bedrohlicher als ein normaler Regentag
-        /pouring|storm|lightning/.test(cond2)? 0x1a1e29 :
-        /rain/.test(cond2)                   ? 0x5a636e :
-        /snow|sleet|hail/.test(cond2)        ? 0xc6d2de :
-        /cloudy/.test(cond2)                 ? 0x9fb0c0 :
-                                               0x87ceeb;
-      sc.setBackdrop(bg);
-      // Nebelfarbe exakt auf den Hintergrund ziehen, sonst zeichnet sich
-      // der Horizont als harte Kante ab statt weich auszulaufen.
-      // Nebelfarbe am HIMMEL ausrichten, nicht am Hintergrund. Mit dem
-      // dunklen Hintergrundton faerbte der Nebel jedes entfernte Objekt
-      // fast schwarz, waehrend der Himmel (fog:false) hell blieb – daher
-      // die pechschwarzen Silhouetten.
-      const fogCol =
-        night2                               ? 0x1a2334 :
-        /pouring|storm|lightning/.test(cond2)? 0x5a6678 :
-        /rain/.test(cond2)                   ? 0x6b7681 :
-        /snow|sleet|hail/.test(cond2)        ? 0xc3ced9 :
-                                               bg;
-      if (fog) sc.setFog(fogCol, fog[1]); else sc.setFog(0, 0);
-    }
-
-    // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
-    // Die gesamte 2D-Kulisse samt Wolken, Gestirn und Temperatur wird
-    // wiederverwendet: sie kann bereits in einen fremden Kontext zeichnen
-    // (iso-Modus, ohne Raeume auszustanzen). Das Gebaeude steht davor,
-    // weil der WebGL-Renderer transparent ist.
-    const wx = this.shadowRoot.getElementById("wx");
-    if (wx) {
-      const cw = this._canvasCssW || wx.clientWidth || 1;
-      const ch = this._canvasCssH || wx.clientHeight || 1;
-      const wdpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (wx.width !== Math.round(cw * wdpr) || wx.height !== Math.round(ch * wdpr)) {
-        wx.width = Math.round(cw * wdpr);
-        wx.height = Math.round(ch * wdpr);
-      }
-      const wctx = wx.getContext("2d");
-      wctx.setTransform(1, 0, 0, 1, 0, 0);
-      wctx.clearRect(0, 0, wx.width, wx.height);
-      if (sc.dome) {
-        const cond = this._weatherState()?.condition;
-        sc.setSkyWeather(cond);
-        // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
-        // Canvas dahinter vollstaendig verdecken.
-        sc.dome.setCenter(sc.center);
-        // Kuppel an die Szene koppeln: beim Rauszoomen wird sie als
-        // Kugel sichtbar, beim Hineinzoomen steht man darin.
-        sc.dome.setScale(sc.span);
-        sc.dome.setBody(this._moonPhase(), this._isDark(), sc.span);
-        // Wolken und Niederschlag als echte Objekte in der Szene, sonst
-        // waere Regen nur in 2D zu sehen.
-        sc.dome.setSceneWeather(cond, sc.span || 12);
-        sc.dome.setGround(sc.span || 12, this._isDark());
-        // Nachbarschaft: Strassen, Haeuser, Baeume. Deterministisch aus
-        // dem Grundriss, damit sie nicht bei jedem Neuaufbau umspringt.
-        sc.setNeighborhood(this._opts?.neighborhood !== false, cond,
-                           this._isDark(), this._opts?.hood_seed || 1337);
-        sc.dome.animate(Date.now() / 1000);
-      }
-      // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
-      // Wolken, Niederschlag und die Temperatur. Nur der Himmelsverlauf
-      // entfaellt, den liefert dann die Kuppel.
-      if (this._opts?.show_weather && this._weatherState() && !sc.dome) {
-        sc.setSky(null);                     // ohne Kuppel: Himmel von hier
-        wctx.save();
-        wctx.scale(wdpr, wdpr);
-        try {
-          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx });
-        } catch (e) {
-          if (!this._wxErr) { this._wxErr = true; console.warn("BLE Positioning: Wetter-Kulisse", e); }
-        }
-        wctx.restore();
-      } else if (!sc.dome) {
-        sc.setSky("#e9ecef");                // ohne Wetter ein neutraler Himmel
-      }
-    }
-
-    // Umgebung nur bei Aenderung neu erzeugen – der PMREM-Durchlauf ist
-    // zu teuer fuer jedes Bild, aber zu billig fuer einen Szenenneubau.
-    const ekey = (this._opts?.env_preset || "studio") + "|" + (this._opts?.env_url || "");
-    if (ekey !== this._glEnvKey) {
-      sc.setEnvironment(this._opts?.env_preset || "studio", this._opts?.env_url || null);
-      this._glEnvKey = ekey;
-    }
-
-    // Lampen getrennt aktualisieren: Farbe und Helligkeit wechseln oft,
-    // ein Neuaufbau der Szene dafür wäre Verschwendung.
-    const lamps = (this._data?.lights || []).map(l => {
-      const st = l.entity ? this._hass?.states?.[l.entity] : null;
-      const a  = st?.attributes || {};
-      // Auch Lichter liegen in mx/my/mz.
-      // Farbe: HA meldet je nach Lampe rgb_color, hs_color, xy_color,
-      // color_temp_kelvin oder color_temp in Mired. Nur zwei davon zu
-      // lesen heisst, dass die meisten Lampen immer gleich aussehen.
-      let rgb = a.rgb_color || l.rgb || null;
-      if (!rgb && Array.isArray(a.hs_color) && a.hs_color.length === 2) {
-        rgb = this._hsToRgb(a.hs_color[0], a.hs_color[1]);
-      }
-      let kelvin = a.color_temp_kelvin || null;
-      // color_temp ist in Mired: Kelvin = 1e6 / Mired
-      const mired = a.color_temp ?? l.color_temp;
-      if (!kelvin && mired) kelvin = Math.round(1e6 / mired);
-      return {
-        entity: l.entity, x: l.mx ?? l.x, y: l.my ?? l.y, z: l.mz ?? l.z,
-        on: st ? st.state === "on" : !!l.on,
-        brightness: a.brightness ?? (l.brightness ?? 255),
-        rgb, kelvin,
-      };
-    });
-    const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));
-    if (lkey !== this._glLightKey) { sc.updateLights(lamps); this._glLightKey = lkey; }
-
-    // Lampen anklickbar machen: Position auf dem Bildschirm merken.
-    // Ein Raycaster waere genauer, aber die Lampen sind kleine Kugeln –
-    // ein Radius um den projizierten Punkt trifft besser.
-    this._glLampHits = lamps.filter(l => l.x != null && l.y != null).map(l => {
-      const p = sc.projectToScreen(l.x, l.y, l.z ?? ((this._wallHeight ?? 2.5) - 0.35));
-      return { entity: l.entity, x: p.x, y: p.y, r: 16 };
-    });
-
-    // Personen wandern staendig – eigener, billiger Pfad ohne Neuaufbau.
-    // Quelle sind die getrackten Geraete aus _data.devices; mmWave liefert
-    // zusaetzlich eine Haltung, BLE allein nicht.
-    const people = (this._data?.devices || [])
-      .filter(dv => dv.x != null && dv.y != null && dv.present !== false)
-      .map((dv, i) => ({
-        id: dv.id || dv.mac || dv.name || ("dev" + i),
-        x: dv.x, y: dv.y, z: dv.z,
-        posture: dv.posture || dv.pose || "standing",
-        heading: dv.heading ?? dv.angle,
-        color: dv.color,
-      }));
-    sc.updatePeople(people);
-
-    // setView aktualisiert auch, was die Sicht verstellt – muss also nach
-    // dem Aufbau der Nachbarschaft laufen.
-    sc.setView(this._3dAzimuth ?? 45, this._3dElevation ?? 30, this._3dZoom ?? 1);
-    sc.render();
-
-    // ── Overlays auf dem 2D-Canvas darueber ────────────────────────────
-    // Musik-Bubbles inklusive Steuerleiste und Treffer-Zonen laufen
-    // unveraendert weiter; sie bekommen nur die Projektion der 3D-Kamera
-    // statt der eigenen. Neu bauen waere doppelte Arbeit.
-    const ctx2 = this._ctx;
-    if (ctx2 && this._canvas) {
-      ctx2.setTransform(1, 0, 0, 1, 0, 0);
-      ctx2.clearRect(0, 0, this._canvas.width, this._canvas.height);
-      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
-      // Treffer-Zonen werden in physischen Pixeln abgelegt, der Kontext
-      // rechnet hier in CSS-Pixeln – derselbe Faktor wie im Canvas-3D.
-      this._3dCtxScale = dpr;
-      ctx2.save();
-      ctx2.scale(dpr, dpr);
-      try {
-        const glProject = (x, y, z) => sc.projectToScreen(x, y, z);
-        if (this._opts?.show_music_bubble) {
-          this._drawMusicBubbles3D(glProject, sc.screenUnitPx());
-        }
-      } catch (e) {
-        if (!this._glOverlayErr) {
-          this._glOverlayErr = true;
-          console.warn("BLE Positioning: Overlay ueber WebGL fehlgeschlagen", e);
-        }
-      }
-      ctx2.restore();
-    }
-    return true;
-  }
-
-  /* Wrapper: sichert den Canvas-Transform-Stack ab. Fliegt beim Zeichnen
-     eine Ausnahme, wird das ctx.restore() am Ende nie erreicht – dann
-     stapelt sich pro Frame eine weitere Skalierung und das Bild zoomt
-     endlos nach oben links weg. Genau das ist in 5.0.0 passiert. */
   _draw3DScene(ctx, rooms, doors, windows, lights, devices) {
-    const depth = typeof ctx.getTransform === "function" ? ctx.getTransform() : null;
-    try {
-      return this._draw3DSceneInner(ctx, rooms, doors, windows, lights, devices);
-    } catch (err) {
-      if (!this._3dErrLogged) {
-        this._3dErrLogged = true;
-        console.error("BLE Positioning: Fehler in der 3D-Szene", err);
-      }
-      // Transform auf den Stand vor dem Aufruf zurücksetzen
-      if (depth) { ctx.setTransform(depth); }
-      else { ctx.setTransform(1, 0, 0, 1, 0, 0); }
-      return undefined;
-    }
-  }
-
-  _draw3DSceneInner(ctx, rooms, doors, windows, lights, devices) {
     if (!ctx || !rooms) return;
     // Texturen laden/aktualisieren
     this._loadTextures();
@@ -20278,16 +19638,7 @@ trigger:
     // Canvas-Kontext auf CSS-Pixel skalieren (HiDPI/Retina Fix)
     // Alle Koordinaten arbeiten dann in CSS-Pixel, Canvas-Auflösung ist dpr-fach höher
     ctx.save();
-    // Nicht blind mit dpr skalieren: adaptive_resolution setzt die Canvas
-    // auf cssW * dpr * scale (Nacht 0.75, Screensaver 0.5). Mit fester
-    // dpr-Annahme wird dann alles um 1/scale zu gross gezeichnet und
-    // waechst nach oben links aus dem Bild. Der echte Faktor ergibt sich
-    // aus der Canvas selbst.
-    const effX = this._canvasCssW ? (this._canvas.width  / this._canvasCssW) : dpr;
-    const effY = this._canvasCssH ? (this._canvas.height / this._canvasCssH) : dpr;
-    ctx.scale(effX, effY);
-    // Fuer Treffer-Zonen: _canvasXY misst in physischen Canvas-Pixeln
-    this._3dCtxScale = effX;
+    ctx.scale(dpr, dpr);
     const cw  = this._canvasCssW || (this._canvas.width  / dpr);
     const ch  = this._canvasCssH || (this._canvas.height / dpr);
     const fw  = this._data?.floor_w || 10;
@@ -20301,30 +19652,11 @@ trigger:
     const az  = ((this._3dAzimuth  ?? 45) * Math.PI) / 180;
     const el  = ((this._3dElevation ?? 30) * Math.PI) / 180;
 
-    // World center und Maßstab richten sich nach den tatsächlich bebauten
-    // Räumen, nicht nach floor_w/floor_h. Ist das Grundstück deutlich
-    // größer als die Bebauung, schrumpft das Gebäude sonst auf einen
-    // Bruchteil der Fläche und wirkt detailarm.
-    let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-    (rooms || []).forEach(r => {
-      if (r.x1 == null || r.x2 == null) return;
-      bx1 = Math.min(bx1, r.x1, r.x2); bx2 = Math.max(bx2, r.x1, r.x2);
-      by1 = Math.min(by1, r.y1, r.y2); by2 = Math.max(by2, r.y1, r.y2);
-    });
-    let wcx = fw / 2, wcy = fh / 2, spanW = fw, spanH = fh;
-    if (isFinite(bx1) && bx2 > bx1 && by2 > by1) {
-      const pad = 0.6;                       // etwas Luft um die Bebauung
-      const rw = (bx2 - bx1) + pad * 2, rh = (by2 - by1) + pad * 2;
-      // Nur umschalten, wenn die Bebauung spürbar kleiner ist als das
-      // Grundstück – sonst bleibt das gewohnte Verhalten erhalten.
-      if (rw * rh < fw * fh * 0.72) {
-        wcx = (bx1 + bx2) / 2; wcy = (by1 + by2) / 2;
-        spanW = rw; spanH = rh;
-      }
-    }
+    // World center: middle of floor plan
+    const wcx = fw / 2, wcy = fh / 2;
 
     // Unit scale: fit floor into canvas – auf Hochformat (Portrait) mehr Breite nutzen
-    const diag   = Math.sqrt(spanW*spanW + spanH*spanH);
+    const diag   = Math.sqrt(fw*fw + fh*fh);
     const isPortrait = ch > cw * 1.2;
     const fitBase = isPortrait ? (cw * 0.92 * zoom) : (Math.min(cw, ch) * 0.82 * zoom);
     const unitPx = fitBase / diag;
@@ -20446,9 +19778,8 @@ trigger:
       ctx.stroke();
     }
 
-    // Floor grid – im Studio-Theme liegt eine glatte Platte statt Raster
+    // Floor grid
     const gridStep = TH.grid.step || 1;
-    if (!TH.hideGrid) {
     ctx.strokeStyle = TH.grid.color;
     ctx.lineWidth   = TH.grid.width || 0.5;
     for (let x = 0; x <= fw; x += gridStep) {
@@ -20458,7 +19789,6 @@ trigger:
     for (let y = 0; y <= fh; y += gridStep) {
       const a = project(0, y, 0), b = project(fw, y, 0);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-    }
     }
     // Sekundäres Grid (Neon-Theme bei 0.5-Schritt)
     if (TH.grid.secondary) {
@@ -20562,20 +19892,12 @@ trigger:
       // Floor – mit Textur oder Theme-Farbe
       const floorPat = this._texPattern(ctx, "floor", unitPx * 0.5);
       if (floorPat) {
-        const poly = () => { ctx.beginPath();
-          f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); };
         ctx.save();
-        // Grundton des Themes zuerst: sonst bestimmt allein die Raumfarbe,
-        // wie hell der Boden wirkt, und zwei Raeume bekommen sichtbar
-        // verschiedene Boeden statt eines durchgehenden Belags.
-        if (TH.floorBase) { ctx.fillStyle = TH.floor(rr,gg,bb,wallAlpha); poly(); ctx.fill(); }
         ctx.fillStyle = floorPat;
-        ctx.globalAlpha = TH.floorBase ? 0.5 : 0.82;
-        poly(); ctx.fill();
-        ctx.globalAlpha = 1;
-        // Raumfarbe nur noch als Hauch, Staerke kommt aus dem Theme
-        const tint = TH.floorTint != null ? TH.floorTint : 0.18;
-        if (tint > 0) { ctx.fillStyle = `rgba(${rr},${gg},${bb},${tint})`; poly(); ctx.fill(); }
+        ctx.globalAlpha = 0.82;
+        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = `rgba(${rr},${gg},${bb},0.18)`;
+        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
         ctx.restore();
       } else {
         // Realistischer Boden: Canvas-generierte Parkett/Fliesen-Textur
@@ -20630,19 +19952,6 @@ trigger:
           const [wr,wg,wb] = [Math.round(rr*brightness), Math.round(gg*brightness), Math.round(bb*brightness)];
           const wallPts = [f[w.bi[0]], f[w.bi[1]], t[w.ti[1]], t[w.ti[0]]];
 
-          // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
-          const wallMidX = ((w.nx === 0)
-            ? (x1+x2)/2
-            : (w.nx > 0 ? x2 : x1)) + w.nx * 0.05;
-          const wallMidY = ((w.ny === 0)
-            ? (y1+y2)/2
-            : (w.ny > 0 ? y2 : y1)) + w.ny * 0.05;
-          const isOuterWall = !rooms.some(rr2 =>
-            rr2 !== room &&
-            wallMidX >= rr2.x1 - 0.1 && wallMidX <= rr2.x2 + 0.1 &&
-            wallMidY >= rr2.y1 - 0.1 && wallMidY <= rr2.y2 + 0.1
-          );
-
           // ── Wandvolumen: Krone und Außenseite (Studio-Theme) ──────────
           // Ohne Dicke wirken Wände wie Pappe. Die Oberseite ist der
           // Effekt, der ein Rendering wie ein gebautes Modell aussehen
@@ -20668,6 +19977,19 @@ trigger:
             ctx.strokeStyle = TH.edge(rr,gg,bb); ctx.lineWidth = 0.7;
             ctx.stroke();
           }
+
+          // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
+          const wallMidX = ((w.nx === 0)
+            ? (x1+x2)/2
+            : (w.nx > 0 ? x2 : x1)) + w.nx * 0.05;
+          const wallMidY = ((w.ny === 0)
+            ? (y1+y2)/2
+            : (w.ny > 0 ? y2 : y1)) + w.ny * 0.05;
+          const isOuterWall = !rooms.some(rr2 =>
+            rr2 !== room &&
+            wallMidX >= rr2.x1 - 0.1 && wallMidX <= rr2.x2 + 0.1 &&
+            wallMidY >= rr2.y1 - 0.1 && wallMidY <= rr2.y2 + 0.1
+          );
 
           const texKey = isOuterWall ? "wall_outer" : "wall_inner";
           const wallPat = this._texPattern(ctx, texKey, unitPx * 0.4);
