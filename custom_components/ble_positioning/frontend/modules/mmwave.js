@@ -2953,20 +2953,13 @@ const MmwaveModul = {
             : project(fx, fy, 1.75);
         const headP = labelRefP; // für Name-Label unten
 
-        // Schulter-Referenzpunkt je nach Haltung (für Bewegungspfeil)
-        const shoulderRefP = posture3d === "lying"
-          ? project(fx - 0.35, fy, 0.35)
-          : posture3d === "sitting"
-            ? project(fx, fy, 0.85)
-            : project(fx, fy, 1.05);
-
         // Bewegungspfeil
         if (target.moving && Math.abs(target.speed) > 0.05) {
           const ang3 = (target.angle || 0) * Math.PI/180 + (sensor.rotation||0)*Math.PI/180 - Math.PI/2;
           const spd3 = Math.min(Math.abs(target.speed) * 0.5, 1.5);
           const ap3  = project(fx + Math.cos(ang3)*spd3, fy + Math.sin(ang3)*spd3, 1.0);
           ctx.strokeStyle = col3d; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(shoulderRefP.x, shoulderRefP.y); ctx.lineTo(ap3.x, ap3.y); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(shouldP.x, shouldP.y); ctx.lineTo(ap3.x, ap3.y); ctx.stroke();
           const ab3 = ang3 + Math.PI;
           ctx.fillStyle = col3d;
           ctx.beginPath();

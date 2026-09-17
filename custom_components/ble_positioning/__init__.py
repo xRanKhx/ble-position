@@ -254,35 +254,6 @@ def _copy_js_files(hass: HomeAssistant) -> None:
         except Exception as exc:
             _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", filename, exc)
 
-    # Alle three-*.js per Muster, nicht einzeln aufgezaehlt: three-scene.js
-    # importiert three-furniture.js, und eine vergessene Datei laesst den
-    # gesamten Modul-Import fehlschlagen (404) – ohne sichtbaren Fehler,
-    # weil dann stillschweigend der Canvas-Renderer uebernimmt.
-    for tf in sorted(_FRONTEND_DIR.glob("three-*.js")):
-        try:
-            shutil.copy2(str(tf), os.path.join(www_dir, tf.name))
-            _LOGGER.info("BLE Positioning: %s kopiert", tf.name)
-        except Exception as exc:
-            _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", tf.name, exc)
-
-    # vendor/ (Three.js) – bewusst mitgeliefert statt per CDN: eine
-    # HA-Instanz laeuft haeufig ohne Internetzugang.
-    vendor_src = _FRONTEND_DIR / "vendor"
-    vendor_dst = os.path.join(www_dir, "vendor")
-    if vendor_src.is_dir():
-        os.makedirs(vendor_dst, exist_ok=True)
-        # rglob statt glob: vendor/pp/ enthaelt die Post-Processing-Module.
-        # Eine einzige fehlende Datei laesst den ganzen Import scheitern.
-        for vf in vendor_src.rglob("*.js"):
-            try:
-                rel = vf.relative_to(vendor_src)
-                dst = os.path.join(vendor_dst, *rel.parts)
-                os.makedirs(os.path.dirname(dst), exist_ok=True)
-                shutil.copy2(str(vf), dst)
-                _LOGGER.info("BLE Positioning: vendor/%s kopiert", rel.as_posix())
-            except Exception as exc:
-                _LOGGER.warning("BLE Positioning: Konnte vendor/%s nicht kopieren: %s", vf.name, exc)
-
     # Module-Unterordner automatisch anlegen und befüllen
     modules_src = _FRONTEND_DIR / "modules"
     modules_dst = os.path.join(www_dir, "modules")
@@ -757,8 +728,10 @@ class BLEUpdateDekoView(_Base):
         if not self._check(entry_id): return self.json_message("Not found", 404)
         try: d = await request.json()
         except Exception: return self.json_message("Invalid body", 400)
-        await self._c.async_update_decos(d.get("decos", []))
+        self._c.decos = d.get("decos", [])
+        await self._c.async_save_floor_store()
         return self.json({"status": "ok"})
+
 
 class BLEUpdateEnergyView(_Base):
     url  = "/api/ble_positioning/{entry_id}/energy"

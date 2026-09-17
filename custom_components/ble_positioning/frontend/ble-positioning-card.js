@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.12.3";
+const CARD_VERSION = "4.5.8";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -709,25 +709,7 @@ const BLEModuleRegistry = {
     );
   },
 
-  /* Bekannte UND geladene IDs. Vorher nur die geladenen – daraus wurde
-     ein Henne-Ei-Problem: die Sidebar fragt hier, welche Module es gibt,
-     ein Modul wird aber erst geladen, wenn es jemand anfordert. Ein noch
-     nicht geladenes Modul tauchte deshalb nie auf. */
-  get ids() {
-    const known = this._knownIds ? [...this._knownIds] : [];
-    return [...new Set([...known, ...Object.keys(this._modules)])];
-  },
-  /** Nur die tatsaechlich geladenen – fuer alles, was das Objekt braucht. */
-  get loadedIds() { return Object.keys(this._modules); },
-
-  /* Alle bekannten Module im Hintergrund holen. Ohne das bleibt ein
-     Reiter leer, bis ihn jemand oeffnet – und wenn er in der Liste
-     fehlt, passiert das nie. */
-  async preloadKnown() {
-    const known = this._knownIds ? [...this._knownIds] : [];
-    await Promise.allSettled(known.map(id => this.load(id).catch(() => null)));
-    return Object.keys(this._modules);
-  },
+  get ids() { return Object.keys(this._modules); },
 };
 
 
@@ -915,7 +897,6 @@ class BLEPositioningCard extends HTMLElement {
     } else {
       // Update live entity values in sidebar
       this._updateSidebarLive();
-      this._updateWeatherStatus();
       if (!this._scannerHistory) this._scannerHistory = {};
     const _sh_now = Date.now();
     (this._data?.scanners||[]).forEach(s => {
@@ -1222,8 +1203,6 @@ class BLEPositioningCard extends HTMLElement {
     <div class="canvas-wrap" id="cwrap">
       <button class="sidebar-toggle" id="sidebar-toggle" title="Seitenleiste ein/ausblenden">‹</button>
       <canvas id="c"></canvas>
-      <canvas id="wx" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;"></canvas>
-      <canvas id="gl" style="display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;"></canvas>
       <div class="mode-hint" id="hint"></div>
       <div class="toast" id="toast"></div>
       <div class="card-version-badge" id="vbadge">v${CARD_VERSION}</div>
@@ -3830,12 +3809,6 @@ class BLEPositioningCard extends HTMLElement {
     // Canvas-Größe für _draw3DScene merken (CSS-Pixel)
     this._canvasCssW = cssW;
     this._canvasCssH = cssH;
-    // _applyCanvasScale ueberspringt gleiche Werte. Nach einem Resize ist
-    // die Canvas wieder auf voller Aufloesung, der Cache wuerde sonst eine
-    // Skalierung melden, die gar nicht mehr anliegt.
-    this._currentCanvasScale = 1;
-    // Der WebGL-Renderer hat ein eigenes Canvas und braucht die Groesse selbst
-    if (this._gl && this._gl.ok) { try { this._gl.resize(); } catch (e) {} }
   }
 
   _attachCanvasEvents() {
@@ -3954,28 +3927,6 @@ class BLEPositioningCard extends HTMLElement {
     if (!d) return { x: 0, y: 0 };
     const { scale, ox, oy } = this._floorScale();
     return { x: ox + mx * scale, y: oy + my * scale };
-  }
-
-  // ── Zoom-bewusste Skalierung ────────────────────────────────────────────
-  // _floorScale() liefert den UNGEZOOMTEN Maßstab. Wer damit Größen rechnet,
-  // muss den Zoom selbst dazunehmen – sonst bleiben Flächen, Texturen und
-  // Deko stehen, während die über _f2c() gezeichneten Räume mitwachsen.
-  _zoomFactor() {
-    return this._opts?.zoomPan ? (this._zoom || 1) : 1;
-  }
-
-  // px pro Meter inklusive Zoom – die richtige Basis für alle Größen in 2D.
-  _zoomScale() {
-    return this._floorScale().scale * this._zoomFactor();
-  }
-
-  // Grundriss-Rechteck in Canvas-Pixeln, inklusive Zoom und Pan.
-  _floorRectC() {
-    const fw = this._data?.floor_w || 10;
-    const fh = this._data?.floor_h || 10;
-    const a = this._f2c(0, 0);
-    const b = this._f2c(fw, fh);
-    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
   }
 
   _c2f(cx, cy) {
@@ -4140,54 +4091,6 @@ class BLEPositioningCard extends HTMLElement {
   // ── Canvas events ────────────────────────────────────────────────────────
 
   async _onCanvasClick(e) {
-    // ── Musik-Bubble: Leiste öffnen bzw. Transport steuern ──────────────────
-    // Steht bewusst ganz vorn: im 3D-Modus verlässt dieser Handler die
-    // Methode weiter unten mit return, dort käme die Prüfung nie an.
-    // _canvasXY liefert physische Canvas-Pixel, genau wie die gemerkten
-    // Zonen – hier darf nicht nochmal mit dpr multipliziert werden.
-    // ── Lampen in der WebGL-Szene schalten ─────────────────────────────────
-    if (this._gl?.ok && this._glLampHits?.length && !this._musicDidDrag) {
-      const { cx: lx, cy: ly } = this._canvasXY(e);
-      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
-      for (const h of this._glLampHits) {
-        if (!h.entity) continue;
-        if (Math.hypot(lx / dpr - h.x, ly / dpr - h.y) <= h.r) {
-          try {
-            await this._hass.callService("light", "toggle", { entity_id: h.entity });
-          } catch (e2) { this._showToast("Lampe schalten fehlgeschlagen"); }
-          this._markDirty();
-          return;
-        }
-      }
-    }
-
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
-      // Ein Verschieben endet nicht als Klick
-      if (this._musicDidDrag) { this._musicDidDrag = false; return; }
-      const { cx: mcx, cy: mcy } = this._canvasXY(e);
-      const hit = this._musicClickZonesFrame.find(z =>
-        mcx >= z.x && mcx <= z.x + z.w && mcy >= z.y && mcy <= z.y + z.h);
-      if (hit && hit.kind === "ctl") {
-        const svc = { play: "media_play_pause", next: "media_next_track",
-                      prev: "media_previous_track" }[hit.act];
-        this._musicCtlHot = hit.entity + ":" + hit.act;
-        setTimeout(() => { this._musicCtlHot = null; this._markDirty(); }, 180);
-        try {
-          await this._hass.callService("media_player", svc, { entity_id: hit.entity });
-        } catch (e2) {
-          this._showToast("Steuerung fehlgeschlagen");
-        }
-        this._markDirty();
-        return;
-      }
-      if (hit && hit.kind === "bubble") {
-        this._musicCtlOpen = this._musicCtlOpen === hit.entity ? null : hit.entity;
-        this._markDirty();
-        return;
-      }
-      if (this._musicCtlOpen) { this._musicCtlOpen = null; this._markDirty(); }
-    }
-
     // ── 3D: Reset-Button prüfen ─────────────────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       if (this._3dResetBtn) {
@@ -4393,6 +4296,18 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
+    // ── Musik-Bubble: Play/Pause per Klick ──────────────────────
+    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
+      const {cx:mcx,cy:mcy} = this._canvasXY(e);
+      const dpr = window.devicePixelRatio||1;
+      for (const z of this._musicClickZonesFrame) {
+        if (mcx>=z.x*dpr && mcx<=(z.x+z.w)*dpr && mcy>=z.y*dpr && mcy<=(z.y+z.h)*dpr) {
+          try { await this._hass.callService("media_player","media_play_pause",{entity_id:z.entity}); this._showToast("\u23ef Play/Pause"); } catch(e2){}
+          return;
+        }
+      }
+    }
+
     // ── Aktives Modul: Tap delegieren (generisch für alle Module) ────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -4455,39 +4370,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasDown(e) {
-    // ── Musik-Bubble: Ziehen, auch in 3D ──────────────────────────────────
-    // Muss vor dem Orbit-Drag stehen, sonst verschluckt der die Geste.
-    // Bei Treffer wird abgebrochen, damit sich die Szene nicht mitdreht.
-    const _m3d = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
-    this._musicDidDrag = false;
-    // Touch liefert kein button-Feld (_touchToMouse setzt es nicht),
-    // ein Vergleich auf 0 schlägt in der Companion App immer fehl.
-    const _primary = e.button === 0 || e.button == null;
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
-        && _primary) {
-      const { cx: dcx, cy: dcy } = this._canvasXY(e);
-      const z = this._musicClickZonesFrame.find(q =>
-        dcx >= q.x && dcx <= q.x + q.w && dcy >= q.y && dcy <= q.y + q.h);
-      if (z) {
-        const cur = this._musicOffset(z.entity);
-        this._musicPress = {
-          entity: z.entity, sx: dcx, sy: dcy,
-          ox: cur.dx, oy: cur.dy,
-          timer: setTimeout(() => {
-            if (!this._musicPress) return;
-            this._musicDrag = { ...this._musicPress };
-            this._musicDidDrag = true;
-            this._canvas.style.cursor = "grabbing";
-            this._markDirty();
-          }, 420),
-        };
-        // In 3D hier aussteigen: sonst startet gleichzeitig der Orbit-Drag.
-        // Der anschließende click öffnet die Leiste weiterhin.
-        if (_m3d) return;
-        // kein return in 2D: dort stört der restliche Handler nicht
-      }
-    }
-
     // ── 3D mode: intercept for orbit drag ──────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       this._3dDrag = { x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
@@ -4695,32 +4577,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasMove(e) {
-    // ── Musik-Bubble wird verschoben ────────────────────────────────────
-    if (this._musicDrag) {
-      const { cx: mx, cy: my } = this._canvasXY(e);
-      const _ddpr = window.devicePixelRatio || 1;
-      this._setMusicOffset(this._musicDrag.entity,
-        this._musicDrag.ox + (mx - this._musicDrag.sx) / _ddpr,
-        this._musicDrag.oy + (my - this._musicDrag.sy) / _ddpr);
-      this._musicDidDrag = true;
-      this._markDirty();
-      return;
-    }
-    // Solange gedrückt: eine deutliche Bewegung startet das Ziehen sofort.
-    // Vorher brach sie es ab – bei dpr 2 reichten 3 CSS-Pixel Wackeln.
-    if (this._musicPress) {
-      const { cx: mx, cy: my } = this._canvasXY(e);
-      const dpr = window.devicePixelRatio || 1;
-      if (Math.hypot(mx - this._musicPress.sx, my - this._musicPress.sy) > 5 * dpr) {
-        clearTimeout(this._musicPress.timer);
-        this._musicDrag = { ...this._musicPress };
-        this._musicPress = null;
-        this._musicDidDrag = true;
-        this._canvas.style.cursor = "grabbing";
-        this._markDirty();
-      }
-    }
-
     // ── Aktives Modul: Drag/Resize bewegen (generisch) ───────────────────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -5040,17 +4896,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasUp(e) {
-    // ── Musik-Bubble: Halten bzw. Ziehen beenden ────────────────────────
-    if (this._musicPress) { clearTimeout(this._musicPress.timer); this._musicPress = null; }
-    if (this._musicDrag) {
-      this._musicDrag = null;
-      this._canvas.style.cursor = "default";
-      this._markDirty();
-      // _musicDidDrag bleibt gesetzt, damit der folgende click nicht
-      // als Tippen gewertet wird; _onCanvasClick setzt es zurück.
-      return;
-    }
-
     // ── Aktives Modul: Drag/Resize beenden (generisch) ──────────────────
     {
       const activeMod = Object.values(BLEModuleRegistry._modules).find(
@@ -5434,19 +5279,6 @@ class BLEPositioningCard extends HTMLElement {
     this._saveOptions();
   }
 
-  _errText(e) {
-    if (!e) return "Unbekannter Fehler";
-    if (typeof e === "string") return e;
-    const b = e.body;
-    if (typeof b === "string" && b) return b;
-    if (b && typeof b === "object" && b.message) return b.message;
-    if (e.message) return e.message;
-    if (e.error) return String(e.error);
-    const code = e.status_code || e.status;
-    if (code) return `HTTP ${code}`;
-    try { return JSON.stringify(e); } catch { return String(e); }
-  }
-
   _showToast(msg) {
     const t = this.shadowRoot.getElementById("toast");
     if (!t) return;
@@ -5483,10 +5315,14 @@ class BLEPositioningCard extends HTMLElement {
     // Abonniere HA state_changed Events für BLE-Positioning Entities
     this._hass.connection.subscribeEvents((event) => {
       const eid = event.data?.entity_id || "";
-      // Nur BLE-Positioning relevante Entities
-      // (Deko/Licht/Media werden bereits über den hass-Setter neu gezeichnet)
-      if (!eid.includes("ble_position") && !eid.includes("mmwave_sensor")) return;
-      // Position geändert → dirty markieren + sofort poll
+      // BLE-Positioning Entities + Deko-relevante Entities (Media Player, Lights, Switches, Covers)
+      // → Damit Canvas neu gezeichnet wird, wenn TV/Speaker/Lights den Status ändern
+      const isRelevant = eid.includes("ble_position") || eid.includes("mmwave_sensor") ||
+                        eid.includes("media_player") || eid.includes("light") || 
+                        eid.includes("switch") || eid.includes("cover") ||
+                        eid.includes("climate") || eid.includes("sensor");
+      if (!isRelevant) return;
+      // Status geändert → dirty markieren + sofort poll
       this._markDirty();
       // Sofort Daten holen (kein Warten auf nächsten Poll-Zyklus)
       this._pollPositions();
@@ -5544,7 +5380,7 @@ class BLEPositioningCard extends HTMLElement {
     let lastFrame = 0;
     this._dirty = true; // Erstes Frame immer zeichnen
     const loop = (ts) => {
-      const { fps, pollMs, scale } = this._getLoopParams();
+      const { fps, pollMs } = this._getLoopParams();
 
       // FPS-Drosselung: nur zeichnen wenn genug Zeit vergangen
       const minFrameMs = fps > 0 ? 1000 / fps : Infinity;
@@ -5553,26 +5389,11 @@ class BLEPositioningCard extends HTMLElement {
         const useDirty = this._opts?.dirty_render !== false;
         // Immer zeichnen wenn: Animationen aktiv, Screensaver, oder dirty
         const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
-        // Dieselbe Deko-Quelle wie die Zeichenroutinen verwenden. Vorher
-        // schaute das Gate nur in _data.decos: lagen die Decos in
-        // _pendingDecos, wurde die Bubble zwar gezeichnet, aber nie
-        // erneut – die Platte stand still.
-        const _animDecos = this._pendingDecos?.length
-          ? this._pendingDecos : (this._data?.decos || []);
-        // Regen und Wolken in der WebGL-Szene brauchen einen laufenden
-        // Loop, sonst steht der Niederschlag still.
-        const hasGlWeather = !!(this._gl?.dome && this._opts?.show_weather);
         const hasMusicAnim = this._opts?.show_music_bubble &&
-          _animDecos.some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
-            this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
-        const hasWeatherAnim = this._opts?.show_weather && this._opts?.weather_animate !== false
-          && !!this._weatherState();
-        const hasCoverAnim = this._opts?.cover_motion !== false &&
-          (this._data?.windows||[]).some(w => w.cover_entity &&
-            ["opening","closing"].includes(
-              String(this._hass?.states?.[w.cover_entity]?.state||"").toLowerCase()));
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasGlWeather
-            || hasElektroAnim || hasWeatherAnim || hasCoverAnim) {
+          (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
+            this._hass?.states?.[d.entity]?.state==="playing");
+        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasElektroAnim) {
           lastFrame = ts;
           this._dirty = false;
           // Canvas-Auflösung anpassen (optional)
@@ -8967,7 +8788,7 @@ draw();
         bri = (light.brightness ?? 255) / 255;
       }
       const lumFactor2D = this._lumensToGlowFactor(light.lumen, bri);
-      const _lScale = this._zoomScale();
+      const { scale: _lScale } = this._floorScale();
       const glowPx = lumFactor2D * _lScale;
       const alpha  = Math.min(0.55, 0.10 + lumFactor2D * 0.22);
       const pos    = this._f2c(light.mx, light.my);
@@ -9668,14 +9489,6 @@ draw();
 
   disconnectedCallback() {
     if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
-    // GPU-Speicher freigeben: Geometrien, Texturen und der WebGL-Kontext
-    // selbst werden sonst erst vom Garbage Collector eingesammelt, und die
-    // Zahl gleichzeitiger Kontexte im Browser ist begrenzt.
-    if (this._glVisHook) {
-      document.removeEventListener("visibilitychange", this._glVisHook);
-      this._glVisHook = null;
-    }
-    if (this._gl) { try { this._gl.dispose(); } catch (e) {} this._gl = null; this._glDataKey = null; }
     if (this._dekoAnimFrame) { 
       if (typeof this._dekoAnimFrame === 'number') cancelAnimationFrame(this._dekoAnimFrame);
       else clearTimeout(this._dekoAnimFrame);
@@ -9715,20 +9528,6 @@ draw();
   }
 
   connectedCallback() {
-    // Module erst hier vorladen, nicht auf Modulebene: sie greifen beim
-    // Initialisieren auf this._opts der Card zu, und die existiert dort
-    // noch nicht ("Cannot read properties of undefined"). Zusaetzlich
-    // verzoegert, damit die Optionen vom Server gesetzt sind.
-    if (!this._modPreloaded) {
-      this._modPreloaded = true;
-      setTimeout(() => {
-        try {
-          if (!this._opts) this._opts = this._opts || {};
-          BLEModuleRegistry.preloadKnown?.().catch(() => {});
-        } catch (e) { /* bei Bedarf wird trotzdem geladen */ }
-      }, 1200);
-    }
-
     // FIX: Page Visibility API – Animationen pausieren wenn Tab versteckt
     if (!this._visibilityHandler) {
       this._visibilityHandler = () => {
@@ -9945,16 +9744,6 @@ draw();
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
-      // ── WebGL-Renderer, falls das Theme ihn verlangt ──────────────────
-      // Schlaegt er fehl, laeuft der Canvas-Pfad unveraendert weiter.
-      if (this._webglWanted() && !this._glFailed) {
-        if (!this._gl) { this._ensureWebGL().then(() => this._markDirty()); }
-        this._syncGlVisibility();
-        if (this._gl && this._drawWebGL()) return;
-      } else if (this._gl || this._glFailed) {
-        this._syncGlVisibility();
-      }
-
       const _3dLights = this._mode === "lights"
         ? (this._pendingLights || []).map(l => ({...l, on: true, brightness: 200, rgb: null}))
         : (this._data?.lights || []);
@@ -10018,10 +9807,11 @@ draw();
     } else {
       ctx.fillStyle = "#07090d";
       ctx.fillRect(0, 0, W, H);
-      // Grundriss-Bereich leicht heller – zoom-/pan-fest über _floorRectC()
-      const _bgR = this._floorRectC();
+      // Grundriss-Bereich leicht heller
+      const {scale:_bg_sc,ox:_bg_ox,oy:_bg_oy}=this._floorScale();
+      const _fw3=this._data?.floor_w||10,_fh3=this._data?.floor_h||10;
       ctx.fillStyle = "#0d1219";
-      ctx.fillRect(_bgR.x, _bgR.y, _bgR.w, _bgR.h);
+      ctx.fillRect(_bg_ox, _bg_oy, _fw3*_bg_sc, _fh3*_bg_sc);
     }
 
     const mode = this._mode;
@@ -10029,12 +9819,12 @@ draw();
     const scanners = mode === "scanners" ? this._pendingScanners : (this._data.scanners || []);
 
     // unitPx2d für Textur-Skalierung: Pixel pro Meter im 2D-Canvas (gleichmäßig)
-    this._unitPx2d = this._zoomScale();
+    const { scale: _scale2d } = this._floorScale();
+    this._unitPx2d = _scale2d;
 
     this._checkNightMode();
     // Im Räume-Modus: Reißbrett als Hintergrund ZUERST
     if (mode === "rooms") this._drawGrid();
-    this._drawWeatherLayer(rooms);
     this._drawRooms(rooms);
     if (mode !== "rooms") this._drawGrid();
     this._drawScanners(scanners);
@@ -10585,9 +10375,6 @@ draw();
 
   _drawDaytimeSunIcon(ctx, W, H) {
     if (!this._opts?.showDayTime) return;
-    // Die Wetter-Kulisse bringt ihr eigenes Gestirn samt Temperatur mit –
-    // sonst stünden zwei Sonnen am Himmel.
-    if (this._opts?.show_weather && this._weatherState()) return;
     const dt   = this._getDaytimeConfig();
     if (!dt.isDay) return;
     // Sun position across top of canvas
@@ -11573,24 +11360,6 @@ draw();
             ctx.moveTo(-len/2, ly); ctx.lineTo(len/2, ly);
             ctx.stroke();
           }
-          // ── Fährt gerade? Wandernde Pfeile + pulsierende Kante ──────
-          const _mot = this._opts?.cover_motion !== false
-            ? this._coverMotion(w.cover_entity) : null;
-          if (_mot) {
-            const _acc = _mot.dir > 0 ? "#f59e0b" : "#38bdf8";
-            // Pfeile laufen quer über die Lamellen in Fahrtrichtung
-            this._drawMotionChevrons(ctx, 0, -shutterDepth, 0, 0, _mot.dir, _acc);
-            // Unterkante pulsiert mit
-            const _p = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
-            ctx.save();
-            ctx.strokeStyle = _acc;
-            ctx.globalAlpha = _p;
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.moveTo(-len/2, -shutterDepth); ctx.lineTo(len/2, -shutterDepth);
-            ctx.stroke();
-            ctx.restore();
-          }
           // Position label
           ctx.restore();
           ctx.font = "bold 8px 'JetBrains Mono',monospace";
@@ -12231,7 +12000,7 @@ _drawDoors() {
         { energy_lines: this._pendingEnergyLines, batteries: this._pendingBatteries });
       await this._loadData();
       this._showToast("✓ Energie gespeichert");
-    } catch(e) { this._showToast("✗ " + this._errText(e)); }
+    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
     this._rebuildSidebar();
   }
 
@@ -12527,7 +12296,7 @@ _drawDoors() {
         { decos: this._pendingDecos });
       if (this._data) this._data.decos = structuredClone(this._pendingDecos);
       this._showToast("✓ Deko gespeichert");
-    } catch(e) { this._showToast("✗ " + this._errText(e)); }
+    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
     this._rebuildSidebar();
   }
 
@@ -12574,16 +12343,6 @@ _drawDoors() {
         ctx._entityVal = null;
         ctx._entityWatt= null;
         ctx._entitySet = null;
-        // Lautstärke-Kranz für spielende Medien (hinter dem Symbol)
-        if (this._opts?.show_volume_ring !== false && deco.entity &&
-            (deco.type === "speaker" || deco.type === "tv")) {
-          const _ms = hassStates[deco.entity];
-          if (_ms && _ms.state === "playing") {
-            this._drawSpectrumRing(ctx, 0, 0, size * 0.62,
-              _ms.attributes?.volume_level, !!_ms.attributes?.is_volume_muted,
-              { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
-          }
-        }
         if (deco.entity && this._hass) {
           const st = hassStates[deco.entity];
           if (st) {
@@ -12669,8 +12428,7 @@ _drawDoors() {
           // Zusatzinfo je Typ
           if (deco.type==="tv"||deco.type==="speaker") {
             if (st.attributes?.media_title) rows.push({ text: (st.attributes.media_title||"").substring(0,12), color:"#94a3b8" });
-            if (st.attributes?.is_volume_muted) rows.push({ text:"\u{1F507} stumm", color:"#64748b" });
-            else if (st.attributes?.volume_level!=null) rows.push({ text:"\u{1F50A} "+(st.attributes.volume_level*100|0)+"%", color:"#38bdf8" });
+            if (st.attributes?.volume_level!=null) rows.push({ text:"🔊 "+(st.attributes.volume_level*100|0)+"%", color:"#445566" });
           }
           if (deco.type==="thermostat") {
             if (st.attributes?.temperature!=null) rows.push({ text:"🎯 "+st.attributes.temperature+"°", color:"#f59e0b" });
@@ -12723,7 +12481,6 @@ _drawDoors() {
       const picUrl = st.attributes?.entity_picture;
       const title  = st.attributes?.media_title  || "";
       const artist = st.attributes?.media_artist || "";
-      const duration = st.attributes?.media_duration || 0;
       if (!picUrl && !title) return;
 
       const size = deco.size || 1.0;
@@ -12739,25 +12496,11 @@ _drawDoors() {
       const floatZ = wallH + 0.3 + Math.sin(t) * 0.15;
       const bPos   = project(deco.mx + size * 0.4, deco.my - size * 0.3, floatZ);
 
-      const volume = st.attributes?.volume_level;
-      const muted  = !!st.attributes?.is_volume_muted;
-      const hasVol = volume != null || muted;
-      const vinyl    = this._opts?.media_vinyl !== false;
-      const vinylR   = 24;
-      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
-      const bw  = vinyl ? vinylBox + 16 : 72;
-      // In 3D wird kein Zeitbalken gezeichnet – daher keine Höhe dafür
-      const barH = 0;
-      // Steuerleiste und Lautstärke klappen gemeinsam auf
-      const ctlOpen = this._musicCtlOpen === deco.entity;
-      const ctlH    = ctlOpen ? 26 : 0;
-      const volH    = (hasVol && ctlOpen) ? 12 : 0;
-      const bh  = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
-      // Versatz aus dem Verschieben; in 3D rechnet der Kontext in CSS-Pixeln,
-      // dort gilt der gespeicherte Wert unverändert.
-      const off = this._musicOffset(deco.entity);
-      const bx = bPos.x - bw / 2 + off.dx;
-      const by = bPos.y - bh + off.dy;
+      const bw  = 72;
+      const barH = duration > 0 ? 14 : 0;
+      const bh  = (picUrl ? 82 : 38) + barH;
+      const bx = bPos.x - bw / 2;
+      const by = bPos.y - bh;
 
       ctx.save();
 
@@ -12807,7 +12550,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img && !vinyl) {
+        } else if (cached.img) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -12818,28 +12561,16 @@ _drawDoors() {
           coverY = by + 5 + cs + 4;
         }
       }
-      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
-      if (vinyl) {
-        const vcx = bx + bw / 2;
-        const vcy = by + 8 + vinylBox / 2;
-        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
-        if (this._opts?.show_volume_ring !== false) {
-          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
-        }
-        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
-        coverY = by + 8 + vinylBox + 2;
-      }
 
       // ── Titel + Artist ────────────────────────────────────────
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const txtW3 = bw - 8;
-      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW3);
+      ctx.fillText(title.length > 10 ? title.slice(0,10) + "\u2026" : title, bx + bw/2, coverY + 9);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW3);
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -12848,832 +12579,11 @@ _drawDoors() {
       ctx.font      = "10px serif";
       ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
 
-      // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol && ctlOpen) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
-                            volume, muted, "#38bdf8");
-      }
-
-      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
-      if (ctlOpen) {
-        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st, true);
-      }
-
-      // Trefferfläche merken. Zonen werden einheitlich in physischen
-      // Canvas-Pixeln gehalten, weil _canvasXY in dieser Einheit misst.
-      {
-        const zd = this._3dCtxScale || window.devicePixelRatio || 1;
-        (this._musicClickZones ||= []).push({
-          entity: deco.entity, kind: "bubble",
-          x: bx * zd, y: by * zd, w: bw * zd, h: bh * zd,
-        });
-      }
-
-      // ── Lautstärke-Kranz am Gerät ─────────────────────────────
-      if (this._opts?.show_volume_ring !== false) {
-        this._drawSpectrumRing(ctx, spTop.x, spTop.y, 7 * size, volume, muted,
-                               { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
-      }
-
       ctx.restore();
     });
-    // Zonen dieses Frames übernehmen – geschieht in 2D am Ende von
-    // _drawMusicBubbles, in 3D wurde es bisher gar nicht gemacht.
-    this._musicClickZonesFrame = [...(this._musicClickZones||[])];
-    this._musicClickZones = [];
   }
 
   // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
-
-  // ══════════════════════════════════════════════════════════════════════
-  // Portiert aus dem HA Floorplan Editor (Hovi).
-  // Hovi rendert in SVG mit <animate>; hier alles neu für Canvas 2D,
-  // zeitgesteuert über Date.now() statt deklarativer SMIL-Animation.
-  // ══════════════════════════════════════════════════════════════════════
-
-  /* Deterministischer Pseudo-Zufall – gleicher Index liefert immer denselben
-     Wert. Ersatz für Hovis pseudoRandom(); ohne das würden Tropfen und Sterne
-     bei jedem Frame neu gewürfelt und flackern. */
-  _fpRand(i, seed) {
-    const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
-    return x - Math.floor(x);
-  }
-
-  /* HA-Wetterzustand auf internen Effekt-Schlüssel abbilden (wie Hovi) */
-  _weatherFx(cond) {
-    return {
-      sunny: "sun", "clear-night": "night", partlycloudy: "clouds",
-      cloudy: "clouds", fog: "fog", rainy: "rain", pouring: "pour",
-      "snowy-rainy": "sleet", snowy: "snow", hail: "hail",
-      lightning: "storm", "lightning-rainy": "storm",
-      windy: "wind", "windy-variant": "wind", exceptional: "clouds"
-    }[cond] || "clouds";
-  }
-
-  _weatherState() {
-    // Testmodus: erlaubt das Durchschalten aller Wetterlagen, ohne auf
-    // echtes Wetter warten zu muessen. Nur zum Pruefen gedacht.
-    if (this._wxTest) {
-      return { condition: this._wxTest.condition,
-               temp: this._wxTest.temp ?? 12, unit: "\u00b0C" };
-    }
-    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
-    if (!eid) return null;
-    const st = this._hass?.states?.[eid];
-    if (!st) return null;
-    return {
-      condition: st.state,
-      temp: st.attributes?.temperature ?? null,
-      unit: st.attributes?.temperature_unit || "°C",
-    };
-  }
-
-  /* Mondphase als kontinuierlicher Wert 0..1
-     0 = Neumond, 0.25 = zunehmender Halbmond, 0.5 = Vollmond,
-     0.75 = abnehmender Halbmond.
-     Gerechnet wird astronomisch; existiert sensor.moon_phase und
-     widerspricht er der Rechnung, gewinnt der Sensor (grob, 8 Stufen). */
-  _moonPhase() {
-    const SYN = 29.530588853;                       // synodischer Monat
-    const REF = Date.UTC(2000, 0, 6, 18, 14, 0);    // bekannter Neumond
-    let p = (((Date.now() - REF) / 86400000) / SYN) % 1;
-    if (p < 0) p += 1;
-
-    const raw = this._hass?.states?.["sensor.moon_phase"]?.state;
-    if (!raw) return p;
-    const mid = {
-      new_moon: 0.0, waxing_crescent: 0.125, first_quarter: 0.25,
-      waxing_gibbous: 0.375, full_moon: 0.5, waning_gibbous: 0.625,
-      last_quarter: 0.75, waning_crescent: 0.875,
-    }[String(raw).toLowerCase().replace(/[\s-]/g, "_")];
-    if (mid == null) return p;
-    // Abweichung über eine halbe Stufe: dem Sensor folgen
-    let d = Math.abs(p - mid);
-    if (d > 0.5) d = 1 - d;
-    return d > 0.0625 ? mid : p;
-  }
-
-  /* Wetter-Kulisse. Wie bei Hovi nur außerhalb der Räume sichtbar – dort per
-     SVG <mask>, hier über eine evenodd-Clip-Region: Vollfläche minus Räume. */
-  /* Stand von Sonne bzw. Mond am Himmel, als Bahnpunkt.
-     u = 0 im Osten (links), 1 im Westen (rechts); h = 0 am Horizont,
-     1 im Zenit. Die Sonne kommt aus sun.sun, der Mond wird über seine
-     Phase zeitversetzt genähert: bei Neumond läuft er mit der Sonne,
-     bei Vollmond genau gegenläufig. HA liefert keinen Mond-Azimut. */
-  _skyArc(night) {
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-    const att   = this._hass?.states?.["sun.sun"]?.attributes || {};
-    const azim  = parseFloat(att.azimuth);
-    const elev  = parseFloat(att.elevation);
-
-    if (!night && isFinite(azim) && isFinite(elev)) {
-      // Echte Werte: Ost (60°) bis West (300°) auf die Breite abbilden
-      return {
-        u: clamp((azim - 60) / 240, 0.04, 0.96),
-        h: clamp(elev / 55, 0.02, 1),
-      };
-    }
-
-    const now = new Date();
-    const hh  = now.getHours() + now.getMinutes() / 60;
-    // Mond: um die Phase verschobene "Ortszeit"
-    const t   = night ? (hh - this._moonPhase() * 24) : hh;
-    let   tt  = ((t % 24) + 24) % 24;
-    const u   = (tt - 6) / 12;                 // 6h→0, 18h→1
-    return {
-      u: clamp(u, 0.04, 0.96),
-      h: clamp(Math.sin(clamp(u, 0, 1) * Math.PI), 0.02, 1),
-    };
-  }
-
-  _drawWeatherLayer(rooms, o) {
-    if (!this._opts?.show_weather) return;
-    const w = this._weatherState();
-    if (!w) return;
-    const ctx = o?.ctx || this._ctx;
-    // 2D: _f2c() und _floorScale() rechnen in PHYSISCHEN Canvas-Pixeln, der
-    // Kontext wird bewusst nicht mit dpr skaliert (siehe _draw). Mit
-    // CSS-Pixeln läge die Kulisse sonst nur im linken oberen Viertel.
-    // 3D (iso): _draw3DScene skaliert selbst mit dpr und übergibt CSS-Maße.
-    const iso = !!o?.iso;
-    const W = iso ? (o.w || 0) : (this._canvas?.width  || 0);
-    const H = iso ? (o.h || 0) : (this._canvas?.height || 0);
-    if (!W || !H) return;
-    // Deko-Größen mitskalieren, sonst wirkt auf Retina alles winzig
-    const k = this._canvasCssW ? (W / this._canvasCssW) : 1;
-    // 2D: Der Himmel füllt die Canvas, die Deko hängt dagegen am Grundriss –
-    // sonst bleiben Sonne, Wolken und Regen beim Zoomen/Pannen stehen,
-    // während die ausgestanzten Räume darunter wegwandern.
-    // 3D: Der Himmel ist schlicht Hintergrund, die Szene steht davor.
-    const fr = iso ? { x: 0, y: 0, w: W, h: H } : this._floorRectC();
-    const z  = iso ? 1 : (this._zoomFactor() || 1);
-    const DW = fr.w / z;   // Grundrissbreite in ungezoomten Canvas-Pixeln
-    const DH = fr.h / z;
-
-    const fx      = this._weatherFx(w.condition);
-    // Tageszeit NICHT aus dem Wetterzustand ableiten: "clear-night" ist der
-    // einzige Zustand, der Nacht verrät – bei bewölkter Nacht meldet HA
-    // "cloudy", und der Himmel wäre cremefarben. sun.sun ist die Wahrheit.
-    const night   = this._isDark();
-    const animate = this._opts?.weather_animate !== false;
-    const T       = Date.now() / 1000;
-
-    // Mit Himmelskuppel liefert diese den Verlauf. Dann werden hier nur
-    // noch Gestirn, Wolken, Niederschlag und die Temperatur gezeichnet –
-    // sonst laege ein zweiter, flacher Himmel davor.
-    const skipSky = !!o?.skipSky;
-
-    ctx.save();
-
-    // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert.
-    // Nur in 2D sinnvoll – in 3D liegen die Räume perspektivisch woanders
-    // und werden ohnehin nach dem Himmel über ihn gezeichnet.
-    if (!iso) {
-      ctx.beginPath();
-      ctx.rect(0, 0, W, H);
-      (rooms || []).forEach(r => {
-        if (r.x1 == null || r.x2 == null) return;
-        const a = this._f2c(r.x1, r.y1);
-        const b = this._f2c(r.x2, r.y2);
-        ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
-                 Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-      });
-      ctx.clip("evenodd");
-    }
-
-    // ── Himmel ────────────────────────────────────────────────────────
-    const skyDay = {
-      sun:   ["#cfe8ff", "#eaf5ff"], night: ["#2b3550", "#3d4a6b"],
-      clouds:["#dbe3ec", "#eef2f7"], fog:   ["#dfe3e8", "#f0f2f4"],
-      rain:  ["#c6d3e2", "#e3eaf2"], pour:  ["#b3c3d6", "#d6e0ec"],
-      snow:  ["#dde6f0", "#f2f6fb"], sleet: ["#d2dce8", "#eaf0f7"],
-      hail:  ["#c8d4e2", "#e6ecf4"], storm: ["#9fb0c6", "#cfd9e6"],
-      wind:  ["#d8e2ec", "#eef3f8"]
-    };
-    // Nachts bekommt jeder Zustand eine eigene dunkle Palette – sonst leuchtet
-    // z. B. bewölkte Nacht in hellem Grau.
-    const skyNight = {
-      sun:   ["#1b2440", "#2c3858"], night: ["#161e38", "#28324f"],
-      clouds:["#1d2742", "#2f3a58"], fog:   ["#222a40", "#333c54"],
-      rain:  ["#161f38", "#26304b"], pour:  ["#111930", "#1f2842"],
-      snow:  ["#212c48", "#33405f"], sleet: ["#1a2440", "#2b3554"],
-      hail:  ["#151e36", "#242e49"], storm: ["#0e1428", "#1b233c"],
-      wind:  ["#1c2540", "#2d3856"]
-    };
-    const sky = (night ? skyNight : skyDay)[fx]
-              || (night ? ["#1a2340", "#2b3454"] : ["#dde5ee", "#eff3f8"]);
-
-    if (!skipSky) {
-      const grad = ctx.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, sky[0]);
-      grad.addColorStop(1, sky[1]);
-      ctx.globalAlpha = night ? 0.55 : 0.5;
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, W, H);
-      ctx.globalAlpha = 1;
-    }
-
-    const tint = night ? "#c7d2ea" : "#7f93ad";
-
-    // Ab hier im Grundriss-Raum zeichnen (zoomt und pant mit)
-    ctx.save();
-    ctx.translate(fr.x, fr.y);
-    ctx.scale(z, z);
-
-    // ── Sonne / Mond mit Sternen ──────────────────────────────────────
-    // Nachts immer ein Gestirn zeigen, auch bei Wolken oder Regen –
-    // vorher blieb der Himmel bei "cloudy" leer.
-    if (fx === "sun" || fx === "night" || night) {
-      // Stand am Himmel statt fest in der Ecke: wandert im Tagesverlauf
-      // von links nach rechts am Gebäude vorbei.
-      const arc = this._skyArc(night);
-      const r   = (night ? 26 : 34) * k;       // Sonne deutlich größer
-      const mgn = r + 14 * k;                  // Rand, damit nichts anschneidet
-      const cx  = mgn + arc.u * Math.max(0, DW - mgn * 2);
-      // hoch am Himmel = weit oben; Bahn bleibt im oberen Drittel
-      const cy  = mgn + (1 - arc.h) * Math.max(0, DH * 0.34 - mgn * 0.5);
-      if (night) {
-        // Mond mit weichem Schein
-        const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
-        halo.addColorStop(0, "rgba(238,242,255,0.35)");
-        halo.addColorStop(1, "rgba(238,242,255,0)");
-        ctx.fillStyle = halo;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 3, 0, Math.PI * 2); ctx.fill();
-        // Sichel: Vollkreis, dann Terminator als Ellipsenbogen ausstanzen.
-        // Der Mond wird größer als vorher, damit die Temperatur Platz hat.
-        const ph     = this._moonPhase();
-        const waxing = ph < 0.5;               // zunehmend: helle Seite rechts
-        const term   = Math.cos(2 * Math.PI * ph);  // +1 Neumond … -1 Vollmond
-        ctx.save();
-        ctx.translate(cx, cy);
-        if (!waxing) ctx.scale(-1, 1);         // abnehmend: gespiegelt zeichnen
-        ctx.fillStyle = "#eef2ff";
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-        if (term > 0.995) {
-          // Neumond: nur ein schwacher Umriss bleibt übrig
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath(); ctx.arc(0, 0, r * 0.97, 0, Math.PI * 2); ctx.fill();
-        } else if (term < -0.995) {
-          // Vollmond: nichts ausstanzen
-        } else {
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath();
-          // dunkle Hälfte (links) …
-          ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, true);
-          // … zurück über den Terminator. Wölbung folgt dem Vorzeichen:
-          // Sichel wölbt in die helle Seite, Gibbous in die dunkle.
-          ctx.ellipse(0, 0, r * Math.abs(term), r, 0,
-                      Math.PI / 2, -Math.PI / 2, term > 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.restore();
-        // Sterne, langsam pulsierend
-        for (let s = 0; s < 18; s++) {
-          const sx = 20 + this._fpRand(s, 3) * (DW - 40);
-          const sy = 16 + this._fpRand(s, 4) * (DH * 0.45);
-          const per = 2 + this._fpRand(s, 5) * 3;
-          const ph  = this._fpRand(s, 6) * per;
-          const op  = animate
-            ? 0.2 + 0.7 * (0.5 + 0.5 * Math.sin(((T + ph) / per) * Math.PI * 2))
-            : 0.7;
-          ctx.globalAlpha = op;
-          ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(sx, sy, 1.2 * k, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      } else {
-        // Sonne mit warmem Schein und langsam rotierenden Strahlen
-        const halo = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 3.4);
-        halo.addColorStop(0, "rgba(255,210,94,0.40)");
-        halo.addColorStop(1, "rgba(255,210,94,0)");
-        ctx.fillStyle = halo;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 3.4, 0, Math.PI * 2); ctx.fill();
-
-        const rot = animate ? (T / 60) * Math.PI * 2 : 0;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(rot);
-        ctx.strokeStyle = "#ffc93c";
-        ctx.lineWidth = 2.4 * k;
-        ctx.lineCap = "round";
-        ctx.globalAlpha = 0.85;
-        for (let i = 0; i < 12; i++) {
-          const a = i * Math.PI / 6;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(a) * (r + 5 * k), Math.sin(a) * (r + 5 * k));
-          ctx.lineTo(Math.cos(a) * (r + 12 * k), Math.sin(a) * (r + 12 * k));
-          ctx.stroke();
-        }
-        ctx.restore();
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "#ffd25e";
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // ── Wolken ────────────────────────────────────────────────────────
-    if (["clouds","rain","pour","snow","sleet","hail","storm","wind"].includes(fx)) {
-      const count = fx === "clouds" ? 3 : 4;
-      ctx.globalAlpha = fx === "storm" ? 0.55 : 0.4;
-      ctx.fillStyle = tint;
-      for (let c = 0; c < count; c++) {
-        const cw  = (60 + this._fpRand(c, 1) * 70) * k;
-        const cy2 = 24 * k + this._fpRand(c, 2) * (DH * 0.3);
-        const dur = 50 + c * 17;
-        const base = this._fpRand(c, 7) * DW;
-        // Von links nach rechts driften und weich umbrechen
-        const prog = animate ? ((T + c * 13) % dur) / dur : 0.5;
-        const cx2  = base - DW * 0.3 + prog * (DW * 0.9 + cw);
-        const sc   = cw / 40;
-        ctx.save();
-        ctx.translate(cx2 - cw, cy2);
-        ctx.scale(sc, sc);
-        // Wolkenkontur (Hovis Pfad als Bezier-Kette)
-        ctx.beginPath();
-        ctx.moveTo(0, 18);
-        ctx.bezierCurveTo(-4.4, 18, -8, 14.4, -8, 10, );
-        ctx.bezierCurveTo(-8, 5.6, -4.4, 2, 0, 2);
-        ctx.bezierCurveTo(1.8, -4.4, 8.4, -8.4, 15, -6.6);
-        ctx.bezierCurveTo(18.6, -5.6, 21, -2.6, 21, -1);
-        ctx.bezierCurveTo(25.1, -1, 28.5, 2.4, 28.5, 6.5);
-        ctx.bezierCurveTo(28.5, 12.9, 26.4, 18, 22, 18);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Niederschlag ──────────────────────────────────────────────────
-    const drops = { rain: 46, pour: 90, snow: 44, sleet: 44, hail: 40, storm: 70 }[fx];
-    if (drops) {
-      const snowy = fx === "snow";
-      for (let d = 0; d < drops; d++) {
-        const x0  = this._fpRand(d, 8) * DW;
-        const dur = snowy ? 5 + this._fpRand(d, 9) * 4
-                          : (fx === "pour" ? 0.7 : 1.1) + this._fpRand(d, 9) * 0.5;
-        const ph   = this._fpRand(d, 10) * dur;
-        const prog = animate ? ((T + ph) % dur) / dur : this._fpRand(d, 10);
-        const dx   = (snowy ? 8 : -14) * prog;
-        const dy   = (DH + 20) * prog - 6;
-        // Schnee zusätzlich seitlich pendeln lassen
-        const sway = snowy && animate ? Math.sin((T + ph) * 1.4) * 4 : 0;
-        const x = x0 + dx + sway;
-        if (snowy || (fx === "sleet" && d % 2 === 0)) {
-          ctx.globalAlpha = 0.85;
-          ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(x, dy, 1.8 * k, 0, Math.PI * 2); ctx.fill();
-        } else if (fx === "hail") {
-          ctx.globalAlpha = 0.9;
-          ctx.fillStyle = "#eaf2ff";
-          ctx.strokeStyle = "#b9c9dd"; ctx.lineWidth = 0.6 * k;
-          ctx.beginPath(); ctx.arc(x, dy, 2 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        } else {
-          ctx.globalAlpha = 0.75;
-          ctx.strokeStyle = "#7fa6cc";
-          ctx.lineWidth = (fx === "pour" ? 1.6 : 1.2) * k;
-          ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(x, dy - 4 * k); ctx.lineTo(x - 2 * k, dy + 6 * k);
-          ctx.stroke();
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Nebelbänder ───────────────────────────────────────────────────
-    if (fx === "fog") {
-      for (let f = 0; f < 5; f++) {
-        const fy  = 30 + f * (DH / 6);
-        const bh  = (10 + this._fpRand(f, 11) * 12) * k;
-        const dur = 26 + f * 9;
-        const prog = animate ? ((T + f * 7) % dur) / dur : 0;
-        const bx = -DW + prog * DW;
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.roundRect(bx, fy, DW * 3, bh, 8 * k);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Windstriche ───────────────────────────────────────────────────
-    if (fx === "wind") {
-      ctx.strokeStyle = tint; ctx.lineWidth = 1.6 * k; ctx.lineCap = "round";
-      for (let i = 0; i < 14; i++) {
-        const wy  = 20 * k + this._fpRand(i, 12) * DH;
-        const len = (30 + this._fpRand(i, 13) * 60) * k;
-        const dur = 2.2 + this._fpRand(i, 14) * 2;
-        const ph  = this._fpRand(i, 15) * 3;
-        const prog = animate ? ((T + ph) % dur) / dur : 0.5;
-        const x = -len + prog * (DW + len * 2);
-        ctx.globalAlpha = 0.45;
-        ctx.beginPath(); ctx.moveTo(x - len, wy); ctx.lineTo(x, wy); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.restore();   // zurück in Canvas-Koordinaten
-
-    // ── Blitz ─────────────────────────────────────────────────────────
-    // erhellt bewusst die ganze Fläche, nicht nur den Grundriss
-    if (fx === "storm" && animate) {
-      const c = (T % 7) / 7;
-      // zwei kurze Schläge pro Zyklus
-      let flash = 0;
-      if (c > 0.20 && c < 0.26) flash = 0.75 * (1 - Math.abs(c - 0.23) / 0.03);
-      if (c > 0.34 && c < 0.38) flash = 0.50 * (1 - Math.abs(c - 0.36) / 0.02);
-      if (flash > 0) {
-        ctx.globalAlpha = flash;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, W, H);
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    ctx.restore();
-
-    // ── Temperatur links oben am Rand ─────────────────────────────────
-    // Nach dem restore, also außerhalb der Clip-Region: sonst würde sie
-    // verschwinden, sobald links oben ein Raum liegt.
-    if (w.temp != null && isFinite(w.temp)) {
-      const label = Math.round(w.temp) + (w.unit || "°C");
-      const px = 16 * k, py = 16 * k;
-      ctx.save();
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.font = "600 " + (17 * k).toFixed(1) + "px system-ui, sans-serif";
-      const tw = ctx.measureText(label).width;
-      const padX = 9 * k, padY = 6 * k, th = 17 * k;
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = night ? "#0d1426" : "#233045";
-      ctx.beginPath();
-      ctx.roundRect(px, py, tw + padX * 2, th + padY * 2, 8 * k);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = night ? "#dfe6ff" : "#f2f6ff";
-      ctx.fillText(label, px + padX, py + padY);
-      ctx.restore();
-    }
-  }
-  _drawVolumeBar(ctx, x, y, w, volume, muted, color) {
-    const v = muted ? 0 : Math.max(0, Math.min(1, volume ?? 0));
-    const barX = x + 13, barW = w - 13 - 24;
-    ctx.save();
-    ctx.font = "8px 'JetBrains Mono',monospace";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = muted ? "#64748b" : color;
-    ctx.fillText(muted ? "\u{1F507}" : "\u{1F50A}", x, y);
-    // Spur
-    ctx.strokeStyle = "rgba(148,163,184,0.35)";
-    ctx.lineWidth = 3; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW, y); ctx.stroke();
-    // Füllung
-    if (v > 0) {
-      ctx.strokeStyle = color;
-      ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW * v, y); ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(barX + barW * v, y, 2.4, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = muted ? "#64748b" : "#94a3b8";
-    ctx.textAlign = "right";
-    ctx.fillText(muted ? "stumm" : Math.round(v * 100) + "%", x + w, y);
-    ctx.textAlign = "left";
-    ctx.restore();
-  }
-
-  /* Fährt der Rollladen gerade? HA meldet das über die States
-     'opening' und 'closing' – die wertete die Card bisher nirgends aus. */
-  _coverMotion(entity) {
-    if (!entity || !this._hass?.states) return null;
-    const st = this._hass.states[entity];
-    if (!st) return null;
-    const s = String(st.state).toLowerCase();
-    if (s === "opening") return { dir: -1, label: "auf" };
-    if (s === "closing") return { dir: 1, label: "zu" };
-    return null;
-  }
-
-  /* Laufanzeige: wandernde Pfeile entlang einer Strecke plus pulsierende
-     Kante. Richtung folgt dir (1 = schließt, -1 = öffnet). */
-  _drawMotionChevrons(ctx, x1, y1, x2, y2, dir, color) {
-    const T = Date.now() / 1000;
-    const dx = x2 - x1, dy = y2 - y1;
-    const L  = Math.hypot(dx, dy);
-    if (L < 4) return;
-    const ux = dx / L, uy = dy / L;
-    const nx = -uy, ny = ux;
-    const n = Math.max(2, Math.round(L / 14));
-    const prog = (T * 0.9) % 1;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (let i = 0; i < n; i++) {
-      let t = (i / n + (dir > 0 ? prog : 1 - prog)) % 1;
-      // an den Enden aus- und einblenden
-      const fade = Math.sin(t * Math.PI);
-      if (fade <= 0.05) continue;
-      const px = x1 + ux * L * t, py = y1 + uy * L * t;
-      const s = 3.2;
-      ctx.globalAlpha = 0.25 + fade * 0.65;
-      ctx.beginPath();
-      ctx.moveTo(px - ux * s * dir - nx * s, py - uy * s * dir - ny * s);
-      ctx.lineTo(px + ux * s * dir, py + uy * s * dir);
-      ctx.lineTo(px - ux * s * dir + nx * s, py - uy * s * dir + ny * s);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  /* Farbverlauf des Spektrums: innen Cyan, Mitte Violett, außen Magenta.
-     t läuft von 0 (Innenkante) bis 1 (äußerstes Segment). */
-  _specColor(t, alpha) {
-    const stops = [[34,211,238], [139,92,246], [236,72,153]];
-    const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
-    const i = Math.min(stops.length - 2, Math.floor(x));
-    const f = x - i;
-    const c = [0,1,2].map(k => Math.round(stops[i][k] + (stops[i+1][k] - stops[i][k]) * f));
-    return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
-  }
-
-  /* Segmentierter Spektrum-Kranz. Die Balken bestehen aus einzelnen
-     Kacheln statt durchgehender Linien – daher der Rasterlook.
-     HA liefert keine Audiodaten, der Ausschlag kann also nicht dem Takt
-     folgen; die Lautstärke steuert stattdessen, wie weit die Balken reichen. */
-  _drawSpectrumRing(ctx, cx, cy, r, volume, muted, opts = {}) {
-    const laut = muted ? 0 : (volume == null ? 0.6 : Math.max(0, Math.min(1, volume)));
-    // Deutliche Spreizung: leise bleibt flach, laut ragt weit hinaus
-    const amp  = 0.12 + 0.88 * Math.pow(laut, 0.85);
-    const bars = opts.bars || 72;
-    const segH = opts.segH || 2.6;
-    const gap  = opts.gap  || 1.6;
-    const maxLen = r * (opts.reach || 1.15) * amp;
-    const inner  = r + (opts.inset || 4);
-    const T = Date.now() / 1000;
-    const animate = this._opts?.weather_animate !== false;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Schein, der mit der Lautstärke atmet
-    const breathe = animate ? 0.5 + 0.5 * Math.sin((T / 2.2) * Math.PI * 2) : 0.5;
-    const glowR = inner + maxLen;
-    const glow = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, Math.max(glowR, r + 1));
-    glow.addColorStop(0, `rgba(139,92,246,${(0.04 + 0.14 * amp * breathe).toFixed(3)})`);
-    glow.addColorStop(1, "rgba(139,92,246,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(0, 0, Math.max(glowR, r + 1), 0, Math.PI * 2); ctx.fill();
-
-    // Innerer Ring aus feinen Kacheln – die helle Kante aus der Vorlage
-    const ringN = Math.round(bars * 2.2);
-    ctx.globalAlpha = muted ? 0.3 : 0.9;
-    for (let i = 0; i < ringN; i++) {
-      const a = (Math.PI * 2 / ringN) * i;
-      const x1 = Math.cos(a) * (inner - 3.2), y1 = Math.sin(a) * (inner - 3.2);
-      const x2 = Math.cos(a) * (inner - 0.8), y2 = Math.sin(a) * (inner - 0.8);
-      ctx.strokeStyle = this._specColor(0, 0.95);
-      ctx.lineWidth = 1.1;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    }
-
-    // Radiale Balken aus gestapelten Segmenten
-    ctx.lineCap = "butt";
-    ctx.globalAlpha = 1;
-    for (let i = 0; i < bars; i++) {
-      // Grundlänge streut, sonst wirkt der Kranz wie ein Zahnrad
-      const f1 = 0.22 + this._fpRand(i, 21) * 0.78;
-      const f2 = 0.22 + this._fpRand(i, 22) * 0.78;
-      const dur = 0.7 + this._fpRand(i, 24) * 0.8;
-      const ph  = this._fpRand(i, 25) * dur;
-      const k = animate ? 0.5 + 0.5 * Math.sin(((T + ph) / dur) * Math.PI * 2) : 0.5;
-      const len = maxLen * (f1 + (f2 - f1) * k);
-      if (len < segH) continue;
-      const a  = (Math.PI * 2 / bars) * i - Math.PI / 2;
-      const ux = Math.cos(a), uy = Math.sin(a);
-      const nSeg = Math.floor(len / (segH + gap));
-      for (let sIdx = 0; sIdx < nSeg; sIdx++) {
-        const d0 = inner + sIdx * (segH + gap);
-        const t  = nSeg > 1 ? sIdx / (nSeg - 1) : 0;
-        // Äußere Segmente blassen leicht aus
-        const al = (muted ? 0.3 : 1) * (0.95 - 0.25 * t);
-        ctx.strokeStyle = this._specColor(t, al);
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(ux * d0, uy * d0);
-        ctx.lineTo(ux * (d0 + segH), uy * (d0 + segH));
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  /* Album-Cover als rotierende Schallplatte.
-     Rillen und Glanz bleiben stehen, nur Label und Reflex drehen sich –
-     sonst wäre die Drehung auf einer symmetrischen Scheibe unsichtbar. */
-  /* Laufschrift: passt der Text in maxW, wird er zentriert gezeichnet.
-     Sonst läuft er endlos durch, mit Lücke zwischen den Wiederholungen.
-     Der Aufrufer muss ctx.font und fillStyle vorher setzen. */
-  /* Verschiebung einer Musik-Bubble. Bleibt über Neuladen erhalten,
-     ohne dafür das Backend anfassen zu müssen. */
-  /* Versatz wird in CSS-Pixeln gehalten. 2D zeichnet in physischen
-     Canvas-Pixeln, 3D in CSS-Pixeln – ohne gemeinsame Einheit springt die
-     Bubble beim Wechsel zwischen den Ansichten. */
-  _musicOffset(entity) {
-    if (!this._musicOff) {
-      this._musicOff = {};
-      try {
-        const raw = localStorage.getItem("ble_music_off");
-        if (raw) this._musicOff = JSON.parse(raw) || {};
-      } catch (e) { this._musicOff = {}; }
-    }
-    return this._musicOff[entity] || { dx: 0, dy: 0 };
-  }
-
-  _setMusicOffset(entity, dx, dy) {
-    this._musicOffset(entity);               // sorgt für geladenen Cache
-    this._musicOff[entity] = { dx, dy };
-    try {
-      localStorage.setItem("ble_music_off", JSON.stringify(this._musicOff));
-    } catch (e) { /* Speicher voll oder gesperrt – Versatz gilt nur temporär */ }
-  }
-
-  /* Play/Pause, vor und zurück. Zonen werden für _onCanvasClick registriert. */
-  _drawMediaControls(ctx, x, y, w, h, entity, st, iso) {
-    // iso: in 3D rechnet der Kontext in CSS-Pixeln, die Zonen müssen aber
-    // wie in 2D in physischen Canvas-Pixeln abgelegt werden.
-    const zd = iso ? (this._3dCtxScale || window.devicePixelRatio || 1) : 1;
-    const playing = st?.state === "playing";
-    const btns = [
-      { id: "prev", sym: "\u23ee" },
-      { id: "play", sym: playing ? "\u23f8" : "\u25b6" },
-      { id: "next", sym: "\u23ed" },
-    ];
-    const bw = w / btns.length;
-
-    ctx.save();
-    // Abtrennung nach oben
-    ctx.strokeStyle = "rgba(56,189,248,0.22)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x + 4, y); ctx.lineTo(x + w - 4, y); ctx.stroke();
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    btns.forEach((b, i) => {
-      const bxx = x + i * bw;
-      const cxx = bxx + bw / 2, cyy = y + h / 2;
-      const hot = this._musicCtlHot === entity + ":" + b.id;
-      if (hot) {
-        ctx.fillStyle = "rgba(56,189,248,0.22)";
-        ctx.beginPath();
-        ctx.roundRect(bxx + 2, y + 3, bw - 4, h - 6, 5);
-        ctx.fill();
-      }
-      ctx.fillStyle = b.id === "play" ? "#38bdf8" : "#94a3b8";
-      ctx.font = (b.id === "play" ? "13px" : "11px") + " system-ui, sans-serif";
-      ctx.fillText(b.sym, cxx, cyy);
-      (this._musicClickZones ||= []).push({
-        entity, kind: "ctl", act: b.id,
-        x: bxx * zd, y: y * zd, w: bw * zd, h: h * zd,
-      });
-    });
-    ctx.textBaseline = "alphabetic";
-    ctx.restore();
-  }
-
-  _marqueeText(ctx, text, cx, y, maxW) {
-    const s = String(text || "");
-    if (!s) return false;
-    const tw = ctx.measureText(s).width;
-    if (tw <= maxW) {
-      ctx.textAlign = "center";
-      ctx.fillText(s, cx, y);
-      return false;
-    }
-    const gap  = 18;                       // Lücke zwischen den Durchläufen
-    const span = tw + gap;
-    const spd  = 22;                       // Pixel pro Sekunde
-    const off  = this._opts?.media_spin !== false
-      ? ((Date.now() / 1000) * spd) % span
-      : 0;
-    const left = cx - maxW / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(left, y - 10, maxW, 16);
-    ctx.clip();
-    ctx.textAlign = "left";
-    ctx.fillText(s, left - off, y);
-    ctx.fillText(s, left - off + span, y);   // nahtlos anschließend
-    ctx.restore();
-    ctx.textAlign = "center";
-    return true;
-  }
-
-  _drawVinyl(ctx, cx, cy, R, img, spinning) {
-    const T = Date.now() / 1000;
-    // Eigenes Gate: die Drehung hing vorher an weather_animate und stand
-    // still, sobald die Wetter-Animation aus war.
-    const animate = this._opts?.media_spin !== false;
-    // Eine Umdrehung pro 2,5 s – schnell genug, dass die Drehung bei
-    // einem kleinen Label auch wirklich auffällt
-    const ang = (spinning && animate) ? (T / 2.5) * Math.PI * 2 : 0;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Scheibe
-    const disc = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.1, 0, 0, R);
-    disc.addColorStop(0, "#2a2f3a");
-    disc.addColorStop(0.6, "#12151c");
-    disc.addColorStop(1, "#05070a");
-    ctx.fillStyle = disc;
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-
-    // Rillen
-    ctx.strokeStyle = "rgba(148,163,184,0.10)";
-    ctx.lineWidth = 0.5;
-    for (let gr = R * 0.68; gr < R * 0.97; gr += Math.max(1.4, R * 0.045)) {
-      ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.stroke();
-    }
-
-    // Wandernder Lichtreflex über die Rillen
-    ctx.save();
-    ctx.rotate(ang * 0.5);
-    const sheen = ctx.createLinearGradient(-R, -R, R, R);
-    sheen.addColorStop(0,    "rgba(255,255,255,0)");
-    sheen.addColorStop(0.45, "rgba(255,255,255,0.05)");
-    sheen.addColorStop(0.5,  "rgba(255,255,255,0.13)");
-    sheen.addColorStop(0.55, "rgba(255,255,255,0.05)");
-    sheen.addColorStop(1,    "rgba(255,255,255,0)");
-    ctx.fillStyle = sheen;
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    // Label aus dem Cover, dreht mit. Nimmt bewusst viel Fläche ein,
-    // vorher blieben bei R=26 nur ~11 px Cover übrig.
-    const lr = R * 0.64;
-    // Rillen nur noch außerhalb des größeren Labels
-    ctx.save();
-    ctx.rotate(ang);
-    if (img) {
-      ctx.save();
-      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.clip();
-      ctx.drawImage(img, -lr, -lr, lr * 2, lr * 2);
-      ctx.restore();
-    } else {
-      // Ohne Cover ein zweifarbiges Label, sonst wäre die Drehung
-      // auf einer einfarbigen Fläche unsichtbar.
-      ctx.fillStyle = "#1e293b";
-      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#334155";
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, lr, -Math.PI / 2, 0);
-      ctx.closePath(); ctx.fill();
-    }
-    // Marke am Labelrand, damit die Drehung immer ablesbar bleibt
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.beginPath();
-    ctx.arc(0, -lr * 0.78, Math.max(1.4, R * 0.075), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Labelkante und Spindelloch
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#05070a";
-    ctx.beginPath(); ctx.arc(0, 0, Math.max(1.4, R * 0.055), 0, Math.PI * 2); ctx.fill();
-
-    ctx.restore();
-  }
-
-  /* Live-Anzeige des Wetter-Entities im Options-Reiter */
-  _updateWeatherStatus() {
-    const el = this.shadowRoot?.getElementById("weather-live");
-    if (!el) return;
-    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
-    if (!eid) { el.textContent = "keine Entity gesetzt"; el.style.color = "#445566"; return; }
-    const st = this._hass?.states?.[eid];
-    if (!st) { el.textContent = `\u26a0 ${eid} nicht gefunden`; el.style.color = "#ef4444"; return; }
-    const map = {
-      "sunny":"\u2600 sonnig","clear-night":"\u{1F319} klar","partlycloudy":"\u26c5 teils bewölkt",
-      "cloudy":"\u2601 bewölkt","fog":"\u{1F32B} Nebel","rainy":"\u{1F327} Regen",
-      "pouring":"\u26c8 Starkregen","snowy":"\u2744 Schnee","snowy-rainy":"\u{1F328} Schneeregen",
-      "hail":"\u{1F328} Hagel","lightning":"\u26a1 Gewitter","lightning-rainy":"\u26c8 Gewitter",
-      "windy":"\u{1F4A8} windig","windy-variant":"\u{1F4A8} windig","exceptional":"\u{1F321} besonders"
-    };
-    const temp = st.attributes?.temperature;
-    el.textContent = (map[st.state] || st.state) + (temp != null ? ` \u00b7 ${temp}\u00b0` : "");
-    el.style.color = "#22c55e";
-  }
 
   _drawMusicBubbles() {
     if (!this._opts?.show_music_bubble) return;
@@ -13704,31 +12614,14 @@ _drawDoors() {
       const sp   = this._f2c(deco.mx, deco.my);
       const size = (deco.size || 1.0) * 18;
 
-      // Bubble-Position: oben rechts, sanft schwebend.
-      // Der Versatz kommt aus dem Verschieben per Gedrückthalten.
+      // Bubble-Position: oben rechts, sanft schwebend
       const t      = (Date.now() / 2000) % (Math.PI * 2);
-      const off    = this._musicOffset(deco.entity);
-      const _odpr  = window.devicePixelRatio || 1;
-      const dragging = this._musicDrag?.entity === deco.entity;
-      const floatY = dragging ? 0 : Math.sin(t) * 4;
-      const bx  = sp.x + size * 2.2 + off.dx * _odpr;
+      const floatY = Math.sin(t) * 4;
+      const bx  = sp.x + size * 2.2;
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
-      const by  = sp.y - wPx - size * 0.8 + floatY + off.dy * _odpr;
-      const volume  = st.attributes?.volume_level;
-      const muted   = !!st.attributes?.is_volume_muted;
-      const hasVol  = volume != null || muted;
-      // Schallplatte: der Kranz ragt über die Scheibe hinaus, daher breiter
-      const vinyl    = this._opts?.media_vinyl !== false;
-      const vinylR   = 26;
-      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
-      const bw   = vinyl ? vinylBox + 16 : 72;
-      const barH = duration > 0 ? 14 : 0;
-      // Steuerleiste erscheint nur für die angetippte Bubble
-      const ctlOpen = this._musicCtlOpen === deco.entity;
-      const ctlH    = ctlOpen ? 26 : 0;
-      // Die Lautstärke klappt mit der Leiste zusammen auf und zu
-      const volH    = (hasVol && ctlOpen) ? 12 : 0;
-      const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
+      const by  = sp.y - wPx - size * 0.8 + floatY;
+      const bw = 72;
+      const bh = picUrl ? 82 : 38;
 
       ctx.save();
 
@@ -13782,7 +12675,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img && !vinyl) {
+        } else if (cached.img) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -13793,30 +12686,17 @@ _drawDoors() {
           coverY = by + 5 + cs + 4;
         }
       }
-      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
-      if (vinyl) {
-        const vcx = bx + bw / 2;
-        const vcy = by + 8 + vinylBox / 2;
-        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
-        if (this._opts?.show_volume_ring !== false) {
-          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
-        }
-        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
-        coverY = by + 8 + vinylBox + 2;
-      }
 
       // ── Titel + Artist ────────────────────────────────────────
-      // Laufschrift statt Abschneiden: lange Titel liefen vorher nach
-      // 10 Zeichen ins Auslassungszeichen.
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const txtW = bw - 8;
-      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW);
+      const mc = 10;
+      ctx.fillText(title.length > mc ? title.slice(0,mc) + "\u2026" : title, bx + bw/2, coverY + 9);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW);
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -13830,7 +12710,7 @@ _drawDoors() {
         const elapsed = posTs ? (Date.now() - new Date(posTs).getTime()) / 1000 : 0;
         const curPos  = Math.min(position + elapsed, duration);
         const prog    = Math.max(0, Math.min(1, curPos / duration));
-        const barY    = by + bh - ctlH - barH + 2;
+        const barY    = by + bh - barH + 2;
         const barW2   = bw - 10;
         ctx.fillStyle = '#1c2535';
         ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2, 4, 2); ctx.fill();
@@ -13843,22 +12723,6 @@ _drawDoors() {
         ctx.textAlign = 'right'; ctx.fillText(fmt(duration), bx+bw-5, barY+11);
         ctx.textAlign = 'center';
       }
-
-      // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol && ctlOpen) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
-                            volume, muted, "#38bdf8");
-      }
-
-      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
-      if (ctlOpen) {
-        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st);
-      }
-
-      // Trefferfläche der Bubble für Tippen und Verschieben merken
-      (this._musicClickZones ||= []).push({
-        entity: deco.entity, x: bx, y: by, w: bw, h: bh, kind: "bubble",
-      });
 
       ctx.restore();
     });
@@ -13914,7 +12778,7 @@ _drawDoors() {
         }
         // Montageschienen
         ctx.strokeStyle="#64748b"; ctx.lineWidth=1;
-        ctx.beginPath(); ctx.moveTo(-hs+ox,-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-hs+ox,my=-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
         break;
       }
       case "inverter": {
@@ -16548,21 +15412,12 @@ _drawDoors() {
       { key:"ws_updates",          emoji:"⚡",  label:"WebSocket Live-Updates",      desc:"Sofortige Updates statt Polling (modernste Methode)" },
       { key:"ambient_light",       emoji:"💡",  label:"Umgebungslicht-Sensor",       desc:"Helligkeit automatisch anpassen (nur Chrome/HTTPS)" },
       { key:"ambient_auto_night",  emoji:"🌙",  label:"  └ Auto Nacht-Modus",        desc:"Nacht-Modus automatisch bei Dunkelheit aktivieren" },
-      { key:"show_weather",        emoji:"🌦",  label:"Wetter-Kulisse",              desc:"Animiertes Wetter außerhalb der Räume (Sonne, Wolken, Regen, Schnee, Nebel, Blitz)" },
-      { key:"weather_animate",     emoji:"🎞",  label:"  └ Wetter animieren",        desc:"Bewegung aus, wenn nur das Standbild gewünscht ist", def:true },
-      { key:"show_volume_ring",    emoji:"🔊",  label:"Lautstärke-Kranz",            desc:"Animierter Kranz um spielende Lautsprecher, Ausschlag nach Lautstärke", def:true },
-      { key:"cover_motion",        emoji:"🪟",  label:"Rollladen-Laufanzeige",       desc:"Zeigt mit laufenden Pfeilen an, dass ein Rollladen gerade fährt", def:true },
-      { key:"media_vinyl",         emoji:"💿",  label:"Medien als Schallplatte",     desc:"Album-Cover als drehende Platte mit Spektrum-Kranz statt Kachel", def:true },
-      { key:"media_spin",          emoji:"🔄",  label:"Platte dreht sich",           desc:"Drehung und Laufschrift bei langen Titeln; aus = stehendes Bild", def:true },
     ];
-    energyToggles.forEach(({key, emoji, label, desc, def}) => {
+    energyToggles.forEach(({key, emoji, label, desc}) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933";
       const cb = document.createElement("input");
-      // def: Toggles, die ohne gesetzte Option aktiv sind, müssen auch
-      // angehakt erscheinen – sonst zeigt die Box "aus", während es läuft
-      cb.type = "checkbox";
-      cb.checked = this._opts?.[key] !== undefined ? !!this._opts[key] : !!def;
+      cb.type = "checkbox"; cb.checked = !!this._opts?.[key];
       cb.style.cssText = "accent-color:#f59e0b;width:13px;height:13px;flex-shrink:0";
       cb.addEventListener("change", () => {
         if (!this._opts) this._opts = {};
@@ -16588,34 +15443,6 @@ _drawDoors() {
       perfBox.appendChild(row);
     });
 
-    // ── Wetter-Entity mit Live-Status ────────────────────────────────
-    {
-      const wRow = document.createElement("div");
-      wRow.style.cssText = "padding:6px 0 2px 0";
-      const wLbl = document.createElement("div");
-      wLbl.style.cssText = "font-size:7px;color:#445566;margin-bottom:2px";
-      wLbl.textContent = "\u{1F326} Wetter-Entity (z.B. weather.home)";
-      const wInp = document.createElement("input");
-      wInp.type = "text";
-      wInp.placeholder = "weather.home";
-      // Fällt auf das alte Screensaver-Feld zurück, damit nichts doppelt gepflegt wird
-      wInp.value = this._opts?.weather_entity || this._opts?.ss_weather_entity || "";
-      wInp.style.cssText = "width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-      const wLive = document.createElement("div");
-      wLive.id = "weather-live";
-      wLive.style.cssText = "font-size:7px;color:#445566;margin-top:3px;font-family:'JetBrains Mono',monospace";
-      wInp.addEventListener("input", () => {
-        if (!this._opts) this._opts = {};
-        this._opts.weather_entity = wInp.value.trim();
-        this._saveOptions();
-        this._updateWeatherStatus();
-        this._markDirty();
-      });
-      wRow.append(wLbl, wInp, wLive);
-      perfBox.appendChild(wRow);
-      // Direkt beim Öffnen befüllen, nicht erst beim nächsten hass-Update
-      setTimeout(() => this._updateWeatherStatus(), 0);
-    }
     const perfHint = document.createElement("div");
     perfHint.style.cssText = "font-size:7.5px;color:#445566;margin-top:5px;line-height:1.6";
     perfHint.innerHTML =
@@ -16756,8 +15583,6 @@ _drawDoors() {
         { id:"comic",     label:"Comic",           icon:"(!)", desc:"Cel-Shading + Outlines" },
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
-        { id:"studio",     label:"Studio",           icon:"🏛", desc:"Wandvolumen, Sockelplatte, Architektur-Look" },
-        { id:"webgl",      label:"Studio WebGL",     icon:"✨", desc:"Echte 3D-Beschleunigung mit Schatten und Texturen (neuere Geräte)" },
         { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
@@ -16782,141 +15607,6 @@ _drawDoors() {
       };
       renderThemeBtns();
       themeSection.appendChild(themeGrid);
-
-      // ── Umgebungsmap (nur fuer den WebGL-Renderer sinnvoll) ────────────
-      // Reflexionen brauchen etwas zum Spiegeln. Ohne Umgebung wirkt Glas
-      // flach und Metall wie grauer Kunststoff.
-      const envBox = document.createElement("div");
-      envBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      const envHead = document.createElement("div");
-      envHead.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\u2728 Spiegelungen (WebGL)</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Umgebung, die sich in Glas und Metall spiegelt</div>';
-      envBox.appendChild(envHead);
-
-      const envSel = document.createElement("select");
-      envSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
-      const envOpts = [
-        ["studio",  "Studio (hell) \u2013 Standard"],
-        ["warm",    "Abendlicht"],
-        ["neutral", "Neutral grau"],
-        ["outdoor", "Freier Himmel"],
-        ["off",     "Aus (matt)"],
-      ];
-      for (const [v, lbl] of envOpts) {
-        const o = document.createElement("option");
-        o.value = v; o.textContent = lbl;
-        if ((this._opts?.env_preset || "studio") === v) o.selected = true;
-        envSel.appendChild(o);
-      }
-      envSel.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.env_preset = envSel.value;
-        this._draw();
-        await this._saveOptions();
-        this._showToast("Spiegelungen: " + envSel.options[envSel.selectedIndex].textContent);
-      });
-      envBox.appendChild(envSel);
-
-      const envUrl = document.createElement("input");
-      envUrl.type = "text";
-      envUrl.placeholder = "Eigenes Panoramabild, z. B. /local/env.jpg (optional)";
-      envUrl.value = this._opts?.env_url || "";
-      envUrl.style.cssText = "width:100%;margin-top:4px;padding:4px;font-size:7.5px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;box-sizing:border-box";
-      envUrl.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.env_url = envUrl.value.trim();
-        this._draw();
-        await this._saveOptions();
-        this._showToast(envUrl.value.trim()
-          ? "Eigenes Umgebungsbild gesetzt"
-          : "Zurueck auf Standard-Umgebung");
-      });
-      envBox.appendChild(envUrl);
-      const envHint = document.createElement("div");
-      envHint.style.cssText = "font-size:6px;color:#445566;margin-top:3px";
-      envHint.textContent = "Bild muss equirectangular sein (2:1). Laedt es nicht, bleibt das Preset aktiv.";
-      envBox.appendChild(envHint);
-      themeSection.appendChild(envBox);
-
-      // ── Wetter-Testmodus ───────────────────────────────────────────────
-      // Zum Pruefen der Darstellung, ohne auf echtes Wetter zu warten.
-      const tBox = document.createElement("div");
-      tBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      tBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83E\uDDEA Wetter-Testmodus</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Zeigt eine Lage an, statt der echten. Nur zum Pr\u00fcfen.</div>';
-      const tSel = document.createElement("select");
-      tSel.style.cssText = "width:100%;margin-top:5px;padding:4px;font-size:8px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px";
-      const lagen = [
-        ["", "Aus \u2013 echtes Wetter"],
-        ["sunny|0|24",        "\u2600\uFE0F Sonnig, Tag"],
-        ["partlycloudy|0|19", "\u26C5 Leicht bew\u00f6lkt, Tag"],
-        ["cloudy|0|14",       "\u2601\uFE0F Bew\u00f6lkt, Tag"],
-        ["fog|0|8",           "\uD83C\uDF2B\uFE0F Nebel, Tag"],
-        ["rainy|0|11",        "\uD83C\uDF27\uFE0F Regen, Tag"],
-        ["pouring|0|9",       "\u26C8\uFE0F Starkregen, Tag"],
-        ["snowy|0|-2",        "\u2744\uFE0F Schnee, Tag"],
-        ["clear-night|1|7",   "\uD83C\uDF19 Klar, Nacht"],
-        ["cloudy|1|6",        "\u2601\uFE0F Bew\u00f6lkt, Nacht"],
-        ["rainy|1|4",         "\uD83C\uDF27\uFE0F Regen, Nacht"],
-        ["snowy|1|-4",        "\u2744\uFE0F Schnee, Nacht"],
-      ];
-      for (const [v, lbl] of lagen) {
-        const o = document.createElement("option");
-        o.value = v; o.textContent = lbl;
-        if ((this._wxTestKey || "") === v) o.selected = true;
-        tSel.appendChild(o);
-      }
-      tSel.addEventListener("change", () => {
-        this._wxTestKey = tSel.value;
-        if (!tSel.value) {
-          this._wxTest = null;
-        } else {
-          const [cond, n, t] = tSel.value.split("|");
-          this._wxTest = { condition: cond, night: n === "1", temp: +t };
-        }
-        // Erzwingt Neuaufbau: Sonnenstand und Himmel haengen daran
-        this._glDayKey = null; this._glDataKey = null; this._skyTestKey = null;
-        if (this._gl?.dome) this._gl.dome.setWeather(this._wxTest?.condition);
-        this._markDirty(); this._draw();
-        this._showToast(tSel.value ? "Test: " + tSel.options[tSel.selectedIndex].textContent
-                                   : "Testmodus aus");
-      });
-      tBox.appendChild(tSel);
-      themeSection.appendChild(tBox);
-
-      // ── Nachbarschaft ──────────────────────────────────────────────────
-      const nBox = document.createElement("div");
-      nBox.style.cssText = "margin-top:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid var(--border)";
-      nBox.innerHTML = '<span style="font-size:8.5px;font-weight:700;color:var(--text)">\uD83C\uDFD8\uFE0F Nachbarschaft (WebGL)</span>' +
-        '<div style="font-size:6.5px;color:#445566;margin-top:1px">Stra\u00dfen, H\u00e4user und B\u00e4ume rings um das Geb\u00e4ude</div>';
-      const nRow = document.createElement("div");
-      nRow.style.cssText = "display:flex;gap:6px;margin-top:5px;align-items:center";
-      const nChk = document.createElement("input");
-      nChk.type = "checkbox";
-      nChk.checked = this._opts?.neighborhood !== false;
-      nChk.addEventListener("change", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.neighborhood = nChk.checked;
-        this._draw(); await this._saveOptions();
-        this._showToast(nChk.checked ? "Nachbarschaft an" : "Nachbarschaft aus");
-      });
-      const nLbl = document.createElement("span");
-      nLbl.style.cssText = "font-size:7.5px;color:var(--text)";
-      nLbl.textContent = "anzeigen";
-      const nNew = document.createElement("button");
-      nNew.textContent = "Neu w\u00fcrfeln";
-      nNew.style.cssText = "margin-left:auto;padding:3px 7px;font-size:7px;font-family:inherit;background:var(--surf3);color:var(--text);border:1px solid var(--border);border-radius:4px;cursor:pointer";
-      nNew.addEventListener("click", async () => {
-        if (!this._opts) this._opts = {};
-        this._opts.hood_seed = Math.floor(Math.random() * 100000);
-        if (this._gl?.hood) { this._gl.hood.dispose(); this._gl.hood = null; }
-        this._draw(); await this._saveOptions();
-        this._showToast("Neue Nachbarschaft");
-      });
-      nRow.appendChild(nChk); nRow.appendChild(nLbl); nRow.appendChild(nNew);
-      nBox.appendChild(nRow);
-      themeSection.appendChild(nBox);
-
       wrap.appendChild(themeSection);
     }
 
@@ -18073,18 +16763,6 @@ _drawDoors() {
   // ══════════════════════════════════════════════════════════════════════════
   // ── FEATURE: NACHT-MODUS ─────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
-
-  /* Ist es draußen dunkel? Unabhängig vom nightMode-Toggle, weil die
-     Wetter-Kulisse die Tageszeit auch dann braucht, wenn der Nacht-Modus
-     der Karte aus ist. */
-  _isDark() {
-    if (this._wxTest) return !!this._wxTest.night;
-    const s = this._hass?.states?.["sun.sun"]?.state;
-    if (s === "below_horizon") return true;
-    if (s === "above_horizon") return false;
-    const h = new Date().getHours();
-    return h >= 22 || h < 6;
-  }
 
   _checkNightMode() {
     if (!this._opts?.nightMode) {
@@ -19575,10 +18253,7 @@ trigger:
   // 3D THEMES – jedes Theme definiert alle visuellen Parameter
   // ══════════════════════════════════════════════════════════════════════════
   _get3DTheme(forceId) {
-    // "webgl" hat kein eigenes 2D-Aussehen: faellt der WebGL-Renderer aus,
-    // soll der Canvas-Pfad wie "studio" zeichnen und nicht wie "default".
-    let id = forceId || this._3dTheme || "default";
-    if (id === "webgl") id = "studio";
+    const id = forceId || this._3dTheme || "default";
     const THEMES = {
 
       // ── Standard (aktuell) ──────────────────────────────────────────────
@@ -19648,47 +18323,6 @@ trigger:
         aoCorners: false,
         wallShading: "glass",
         glassShimmer: true,
-      },
-
-      // ── Studio: opake Materialien, Wandvolumen, Bodenplatte ─────────────
-      // Orientiert am Look klassischer Architektur-Renderings: helles
-      // Umfeld, warmes Licht von oben links, kein Durchscheinen.
-      studio: {
-        id: "studio", label: "Studio", icon: "🏛",
-        bg: "#e9ecef",
-        grid: { color: "rgba(90,105,125,0.07)", width: 0.5, step: 1 },
-        floor: () => "rgba(196,164,120,0.95)",
-        wall:  (rr,gg,bb,wa,brightness,isOuter) => {
-          // Außen fast weiß wie verputzte Fassade, innen leicht getönt
-          const base = isOuter ? 246 : 232;
-          const v = Math.round(base * (0.72 + 0.28 * brightness));
-          const r = Math.min(255, v + (isOuter ? 0 : Math.round((rr - 128) * 0.14)));
-          const g = Math.min(255, v + (isOuter ? 0 : Math.round((gg - 128) * 0.14)));
-          const b = Math.min(255, Math.round(v * 0.985)
-                             + (isOuter ? 0 : Math.round((bb - 128) * 0.14)));
-          return `rgba(${r},${g},${b},1)`;
-        },
-        ceiling:() => "rgba(0,0,0,0)",          // offenes Puppenhaus, keine Decke
-        edge:  () => "rgba(120,130,145,0.30)",
-        topEdge:() => "rgba(255,255,255,0.85)",
-        label: () => "rgba(70,80,95,0.85)",
-        door:  { frame:"#b08154", panel:"#8d6238", open:"#3fa96a", closed:"#8b7cc8" },
-        window:{ frame:"#cfd8e3", glass:"rgba(220,235,250,0.55)", open:"#e06c6c", closed:"#3fa96a", tilted:"#e0a13f" },
-        shutter:{ fill:"rgba(180,186,196,0.9)", slat:"rgba(140,148,160,0.5)", box:"rgba(160,166,178,0.95)" },
-        person:{ auraColor:"240,150,60", bodyColor:"#e88a34", headColor:"#f3b27a", labelBg:"rgba(60,70,85,0.85)" },
-        ble:   { color:"#2b9ec4", glow:"rgba(43,158,196,0.22)" },
-        decoTint: null,
-        aoCorners: true,
-        wallShading: "directional",
-        // Durchgehender Holzboden: Theme-Grundton statt Raumfarbe
-        floorBase: true,
-        floorTint: 0.05,
-        hideGrid: true,
-        // Neu in 5.0: Wandstärke in Metern und Sockelplatte
-        wallDepth: 0.14,
-        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.35,
-                     shadow:"rgba(60,72,92,0.22)" },
-        lightWarm: true,
       },
 
       // ── Neon-Grid ────────────────────────────────────────────────────────
@@ -19864,445 +18498,7 @@ trigger:
   }
 
 
-  /* ── WebGL-Renderer (Three.js) ─────────────────────────────────────────
-     Zweiter Renderer neben der Canvas-2D-Szene, aktiv im Theme "webgl".
-     Faellt bei fehlendem WebGL oder Kontextverlust auf 2D zurueck, damit
-     aeltere Geraete weiterhin ein Bild bekommen. */
-  /* HS nach RGB. HA liefert Farbton 0..360 und Saettigung 0..100. */
-  _hsToRgb(h, sPct) {
-    const sat = Math.max(0, Math.min(100, sPct)) / 100;
-    const hh = ((h % 360) + 360) % 360 / 60;
-    const c = sat, x = c * (1 - Math.abs((hh % 2) - 1));
-    let r = 0, g = 0, b = 0;
-    if      (hh < 1) { r = c; g = x; }
-    else if (hh < 2) { r = x; g = c; }
-    else if (hh < 3) { g = c; b = x; }
-    else if (hh < 4) { g = x; b = c; }
-    else if (hh < 5) { r = x; b = c; }
-    else             { r = c; b = x; }
-    const m = 1 - c;
-    return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)];
-  }
-
-  _webglWanted() {
-    return (this._3dTheme === "webgl") &&
-           (this._mode === "view" || this._mode === "screensaver") &&
-           !!this._opts?.show3D;
-  }
-
-  async _ensureWebGL() {
-    if (this._glFailed) return null;
-    if (this._gl) return this._gl;
-    if (this._glLoading) return null;           // Import laeuft noch
-    this._glLoading = true;
-    try {
-      // Version an die URL haengen, damit ein frueher gecachter 404 oder
-      // eine alte Fassung den Import nicht dauerhaft blockiert.
-      const mod = await import("/local/ble_positioning/three-scene.js?v=" + CARD_VERSION);
-      const cv = this.shadowRoot.getElementById("gl");
-      const sc = new mod.ThreeScene(cv, {
-        envPreset: this._opts?.env_preset || "studio",
-        envUrl: this._opts?.env_url || null,
-      });
-      if (!sc.ok) throw sc.error || new Error("WebGL nicht verfuegbar");
-      sc.onContextLost(() => {
-        // Kontextverlust ist in WebViews normal. Nicht endlos neu versuchen:
-        // einmal zurueck auf 2D, der Nutzer kann bewusst neu laden.
-        this._glFailed = true;
-        this._showToast("3D-Beschleunigung verloren, zurueck auf Standard");
-        this._syncGlVisibility();
-        this._markDirty();
-      });
-      this._gl = sc;
-      this._glDataKey = null;
-      this._ensureGlVisibilityHook();
-      // Himmelskuppel: Preetham-Shader, mit Verlaufskuppel als Rueckfall
-      // Nach dem Laden direkt zeichnen, nicht nur ein Flag setzen:
-      // _markDirty wirkt erst im naechsten Frame, und
-      // requestAnimationFrame pausiert in Hintergrund-Tabs. Die Szene
-      // bliebe sonst unfertig, bis der Tab wieder sichtbar wird.
-      const kick = () => { try { this._draw(); } catch (e) { /* egal */ } };
-      if (this._opts?.sky_dome !== false) {
-        sc.initSky(this._opts?.sky_mode || "sky").then(kick);
-      }
-      if (this._opts?.post_fx !== false) {
-        sc.initPostProcessing().then(kick);
-      }
-      kick();
-      return sc;
-    } catch (err) {
-      this._glFailed = true;
-      // Sichtbar machen: der Rueckfall auf Canvas sieht fast normal aus,
-      // ein stiller Fehlschlag wird sonst als "WebGL sieht halt so aus"
-      // missverstanden. Genau das ist mit einer fehlenden Moebel-Datei
-      // passiert – 404 beim Modul-Import, kein Hinweis in der Oberflaeche.
-      console.warn("BLE Positioning: WebGL nicht nutzbar, nutze Canvas-Renderer", err);
-      this._showToast("WebGL konnte nicht starten \u2013 Standard-3D aktiv");
-      return null;
-    } finally {
-      this._glLoading = false;
-    }
-  }
-
-  /* Temperatur als DOM-Element statt auf ein Canvas: mit Himmelskuppel
-     liegt kein Canvas mehr hinter der Szene, und vor die Szene gemalt
-     wuerde sie mit dem Gebaeude kollidieren. */
-  _syncWeatherBadge(on) {
-    const wrap = this.shadowRoot?.getElementById("cwrap");
-    if (!wrap) return;
-    let el = this.shadowRoot.getElementById("wxbadge");
-    const w = on ? this._weatherState() : null;
-    if (!w || w.temp == null || !isFinite(w.temp)) { if (el) el.remove(); return; }
-    if (!el) {
-      el = document.createElement("div");
-      el.id = "wxbadge";
-      el.style.cssText = "position:absolute;left:14px;top:14px;z-index:5;" +
-        "padding:5px 10px;border-radius:8px;font:600 13px system-ui,sans-serif;" +
-        "pointer-events:none;backdrop-filter:blur(3px)";
-      wrap.appendChild(el);
-    }
-    const night = this._isDark();
-    el.style.background = night ? "rgba(13,20,38,0.55)" : "rgba(35,48,69,0.45)";
-    el.style.color = night ? "#dfe6ff" : "#f2f6ff";
-    el.textContent = Math.round(w.temp) + (w.unit || "\u00b0C");
-  }
-
-  /* Kehrt der Tab aus dem Hintergrund zurueck, sofort neu zeichnen.
-     Waehrend er verborgen war, stand die Render-Schleife still und die
-     Szene kann unvollstaendig sein. */
-  _ensureGlVisibilityHook() {
-    if (this._glVisHook) return;
-    this._glVisHook = () => {
-      if (document.visibilityState !== "visible") return;
-      if (!this._gl?.ok) return;
-      this._glDataKey = null;      // Aufbau erzwingen
-      this._glDayKey = null;
-      try { this._draw(); } catch (e) { /* egal */ }
-    };
-    document.addEventListener("visibilitychange", this._glVisHook);
-  }
-
-  _syncGlVisibility() {
-    const cv = this.shadowRoot?.getElementById("gl");
-    const c2 = this.shadowRoot?.getElementById("c");
-    if (!cv || !c2) return;
-    const on = this._webglWanted() && this._gl && !this._glFailed;
-    cv.style.display = on ? "block" : "none";
-    const wx = this.shadowRoot?.getElementById("wx");
-    const useDome = on && this._gl?.dome;
-    if (wx) wx.style.display = (on && !useDome) ? "block" : "none";
-    this._syncWeatherBadge(on && !!this._opts?.show_weather);
-    // Das 2D-Canvas bleibt sichtbar und liegt oben: es traegt die Overlays
-    // und faengt alle Klicks. Vorher wurde es versteckt, dadurch gingen
-    // Drehen, Zoomen und der Editor verloren.
-    c2.style.position = on ? "relative" : "";
-    c2.style.zIndex = on ? "3" : "";
-    if (c2.style.visibility === "hidden") c2.style.visibility = "";
-  }
-
-  /* Baut die Szene nur neu auf, wenn sich die Geometrie geaendert hat.
-     Kamera und Sonne sind billig und laufen jeden Frame. */
-  _drawWebGL() {
-    const sc = this._gl;
-    if (!sc || !sc.ok) return false;
-    const rooms = this._data?.rooms || [];
-    const doors   = this._data?.doors   || [];
-    const windows = this._data?.windows || [];
-    const decos   = this._data?.decos   || [];
-    // Deko-Eintraege, fuer die es ein 3D-Moebel gibt. TV und Lautsprecher
-    // tragen ihren Entity-Zustand mit: ein laufender Fernseher soll
-    // leuchten, ein spielender Lautsprecher seinen Ring zeigen.
-    const furniture = decos.map(dc => {
-      const st = dc.entity ? this._hass?.states?.[dc.entity] : null;
-      const at = st?.attributes || {};
-      // Deko liegt in Kartenkoordinaten mx/my, nicht x/y – mit x/y wurde
-      // bisher alles herausgefiltert und nichts erschien.
-      return {
-        type: dc.type, x: dc.mx ?? dc.x, y: dc.my ?? dc.y, z: dc.mz ?? dc.z,
-        rotation: dc.rotation ?? dc.angle ?? 0,
-        scale: dc.size || 1,
-        width: dc.width, depth: dc.depth, height: dc.height,
-        color: dc.color, wallMounted: dc.wall_mounted,
-        state: st?.state,
-        level: at.volume_level,
-      };
-    }).filter(f => f.x != null && f.y != null);
-    // Der Schlüssel deckt nur Geometrie ab. Zustände von Türen, Fenstern
-    // und Lampen ändern sich ständig und dürfen keinen Neuaufbau auslösen.
-    const key = JSON.stringify([
-      rooms.map(r => [r.x1, r.y1, r.x2, r.y2, r.color]),
-      doors.map(o => [o.x, o.y, o.width, o.height,
-                      o.entity ? this._hass?.states?.[o.entity]?.state : o.state]),
-      windows.map(o => [o.x, o.y, o.width, o.height, o.sill]),
-      furniture.map(f => [f.type, f.x, f.y, f.rotation, f.state, f.level]),
-      this._data?.floor_w, this._data?.floor_h, this._wallHeight,
-    ]);
-    let att = this._hass?.states?.["sun.sun"]?.attributes || {};
-    if (this._wxTest) {
-      // Zur Nacht eine Sonne unter dem Horizont, sonst mittags hoch
-      att = { azimuth: this._wxTest.night ? 20 : 170,
-              elevation: this._wxTest.night ? -25 : 42 };
-    }
-    if (key !== this._glDataKey) {
-      sc.build({
-        rooms,
-        doors: doors.map(o => {
-          const st2 = o.entity ? this._hass?.states?.[o.entity]?.state : o.state;
-          // Offene Tueren lassen Tageslicht herein, geschlossene nicht
-          return { ...o, state: st2,
-                   open_amount: (st2 === "open" || st2 === "on") ? 1 : (o.open_amount ?? 0) };
-        }),
-        windows: windows.map(o => ({
-          ...o, state: o.entity ? this._hass?.states?.[o.entity]?.state : o.state,
-        })),
-        floorW: this._data?.floor_w || 10,
-        floorH: this._data?.floor_h || 10,
-        wallHeight: this._wallHeight ?? 2.5,
-        wallDepth: 0.14,
-        furniture,
-        sunAzimuth: parseFloat(att.azimuth),
-        sunElevation: parseFloat(att.elevation),
-      });
-      this._glDataKey = key;
-      this._glLightKey = null;
-    }
-    sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
-
-    // ── Tageslicht nach Sonnenstand und Wetter ────────────────────────
-    // Nachts bleibt der Innenraum dunkel, damit eine Lampe ueberhaupt
-    // etwas bewirkt; bei Bewoelkung kommt weniger und weicheres Licht.
-    // Das Licht faellt durch Fenster und offene Tueren ein, deshalb
-    // bleibt ein Raum ohne Oeffnung von selbst dunkel.
-    const wSt = this._weatherState();
-    const lkeyDay = [this._isDark(), wSt?.condition, Math.round(parseFloat(att.elevation) || 0)].join("|");
-    if (lkeyDay !== this._glDayKey) {
-      sc.setDaylight({
-        elevation: parseFloat(att.elevation),
-        condition: wSt?.condition,
-        night: this._isDark(),
-      });
-      this._glDayKey = lkeyDay;
-
-      // Bloom und Nebel folgen der Wetterlage: nachts leuchten Lampen
-      // kraeftiger, tagsueber soll nichts ueberstrahlen.
-      const night2 = this._isDark();
-      const cond2 = String(wSt?.condition || "");
-      // Schwelle bleibt auch nachts hoch: bei 0.6 fing der beleuchtete
-      // Holzboden an zu gluehen und schluckte die Maserung.
-      // Bewusst schwach: Bloom soll Lampen und LEDs hervorheben, nicht
-      // Waende und Boeden weichzeichnen.
-      // Eng gezogen: nur wirklich helle Quellen sollen gluehen. Bei 0.85
-      // fing der beleuchtete Boden an mitzustrahlen.
-      // Sehr eng: unbeleuchtete helle Flaechen duerfen keinen Glow mehr
-      // ausloesen, nur echte Lichtquellen.
-      sc.setBloom(night2 ? 0.1 : 0.05, night2 ? 0.45 : 0.4, 0.95);
-      // Nebel deutlich zurueckgenommen. Er lag bei 0.008 bis 0.045 und
-      // legte sich als grauer Schleier ueber die ganze Szene – der
-      // Schwarzpunkt ging verloren. Nur noch dort, wo Nebel wirklich zur
-      // Wetterlage gehoert, und in der Farbe des Himmels, nie neutralgrau.
-      const fog =
-        night2                               ? [0x0a0e17, 0.0008] :
-        /fog/.test(cond2)                    ? [0xc9d2da, 0.016]  :
-        /pouring|storm|lightning/.test(cond2)? [0x5a6678, 0.012]  :
-        /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
-        /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
-                                               null;   // sonst gar keiner
-      // Hintergrund: die Kuppel traegt den Himmel, aber wo sie nicht
-      // hinreicht – ausserhalb ihres Radius, beim Rauszoomen – war es
-      // totes Schwarz. Ein passender Grundton dahinter verhindert das.
-      const bg =
-        night2                               ? 0x0d131d :
-        /fog/.test(cond2)                    ? 0xb9c2ca :
-        // Gewitter deutlich bedrohlicher als ein normaler Regentag
-        /pouring|storm|lightning/.test(cond2)? 0x1a1e29 :
-        /rain/.test(cond2)                   ? 0x5a636e :
-        /snow|sleet|hail/.test(cond2)        ? 0xc6d2de :
-        /cloudy/.test(cond2)                 ? 0x9fb0c0 :
-                                               0x87ceeb;
-      sc.setBackdrop(bg);
-      // Nebelfarbe exakt auf den Hintergrund ziehen, sonst zeichnet sich
-      // der Horizont als harte Kante ab statt weich auszulaufen.
-      // Nebelfarbe am HIMMEL ausrichten, nicht am Hintergrund. Mit dem
-      // dunklen Hintergrundton faerbte der Nebel jedes entfernte Objekt
-      // fast schwarz, waehrend der Himmel (fog:false) hell blieb – daher
-      // die pechschwarzen Silhouetten.
-      const fogCol =
-        night2                               ? 0x1a2334 :
-        /pouring|storm|lightning/.test(cond2)? 0x5a6678 :
-        /rain/.test(cond2)                   ? 0x6b7681 :
-        /snow|sleet|hail/.test(cond2)        ? 0xc3ced9 :
-                                               bg;
-      if (fog) sc.setFog(fogCol, fog[1]); else sc.setFog(0, 0);
-    }
-
-    // ── Wetterkulisse auf dem Canvas hinter der Szene ──────────────────
-    // Die gesamte 2D-Kulisse samt Wolken, Gestirn und Temperatur wird
-    // wiederverwendet: sie kann bereits in einen fremden Kontext zeichnen
-    // (iso-Modus, ohne Raeume auszustanzen). Das Gebaeude steht davor,
-    // weil der WebGL-Renderer transparent ist.
-    const wx = this.shadowRoot.getElementById("wx");
-    if (wx) {
-      const cw = this._canvasCssW || wx.clientWidth || 1;
-      const ch = this._canvasCssH || wx.clientHeight || 1;
-      const wdpr = Math.min(window.devicePixelRatio || 1, 2);
-      if (wx.width !== Math.round(cw * wdpr) || wx.height !== Math.round(ch * wdpr)) {
-        wx.width = Math.round(cw * wdpr);
-        wx.height = Math.round(ch * wdpr);
-      }
-      const wctx = wx.getContext("2d");
-      wctx.setTransform(1, 0, 0, 1, 0, 0);
-      wctx.clearRect(0, 0, wx.width, wx.height);
-      if (sc.dome) {
-        const cond = this._weatherState()?.condition;
-        sc.setSkyWeather(cond);
-        // Gestirn gehoert in die Kuppel: sie ist opak und wuerde ein
-        // Canvas dahinter vollstaendig verdecken.
-        sc.dome.setCenter(sc.center);
-        // Kuppel an die Szene koppeln: beim Rauszoomen wird sie als
-        // Kugel sichtbar, beim Hineinzoomen steht man darin.
-        sc.dome.setScale(sc.span);
-        sc.dome.setBody(this._moonPhase(), this._isDark(), sc.span);
-        // Wolken und Niederschlag als echte Objekte in der Szene, sonst
-        // waere Regen nur in 2D zu sehen.
-        sc.dome.setSceneWeather(cond, sc.span || 12);
-        sc.dome.setGround(sc.span || 12, this._isDark());
-        // Nachbarschaft: Strassen, Haeuser, Baeume. Deterministisch aus
-        // dem Grundriss, damit sie nicht bei jedem Neuaufbau umspringt.
-        sc.setNeighborhood(this._opts?.neighborhood !== false, cond,
-                           this._isDark(), this._opts?.hood_seed || 1337);
-        sc.dome.animate(Date.now() / 1000);
-      }
-      // Die Kulisse wird auch mit Kuppel gezeichnet: sie traegt Gestirn,
-      // Wolken, Niederschlag und die Temperatur. Nur der Himmelsverlauf
-      // entfaellt, den liefert dann die Kuppel.
-      if (this._opts?.show_weather && this._weatherState() && !sc.dome) {
-        sc.setSky(null);                     // ohne Kuppel: Himmel von hier
-        wctx.save();
-        wctx.scale(wdpr, wdpr);
-        try {
-          this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx: wctx });
-        } catch (e) {
-          if (!this._wxErr) { this._wxErr = true; console.warn("BLE Positioning: Wetter-Kulisse", e); }
-        }
-        wctx.restore();
-      } else if (!sc.dome) {
-        sc.setSky("#e9ecef");                // ohne Wetter ein neutraler Himmel
-      }
-    }
-
-    // Umgebung nur bei Aenderung neu erzeugen – der PMREM-Durchlauf ist
-    // zu teuer fuer jedes Bild, aber zu billig fuer einen Szenenneubau.
-    const ekey = (this._opts?.env_preset || "studio") + "|" + (this._opts?.env_url || "");
-    if (ekey !== this._glEnvKey) {
-      sc.setEnvironment(this._opts?.env_preset || "studio", this._opts?.env_url || null);
-      this._glEnvKey = ekey;
-    }
-
-    // Lampen getrennt aktualisieren: Farbe und Helligkeit wechseln oft,
-    // ein Neuaufbau der Szene dafür wäre Verschwendung.
-    const lamps = (this._data?.lights || []).map(l => {
-      const st = l.entity ? this._hass?.states?.[l.entity] : null;
-      const a  = st?.attributes || {};
-      // Auch Lichter liegen in mx/my/mz.
-      // Farbe: HA meldet je nach Lampe rgb_color, hs_color, xy_color,
-      // color_temp_kelvin oder color_temp in Mired. Nur zwei davon zu
-      // lesen heisst, dass die meisten Lampen immer gleich aussehen.
-      let rgb = a.rgb_color || l.rgb || null;
-      if (!rgb && Array.isArray(a.hs_color) && a.hs_color.length === 2) {
-        rgb = this._hsToRgb(a.hs_color[0], a.hs_color[1]);
-      }
-      let kelvin = a.color_temp_kelvin || null;
-      // color_temp ist in Mired: Kelvin = 1e6 / Mired
-      const mired = a.color_temp ?? l.color_temp;
-      if (!kelvin && mired) kelvin = Math.round(1e6 / mired);
-      return {
-        entity: l.entity, x: l.mx ?? l.x, y: l.my ?? l.y, z: l.mz ?? l.z,
-        on: st ? st.state === "on" : !!l.on,
-        brightness: a.brightness ?? (l.brightness ?? 255),
-        rgb, kelvin,
-      };
-    });
-    const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));
-    if (lkey !== this._glLightKey) { sc.updateLights(lamps); this._glLightKey = lkey; }
-
-    // Lampen anklickbar machen: Position auf dem Bildschirm merken.
-    // Ein Raycaster waere genauer, aber die Lampen sind kleine Kugeln –
-    // ein Radius um den projizierten Punkt trifft besser.
-    this._glLampHits = lamps.filter(l => l.x != null && l.y != null).map(l => {
-      const p = sc.projectToScreen(l.x, l.y, l.z ?? ((this._wallHeight ?? 2.5) - 0.35));
-      return { entity: l.entity, x: p.x, y: p.y, r: 16 };
-    });
-
-    // Personen wandern staendig – eigener, billiger Pfad ohne Neuaufbau.
-    // Quelle sind die getrackten Geraete aus _data.devices; mmWave liefert
-    // zusaetzlich eine Haltung, BLE allein nicht.
-    const people = (this._data?.devices || [])
-      .filter(dv => dv.x != null && dv.y != null && dv.present !== false)
-      .map((dv, i) => ({
-        id: dv.id || dv.mac || dv.name || ("dev" + i),
-        x: dv.x, y: dv.y, z: dv.z,
-        posture: dv.posture || dv.pose || "standing",
-        heading: dv.heading ?? dv.angle,
-        color: dv.color,
-      }));
-    sc.updatePeople(people);
-
-    // setView aktualisiert auch, was die Sicht verstellt – muss also nach
-    // dem Aufbau der Nachbarschaft laufen.
-    sc.setView(this._3dAzimuth ?? 45, this._3dElevation ?? 30, this._3dZoom ?? 1);
-    sc.render();
-
-    // ── Overlays auf dem 2D-Canvas darueber ────────────────────────────
-    // Musik-Bubbles inklusive Steuerleiste und Treffer-Zonen laufen
-    // unveraendert weiter; sie bekommen nur die Projektion der 3D-Kamera
-    // statt der eigenen. Neu bauen waere doppelte Arbeit.
-    const ctx2 = this._ctx;
-    if (ctx2 && this._canvas) {
-      ctx2.setTransform(1, 0, 0, 1, 0, 0);
-      ctx2.clearRect(0, 0, this._canvas.width, this._canvas.height);
-      const dpr = this._canvasCssW ? (this._canvas.width / this._canvasCssW) : 1;
-      // Treffer-Zonen werden in physischen Pixeln abgelegt, der Kontext
-      // rechnet hier in CSS-Pixeln – derselbe Faktor wie im Canvas-3D.
-      this._3dCtxScale = dpr;
-      ctx2.save();
-      ctx2.scale(dpr, dpr);
-      try {
-        const glProject = (x, y, z) => sc.projectToScreen(x, y, z);
-        if (this._opts?.show_music_bubble) {
-          this._drawMusicBubbles3D(glProject, sc.screenUnitPx());
-        }
-      } catch (e) {
-        if (!this._glOverlayErr) {
-          this._glOverlayErr = true;
-          console.warn("BLE Positioning: Overlay ueber WebGL fehlgeschlagen", e);
-        }
-      }
-      ctx2.restore();
-    }
-    return true;
-  }
-
-  /* Wrapper: sichert den Canvas-Transform-Stack ab. Fliegt beim Zeichnen
-     eine Ausnahme, wird das ctx.restore() am Ende nie erreicht – dann
-     stapelt sich pro Frame eine weitere Skalierung und das Bild zoomt
-     endlos nach oben links weg. Genau das ist in 5.0.0 passiert. */
   _draw3DScene(ctx, rooms, doors, windows, lights, devices) {
-    const depth = typeof ctx.getTransform === "function" ? ctx.getTransform() : null;
-    try {
-      return this._draw3DSceneInner(ctx, rooms, doors, windows, lights, devices);
-    } catch (err) {
-      if (!this._3dErrLogged) {
-        this._3dErrLogged = true;
-        console.error("BLE Positioning: Fehler in der 3D-Szene", err);
-      }
-      // Transform auf den Stand vor dem Aufruf zurücksetzen
-      if (depth) { ctx.setTransform(depth); }
-      else { ctx.setTransform(1, 0, 0, 1, 0, 0); }
-      return undefined;
-    }
-  }
-
-  _draw3DSceneInner(ctx, rooms, doors, windows, lights, devices) {
     if (!ctx || !rooms) return;
     // Texturen laden/aktualisieren
     this._loadTextures();
@@ -20310,16 +18506,7 @@ trigger:
     // Canvas-Kontext auf CSS-Pixel skalieren (HiDPI/Retina Fix)
     // Alle Koordinaten arbeiten dann in CSS-Pixel, Canvas-Auflösung ist dpr-fach höher
     ctx.save();
-    // Nicht blind mit dpr skalieren: adaptive_resolution setzt die Canvas
-    // auf cssW * dpr * scale (Nacht 0.75, Screensaver 0.5). Mit fester
-    // dpr-Annahme wird dann alles um 1/scale zu gross gezeichnet und
-    // waechst nach oben links aus dem Bild. Der echte Faktor ergibt sich
-    // aus der Canvas selbst.
-    const effX = this._canvasCssW ? (this._canvas.width  / this._canvasCssW) : dpr;
-    const effY = this._canvasCssH ? (this._canvas.height / this._canvasCssH) : dpr;
-    ctx.scale(effX, effY);
-    // Fuer Treffer-Zonen: _canvasXY misst in physischen Canvas-Pixeln
-    this._3dCtxScale = effX;
+    ctx.scale(dpr, dpr);
     const cw  = this._canvasCssW || (this._canvas.width  / dpr);
     const ch  = this._canvasCssH || (this._canvas.height / dpr);
     const fw  = this._data?.floor_w || 10;
@@ -20333,30 +18520,11 @@ trigger:
     const az  = ((this._3dAzimuth  ?? 45) * Math.PI) / 180;
     const el  = ((this._3dElevation ?? 30) * Math.PI) / 180;
 
-    // World center und Maßstab richten sich nach den tatsächlich bebauten
-    // Räumen, nicht nach floor_w/floor_h. Ist das Grundstück deutlich
-    // größer als die Bebauung, schrumpft das Gebäude sonst auf einen
-    // Bruchteil der Fläche und wirkt detailarm.
-    let bx1 = Infinity, by1 = Infinity, bx2 = -Infinity, by2 = -Infinity;
-    (rooms || []).forEach(r => {
-      if (r.x1 == null || r.x2 == null) return;
-      bx1 = Math.min(bx1, r.x1, r.x2); bx2 = Math.max(bx2, r.x1, r.x2);
-      by1 = Math.min(by1, r.y1, r.y2); by2 = Math.max(by2, r.y1, r.y2);
-    });
-    let wcx = fw / 2, wcy = fh / 2, spanW = fw, spanH = fh;
-    if (isFinite(bx1) && bx2 > bx1 && by2 > by1) {
-      const pad = 0.6;                       // etwas Luft um die Bebauung
-      const rw = (bx2 - bx1) + pad * 2, rh = (by2 - by1) + pad * 2;
-      // Nur umschalten, wenn die Bebauung spürbar kleiner ist als das
-      // Grundstück – sonst bleibt das gewohnte Verhalten erhalten.
-      if (rw * rh < fw * fh * 0.72) {
-        wcx = (bx1 + bx2) / 2; wcy = (by1 + by2) / 2;
-        spanW = rw; spanH = rh;
-      }
-    }
+    // World center: middle of floor plan
+    const wcx = fw / 2, wcy = fh / 2;
 
     // Unit scale: fit floor into canvas – auf Hochformat (Portrait) mehr Breite nutzen
-    const diag   = Math.sqrt(spanW*spanW + spanH*spanH);
+    const diag   = Math.sqrt(fw*fw + fh*fh);
     const isPortrait = ch > cw * 1.2;
     const fitBase = isPortrait ? (cw * 0.92 * zoom) : (Math.min(cw, ch) * 0.82 * zoom);
     const unitPx = fitBase / diag;
@@ -20393,9 +18561,6 @@ trigger:
     // ── Background ───────────────────────────────────────────────────────────
     ctx.fillStyle = TH.bg;
     ctx.fillRect(0, 0, cw, ch);
-    // Wetter-Kulisse als Himmel hinter der Szene. Ohne Ausstanzen: die
-    // Räume werden gleich darüber gezeichnet und verdecken sie von selbst.
-    this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx });
 
     // ── Draufsicht-Theme: Grundriss-Bild als isometrischer Boden ────────────
     if (TH.floorplanMode && this._bgLoaded && this._bgImg?.complete) {
@@ -20447,40 +18612,8 @@ trigger:
       ctx.restore();
     }
 
-    // ── Sockelplatte (Studio-Theme) ────────────────────────────────────────
-    // Das Gebäude steht auf einer hellen Platte und wirft einen Schatten
-    // darauf, statt über einem Raster zu schweben.
-    if (TH.basePlate) {
-      const m  = TH.basePlate.margin ?? 0.8;
-      const bp = [project(-m,-m,0), project(fw+m,-m,0),
-                  project(fw+m,fh+m,0), project(-m,fh+m,0)];
-      // Schlagschatten nach rechts unten, Licht kommt von oben links.
-      // shadowBlur statt ctx.filter: letzteres fehlt in älteren
-      // iOS-WebViews, also auch in der Companion App.
-      const sOff = Math.max(3, unitPx * 0.13);
-      ctx.save();
-      ctx.shadowColor   = TH.basePlate.shadow;
-      ctx.shadowBlur    = Math.max(6, unitPx * 0.3);
-      ctx.shadowOffsetX = sOff;
-      ctx.shadowOffsetY = sOff * 0.6;
-      ctx.fillStyle = TH.basePlate.fill;
-      ctx.beginPath();
-      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
-      ctx.closePath(); ctx.fill();
-      ctx.restore();
-
-      ctx.fillStyle = TH.basePlate.fill;
-      ctx.beginPath();
-      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = TH.basePlate.edge;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-
-    // Floor grid – im Studio-Theme liegt eine glatte Platte statt Raster
+    // Floor grid
     const gridStep = TH.grid.step || 1;
-    if (!TH.hideGrid) {
     ctx.strokeStyle = TH.grid.color;
     ctx.lineWidth   = TH.grid.width || 0.5;
     for (let x = 0; x <= fw; x += gridStep) {
@@ -20490,7 +18623,6 @@ trigger:
     for (let y = 0; y <= fh; y += gridStep) {
       const a = project(0, y, 0), b = project(fw, y, 0);
       ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
-    }
     }
     // Sekundäres Grid (Neon-Theme bei 0.5-Schritt)
     if (TH.grid.secondary) {
@@ -20594,20 +18726,12 @@ trigger:
       // Floor – mit Textur oder Theme-Farbe
       const floorPat = this._texPattern(ctx, "floor", unitPx * 0.5);
       if (floorPat) {
-        const poly = () => { ctx.beginPath();
-          f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); };
         ctx.save();
-        // Grundton des Themes zuerst: sonst bestimmt allein die Raumfarbe,
-        // wie hell der Boden wirkt, und zwei Raeume bekommen sichtbar
-        // verschiedene Boeden statt eines durchgehenden Belags.
-        if (TH.floorBase) { ctx.fillStyle = TH.floor(rr,gg,bb,wallAlpha); poly(); ctx.fill(); }
         ctx.fillStyle = floorPat;
-        ctx.globalAlpha = TH.floorBase ? 0.5 : 0.82;
-        poly(); ctx.fill();
-        ctx.globalAlpha = 1;
-        // Raumfarbe nur noch als Hauch, Staerke kommt aus dem Theme
-        const tint = TH.floorTint != null ? TH.floorTint : 0.18;
-        if (tint > 0) { ctx.fillStyle = `rgba(${rr},${gg},${bb},${tint})`; poly(); ctx.fill(); }
+        ctx.globalAlpha = 0.82;
+        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = `rgba(${rr},${gg},${bb},0.18)`;
+        ctx.beginPath(); f.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y)); ctx.closePath(); ctx.fill();
         ctx.restore();
       } else {
         // Realistischer Boden: Canvas-generierte Parkett/Fliesen-Textur
@@ -20674,32 +18798,6 @@ trigger:
             wallMidX >= rr2.x1 - 0.1 && wallMidX <= rr2.x2 + 0.1 &&
             wallMidY >= rr2.y1 - 0.1 && wallMidY <= rr2.y2 + 0.1
           );
-
-          // ── Wandvolumen: Krone und Außenseite (Studio-Theme) ──────────
-          // Ohne Dicke wirken Wände wie Pappe. Die Oberseite ist der
-          // Effekt, der ein Rendering wie ein gebautes Modell aussehen
-          // lässt. Nur an Außenwänden, innen stoßen die Räume aneinander.
-          const wd = TH.wallDepth || 0;
-          if (wd > 0 && isOuterWall) {
-            const c0 = corners[w.bi[0]], c1 = corners[w.bi[1]];
-            const ox = w.nx * wd, oy = w.ny * wd;
-            const to0 = project(c0[0] + ox, c0[1] + oy, h);
-            const to1 = project(c1[0] + ox, c1[1] + oy, h);
-            const bo0 = project(c0[0] + ox, c0[1] + oy, 0);
-            const bo1 = project(c1[0] + ox, c1[1] + oy, 0);
-            // Außenfläche
-            ctx.fillStyle = TH.wall(rr,gg,bb,1,Math.min(1,brightness+0.12),true);
-            ctx.beginPath();
-            [bo0, bo1, to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-            ctx.closePath(); ctx.fill();
-            // Krone, am hellsten weil sie zum Licht zeigt
-            ctx.fillStyle = TH.wall(rr,gg,bb,1,1.0,true);
-            ctx.beginPath();
-            [t[w.ti[0]], t[w.ti[1]], to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-            ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = TH.edge(rr,gg,bb); ctx.lineWidth = 0.7;
-            ctx.stroke();
-          }
 
           const texKey = isOuterWall ? "wall_outer" : "wall_inner";
           const wallPat = this._texPattern(ctx, texKey, unitPx * 0.4);
@@ -21028,21 +19126,6 @@ trigger:
         // Bottom rail highlight
         ctx.strokeStyle="rgba(180,180,200,0.8)"; ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
-        // ── Fährt gerade? Pfeile laufen die Bahn entlang ──────────
-        const _mot3 = this._opts?.cover_motion !== false
-          ? this._coverMotion(win.cover_entity) : null;
-        if (_mot3) {
-          const _acc3 = _mot3.dir > 0 ? "#f59e0b" : "#38bdf8";
-          const _mt = project(wmx, wmy, zTop);
-          const _mb = project(wmx, wmy, rolloZ);
-          this._drawMotionChevrons(ctx, _mt.x, _mt.y, _mb.x, _mb.y, _mot3.dir, _acc3);
-          // Laufende Kante hervorheben
-          const _p3 = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
-          ctx.save();
-          ctx.strokeStyle = _acc3; ctx.globalAlpha = _p3; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
-          ctx.restore();
-        }
       }
 
       // ── Label ──
@@ -21666,7 +19749,7 @@ trigger:
       await this._loadData();
       this._showToast("✓ Info-Sensoren gespeichert");
     } catch(e) {
-      this._showToast("✗ " + this._errText(e));
+      this._showToast("✗ " + (e?.body?.message || e?.message || e));
     }
     this._rebuildSidebar();
   }
@@ -21899,9 +19982,6 @@ trigger:
 // ── Register ──────────────────────────────────────────────────────────────
 // Inline-Module registrieren (Registry + Klassen jetzt vollständig)
 _registerInlineModules();
-// KEIN Preload hier: auf Modulebene existiert noch keine Card, und die
-// Module greifen beim Initialisieren auf deren _opts zu. Das Vorladen
-// passiert in connectedCallback, sobald die Optionen stehen.
 
 if (!customElements.get("ble-positioning-card")) {
   customElements.define("ble-positioning-card", BLEPositioningCard);
