@@ -12,7 +12,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ElektroModul = {
-  id:"elektro", name:"Elektro", icon:"\uD83D\uDD0C", tabId:"elektro", version: "4.4.2",
+  id:"elektro", name:"Elektro", icon:"\uD83D\uDD0C", tabId:"elektro", version: "4.4.9",
   description:"Baukasten \u00B7 Multi-Forecast \u00B7 Wetter \u00B7 Drag&Drop",
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -63,6 +63,9 @@ const ElektroModul = {
   // ── Lifecycle ─────────────────────────────────────────────────────────────
   init(card){
     this._card=card;
+    this._lastWeatherLoad=0; // sicherstellen dass erster Aufruf sofort läuft
+    // Wetter sofort laden ohne auf den ersten Poll zu warten
+    setTimeout(()=>this._refreshData(card).catch(()=>{}), 800);
     this._systems=card._opts?.elektro_v4_systems||[{id:"sys1",name:"Wohnung",nodes:[],wires:[],autos:[],cfg:{}}];
     this._activeSystem=card._opts?.elektro_v4_active||0;
     this._loadSystem(card);
@@ -81,7 +84,7 @@ const ElektroModul = {
     return {
       id:"fp_"+Date.now(),
       name:"Solar Forecast",
-      x:0.02,y:0.02,w:0.96,h:0.20,
+      x:0.02,y:0.02,w:0.96,h:0.15,
       visible:true,
       sources:[
         {id:"src_1",name:"Haupt-Anlage",color:"#fbbf24",
@@ -114,11 +117,11 @@ const ElektroModul = {
 
   _createDefaultLayout(){
     this._nodes=[
-      {id:"solar1",type:"solar",   x:0.35,y:0.28,w:60,h:60,label:"Solar",   entity:"",sensorKey:"solar_power"},
-      {id:"mppt1", type:"mppt",    x:0.35,y:0.48,w:52,h:52,label:"MPPT",    entity:"",sensorKey:""},
-      {id:"batt1", type:"battery", x:0.18,y:0.70,w:70,h:46,label:"Batterie",entity:"",sensorKey:""},
-      {id:"inv1",  type:"inverter",x:0.52,y:0.70,w:52,h:52,label:"WR",      entity:"",sensorKey:""},
-      {id:"house1",type:"house",   x:0.72,y:0.70,w:65,h:65,label:"Haus",    entity:"",sensorKey:""},
+      {id:"solar1",type:"solar",   x:0.25,y:0.35,w:52,h:52,label:"Solar",   entity:"",sensorKey:"solar_power"},
+      {id:"mppt1", type:"mppt",    x:0.25,y:0.58,w:46,h:46,label:"MPPT",    entity:"",sensorKey:""},
+      {id:"batt1", type:"battery", x:0.12,y:0.78,w:58,h:38,label:"Batterie",entity:"",sensorKey:""},
+      {id:"inv1",  type:"inverter",x:0.45,y:0.78,w:46,h:46,label:"WR",      entity:"",sensorKey:""},
+      {id:"house1",type:"house",   x:0.68,y:0.72,w:52,h:52,label:"Haus",    entity:"",sensorKey:""},
     ];
     this._wires=[
       {id:"w1",from:"solar1",to:"mppt1", sensorKey:"",label:""},
@@ -332,7 +335,13 @@ const ElektroModul = {
     }
 
     // Forecast-Panels (Hintergrund-Layer zuerst)
-    this._fPanels.filter(p=>p.visible).forEach(p=>this._drawForecastPanel(ctx,p,W,H,dpr,t,card));
+    // Forecast-Panels: auf kleinen Screens (Handy) automatisch kompakter
+    const _isSmallScreen=(W/dpr)<600||(H/dpr)<400;
+    this._fPanels.filter(p=>p.visible).forEach(p=>{
+      // Auf kleinen Screens Panel auf max 15% Höhe begrenzen
+      const adjustedPanel=_isSmallScreen&&p.h>0.15?{...p,h:0.15}:p;
+      this._drawForecastPanel(ctx,adjustedPanel,W,H,dpr,t,card);
+    });
 
     // Power-Skala
     this._drawPowerScale(ctx,vals,W,H,dpr);
@@ -355,7 +364,8 @@ const ElektroModul = {
     // Status-Bar
     const runCount=this._autos.filter(a=>a.enabled!==false&&this._evalAuto(a,vals,card._hass,card._opts?.elektro_v4_cfg||{})).length;
     ctx.fillStyle="rgba(7,10,16,0.92)"; ctx.fillRect(0,0,W,20*dpr);
-    ctx.font=`${6.5*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle="#445566"; ctx.textAlign="left";
+    const _fs=Math.min(6.5,(W/dpr)/100)*dpr;
+    ctx.font=`${_fs}px 'JetBrains Mono',monospace`; ctx.fillStyle="#445566"; ctx.textAlign="left";
     ctx.fillText(`\u2600${vals.solarW.toFixed(0)}W  \uD83D\uDD0B${vals.battPct.toFixed(0)}%  \u26A1+${vals.surplus.toFixed(0)}W  \u25C6${runCount}/${this._autos.length}  \uD83C\uDFE0${this._haAutos.filter(a=>a.state==="on").length}/${this._haAutos.length} HA`,10*dpr,13*dpr);
   },
 
@@ -652,7 +662,7 @@ _drawForecastPanorama(ctx,panel,px,py,pw,ph,dpr,t,card,src){
     }
   }
 
-  // Forecast-Kurve
+  // ── Prognose-Kurve (Gauss, Anlagen-Farbe = gold) ─────────────────────
   ctx.beginPath(); let started=false;
   for(let h=H0;h<=H1;h+=0.15){
     const gx=px+(h-H0)/(nHours-1)*pw;
@@ -661,7 +671,40 @@ _drawForecastPanorama(ctx,panel,px,py,pw,ph,dpr,t,card,src){
   }
   ctx.strokeStyle=srcColor; ctx.lineWidth=2*dpr; ctx.lineJoin='round'; ctx.stroke();
 
-  // Ist-Wert-Kurve (aus actual_w Entity)
+  // ── Ist-Verlaufskurve (grau, aus stündlichen HA-Daten / actual_w) ────
+  // Baut eine Kurve aus vergangenen Stunden auf Basis actual_w + hourlyFc
+  {
+    const pastPoints=[];
+    for(let h=H0;h<nowH&&h<=H1;h+=0.5){
+      // Nutze stündlichen HA-Forecast als "gemessene" Basis (condition + echte Leistung)
+      const fEntry=hourlyFc.find(f=>f.datetime&&Math.abs(new Date(f.datetime).getHours()-Math.floor(h))<1);
+      let kwh=null;
+      if(h>=nowH-0.6&&fc.actual_w){
+        // Aktuelle Stunde: echter Messwert
+        kwh=parseFloat(fc.actual_w)/1000;
+      } else if(fEntry?.precipitation!=null){
+        // Vergangene Stunden: schätze aus Gauss * Bewölkungskorrektur
+        const cloudFactor=fEntry.cloud_coverage!=null?Math.max(0.1,1-fEntry.cloud_coverage/100):1;
+        kwh=gauss(h)*cloudFactor;
+      } else {
+        kwh=gauss(h)*0.85; // default 85% der Prognose
+      }
+      if(kwh!=null)pastPoints.push({h,kwh});
+    }
+    if(pastPoints.length>1){
+      ctx.beginPath();started=false;
+      pastPoints.forEach(({h,kwh})=>{
+        const gx=px+(h-H0)/(nHours-1)*pw;
+        const gy=barBase-(Math.max(0,kwh)/maxKwh)*barArea;
+        if(!started){ctx.moveTo(gx,gy);started=true;}else ctx.lineTo(gx,gy);
+      });
+      ctx.strokeStyle='rgba(148,163,184,0.7)'; // grau wie im Konzept
+      ctx.lineWidth=1.5*dpr; ctx.lineJoin='round';
+      ctx.setLineDash([4*dpr,3*dpr]); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  // ── Ist-Punkt jetzt (grüner Kreis + Wattangabe) ───────────────────────
   if(fc.actual_w){
     const actualW=parseFloat(fc.actual_w)||0;
     const actualKwh=actualW/1000;
@@ -973,38 +1016,80 @@ _parsePeakHour(val){
   if(!val)return 13;
   if(typeof val==='number')return val;
   if(typeof val==='string'){
-    if(val.includes('T'))try{return new Date(val).getHours();}catch(e){return 13;}
-    const m=val.match(/(\d{1,2}):/);if(m)return parseInt(m[1]);
-    const n=parseFloat(val);if(!isNaN(n))return n;
+    // ISO-Datetime: "2026-03-22T10:00:00+00:00" → lokale Stunde
+    if(val.includes('T')){
+      try{
+        const d=new Date(val);
+        if(!isNaN(d.getTime()))return d.getHours()+d.getMinutes()/60;
+      }catch(e){}
+    }
+    // "10:30" → 10.5
+    const m=val.match(/^(\d{1,2}):(\d{2})/);
+    if(m)return parseInt(m[1])+parseInt(m[2])/60;
+    // reine Zahl "13"
+    const n=parseFloat(val);
+    if(!isNaN(n)&&n>=0&&n<=24)return n;
   }
   return 13;
 },
 
   _drawPowerScale(ctx,vals,W,H,dpr){
-    const sx=8*dpr,sy=28*dpr,sw=22*dpr,sh=H-48*dpr;
-    ctx.fillStyle="#0d1219";ctx.strokeStyle="#1c2535";ctx.lineWidth=1;
-    ctx.beginPath();ctx.roundRect(sx,sy,sw,sh,4);ctx.fill();ctx.stroke();
+    // Breite skaliert mit Canvas-Breite (mobil schmaler, Desktop breiter)
+    const minW=32*dpr, maxW=52*dpr;
+    const sw=Math.max(minW,Math.min(maxW,W*0.055));
+    const sx=6*dpr, sy=32*dpr, sh=H-54*dpr;
+
+    // Hintergrund
+    ctx.fillStyle="#0a1018"; ctx.strokeStyle="#1c2535"; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.roundRect(sx,sy,sw,sh,5); ctx.fill(); ctx.stroke();
+
     const total=Math.max(vals.solarW,1);
     const segs=[
-      {label:"Ubers.",w:vals.surplus,color:"#fbbf24"},
-      {label:"Akku",  w:Math.max(0,vals.battW),color:"#22c55e"},
-      {label:"Last",  w:Math.max(0,vals.loadW-vals.surplus),color:"#38bdf8"},
-      {label:"Rest",  w:Math.max(0,total-vals.surplus-Math.max(0,vals.battW)-Math.max(0,vals.loadW)),color:"#334155"},
+      {label:"Überschuss", short:"Übers.", w:vals.surplus,           color:"#fbbf24"},
+      {label:"Akku laden", short:"Akku",   w:Math.max(0,vals.battW), color:"#22c55e"},
+      {label:"Verbrauch",  short:"Last",   w:Math.max(0,vals.loadW-vals.surplus), color:"#38bdf8"},
+      {label:"Rest",       short:"Rest",   w:Math.max(0,total-vals.surplus-Math.max(0,vals.battW)-Math.max(0,vals.loadW)), color:"#334155"},
     ].filter(s=>s.w>0);
+
     let yOff=0;
     segs.forEach(seg=>{
-      const frac=Math.min(1,seg.w/total),segH=frac*sh;
-      ctx.fillStyle=seg.color+"bb";ctx.beginPath();ctx.roundRect(sx+1,sy+yOff+1,sw-2,Math.max(2,segH-2),2);ctx.fill();
-      if(segH>14*dpr){ctx.font=`${5.5*dpr}px monospace`;ctx.fillStyle=seg.color;ctx.textAlign="center";ctx.fillText(seg.label,sx+sw/2,sy+yOff+segH/2+2*dpr);if(segH>22*dpr){ctx.font=`bold ${5.5*dpr}px monospace`;ctx.fillText(`${seg.w.toFixed(0)}W`,sx+sw/2,sy+yOff+segH/2+10*dpr);}}
+      const frac=Math.min(1,seg.w/total), segH=frac*sh;
+      // Segment-Füllung mit Gradient-Effekt
+      const g=ctx.createLinearGradient(sx,0,sx+sw,0);
+      g.addColorStop(0,seg.color+"99"); g.addColorStop(1,seg.color+"dd");
+      ctx.fillStyle=g;
+      ctx.beginPath(); ctx.roundRect(sx+1,sy+yOff+1,sw-2,Math.max(2,segH-2),3); ctx.fill();
+      // Label: kurz wenn wenig Platz
+      if(segH>14*dpr){
+        const lbl=segH>28*dpr?seg.label:seg.short;
+        ctx.font=`bold ${Math.max(5,Math.min(7,sw*0.18))*dpr}px monospace`;
+        ctx.fillStyle=seg.color; ctx.textAlign="center";
+        ctx.fillText(lbl,sx+sw/2,sy+yOff+segH/2+(segH>22*dpr?-3:2)*dpr);
+        if(segH>24*dpr){
+          ctx.font=`${Math.max(5,Math.min(6.5,sw*0.16))*dpr}px monospace`;
+          const wStr=seg.w>=1000?`${(seg.w/1000).toFixed(1)}kW`:`${seg.w.toFixed(0)}W`;
+          ctx.fillText(wStr,sx+sw/2,sy+yOff+segH/2+9*dpr);
+        }
+      }
       yOff+=segH;
     });
-    ctx.font=`${6*dpr}px monospace`;ctx.fillStyle="#f59e0b";ctx.textAlign="center";ctx.fillText(`${total.toFixed(0)}W`,sx+sw/2,sy-5*dpr);
+
+    // Gesamt-Wert oben
+    ctx.font=`bold ${Math.max(6,Math.min(8,sw*0.2))*dpr}px monospace`;
+    ctx.fillStyle="#f59e0b"; ctx.textAlign="center";
+    const totalStr=total>=1000?`${(total/1000).toFixed(1)}kW`:`${total.toFixed(0)}W`;
+    ctx.fillText(totalStr,sx+sw/2,sy-7*dpr);
+    // "Solar"-Label ganz oben
+    ctx.font=`${Math.max(5,Math.min(6,sw*0.15))*dpr}px monospace`;
+    ctx.fillStyle="#445566"; ctx.fillText("Solar",sx+sw/2,sy-16*dpr);
   },
 
   // ── Node zeichnen ─────────────────────────────────────────────────────────
   _drawNode(ctx,node,vals,card,W,H,dpr,t){
     const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;
-    const nx=node.x*W,ny=node.y*H,nw=(node.w||nt.defaultW)*dpr,nh=(node.h||nt.defaultH)*dpr;
+    const nx=node.x*W,ny=node.y*H;
+    const _scale=Math.min(1,Math.min(W/dpr,H/dpr)/500);
+    const nw=(node.w||nt.defaultW)*dpr*_scale,nh=(node.h||nt.defaultH)*dpr*_scale;
     const sel=this._selNode===node||this._connectFrom===node.id;
     const cv=this._getNodeVal(node,vals,card);
     const hass=card?._hass;
@@ -1199,7 +1284,7 @@ _parsePeakHour(val){
     if(this._resizeNode){this._saveSystem(card);this._resizeNode=null;}
   },
 
-  _hitNode(x,y,W,H,dpr){return this._nodes.slice().reverse().find(node=>{const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;const r=(Math.min(node.w||nt.defaultW,node.h||nt.defaultH)/2+4)*dpr;return Math.hypot(x-node.x*W,y-node.y*H)<r;})||null;},
+  _hitNode(x,y,W,H,dpr){const _scale=Math.min(1,Math.min(W/dpr,H/dpr)/500);return this._nodes.slice().reverse().find(node=>{const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;const r=(Math.min(node.w||nt.defaultW,node.h||nt.defaultH)/2+4)*dpr*_scale;return Math.hypot(x-node.x*W,y-node.y*H)<r;})||null;},
   _hitWire(x,y,W,H,dpr){for(const wire of this._wires){const nA=this._nodes.find(n=>n.id===wire.from),nB=this._nodes.find(n=>n.id===wire.to);if(!nA||!nB)continue;const ax=nA.x*W,ay=nA.y*H,bx=nB.x*W,by=nB.y*H;const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy);if(len<1)continue;const tt=Math.max(0,Math.min(1,((x-ax)*dx+(y-ay)*dy)/(len*len)));if(Math.hypot(x-(ax+tt*dx),y-(ay+tt*dy))<10*dpr)return wire;}return null;},
 
   _getSun(){const h=new Date().getHours()+new Date().getMinutes()/60;const rise=6,set=20.5;if(h<rise||h>set)return{up:false,frac:0,alt:0};const frac=(h-rise)/(set-rise);return{up:true,frac,alt:Math.sin(frac*Math.PI)};},
@@ -1394,7 +1479,7 @@ _parsePeakHour(val){
       const valSpan=document.createElement("span");valSpan.textContent=`${s[key]}${unit}`;
       top.innerHTML=`<span>${label}</span>`;top.appendChild(valSpan);
       const sl=document.createElement("input");sl.type="range";sl.min=min;sl.max=max;sl.step=1;sl.value=s[key];sl.style.cssText="width:100%;accent-color:#f59e0b;height:14px";
-      sl.addEventListener("input",()=>{s[key]=parseInt(sl.value);valSpan.textContent=`${s[key]}${unit}`;card._markDirty?.();});
+      sl.addEventListener("input",()=>{s[key]=parseInt(sl.value);valSpan.textContent=`${s[key]}${unit}`;this._runSimCycle(card);card._markDirty?.();});
       row.append(top,sl);return row;
     };
     box.appendChild(mkSlider("Solar","solarW",0,5000,"W"));
@@ -1475,6 +1560,8 @@ _parsePeakHour(val){
       toggleBtn.textContent=isOn?"AN":"AUS";
       toggleBtn.addEventListener("click",()=>{
         this._simStates[eid]=isOn?"off":"on";
+        // Sofort Automationen neu auswerten (nicht auf nächsten Poll warten)
+        this._runSimCycle(card);
         card._rebuildSidebar?.();card._markDirty?.();
       });
 
@@ -1601,7 +1688,24 @@ _parsePeakHour(val){
     const ci=document.createElement("input");ci.type="number";ci.value=auto.cooldown_min||15;ci.min=1;ci.max=1440;ci.style.cssText="width:40px;padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";ci.addEventListener("input",()=>save("cooldown_min",parseInt(ci.value)||15));
     tr.append(ec,el,Object.assign(document.createElement("span"),{textContent:"Cooldown:",style:"font-size:7px;color:#445566"}),ci,document.createTextNode("min"));div.appendChild(tr);
 
-    const COND={surplus_gt:{label:"Uberschuss > W",icon:"\u26A1",params:["threshold_w"]},surplus_lt:{label:"Uberschuss < W",icon:"\u26A1",params:["threshold_w"]},soc_gt:{label:"Batt > %",icon:"\uD83D\uDD0B",params:["threshold_pct"]},soc_lt:{label:"Batt < %",icon:"\uD83D\uDD0B",params:["threshold_pct"]},watt_gt:{label:"Solar > W",icon:"\u2600",params:["threshold_w"]},watt_lt:{label:"Solar < W",icon:"\u2600",params:["threshold_w"]},time_between:{label:"Uhrzeit zwischen",icon:"\uD83D\uDD50",params:["time_from","time_to"]},entity_on:{label:"Entity AN",icon:"\uD83D\uDCA1",params:["entity"]},entity_off:{label:"Entity AUS",icon:"\uD83D\uDCA1",params:["entity"]},forecast_today_gt:{label:"Forecast heute > kWh",icon:"\uD83D\uDCCA",params:["threshold_kwh"]},forecast_today_lt:{label:"Forecast heute < kWh",icon:"\uD83D\uDCCA",params:["threshold_kwh"]},forecast_tomorrow_gt:{label:"Morgen > kWh",icon:"\uD83D\uDCCA",params:["threshold_kwh"]},weather_is:{label:"Wetter ist...",icon:"\uD83C\uDF24",params:["weather_cond"]}};
+    const COND={
+  surplus_gt:          {label:"Uberschuss > W",       icon:"\u26A1", params:["threshold_w"],   grp:"energie"},
+  surplus_lt:          {label:"Uberschuss < W",       icon:"\u26A1", params:["threshold_w"],   grp:"energie"},
+  soc_gt:              {label:"Batt-SOC > %",         icon:"\uD83D\uDD0B",params:["threshold_pct"], grp:"energie"},
+  soc_lt:              {label:"Batt-SOC < %",         icon:"\uD83D\uDD0B",params:["threshold_pct"], grp:"energie"},
+  watt_gt:             {label:"Solar > W",            icon:"\u2600", params:["threshold_w"],   grp:"energie"},
+  watt_lt:             {label:"Solar < W",            icon:"\u2600", params:["threshold_w"],   grp:"energie"},
+  time_between:        {label:"Uhrzeit zwischen",     icon:"\uD83D\uDD50",params:["time_from","time_to"],grp:"zeit"},
+  entity_on:           {label:"Entity AN",            icon:"\uD83D\uDCA1",params:["entity"],       grp:"entity"},
+  entity_off:          {label:"Entity AUS",           icon:"\uD83D\uDCA1",params:["entity"],       grp:"entity"},
+  entity_state:        {label:"Entity Zustand =",     icon:"\uD83D\uDCCB",params:["entity","compare_value"], grp:"entity"},
+  entity_num_gt:       {label:"Entity (Zahl) > Wert", icon:"\uD83D\uDCCA",params:["entity","compare_value"], grp:"entity"},
+  entity_num_lt:       {label:"Entity (Zahl) < Wert", icon:"\uD83D\uDCCA",params:["entity","compare_value"], grp:"entity"},
+  forecast_today_gt:   {label:"Forecast heute > kWh", icon:"\uD83D\uDCCA",params:["threshold_kwh"], grp:"forecast"},
+  forecast_today_lt:   {label:"Forecast heute < kWh", icon:"\uD83D\uDCCA",params:["threshold_kwh"], grp:"forecast"},
+  forecast_tomorrow_gt:{label:"Morgen > kWh",         icon:"\uD83D\uDCCA",params:["threshold_kwh"], grp:"forecast"},
+  weather_is:          {label:"Wetter ist...",         icon:"\uD83C\uDF24",params:["weather_cond"],  grp:"forecast"},
+};
     const ACT={switch_on:{label:"Schalter AN",icon:"\u2705",params:["entity"]},switch_off:{label:"Schalter AUS",icon:"\u274C",params:["entity"]},switch_toggle:{label:"Toggeln",icon:"\uD83D\uDD04",params:["entity"]},notify:{label:"Benachrichtigung",icon:"\uD83D\uDD14",params:["message"]}};
 
     const ch=document.createElement("div");ch.style.cssText="font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:3px";ch.textContent="WENN";div.appendChild(ch);
@@ -1612,13 +1716,34 @@ _parsePeakHour(val){
       (ct.params||[]).forEach(param=>{
         if(param==="entity"){rb.appendChild(this._mkEntityPicker("Entity",c[param],["switch","sensor","binary_sensor","input_boolean"],v=>{c[param]=v;this._saveSystem(card);},card));}
         else if(param==="weather_cond"){const sel=document.createElement("select");sel.style.cssText="width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px";["sunny","partlycloudy","cloudy","overcast","rainy","snowy","foggy","windy"].forEach(w=>{const o=document.createElement("option");o.value=w;o.textContent=w;if(c[param]===w)o.selected=true;sel.appendChild(o);});sel.addEventListener("change",()=>{c[param]=sel.value;this._saveSystem(card);});rb.appendChild(sel);}
-        else{const pr=document.createElement("div");const pl=document.createElement("div");pl.style.cssText="font-size:6.5px;color:#445566;margin-bottom:1px";pl.textContent={threshold_w:"Ab Watt",threshold_pct:"Ab %",threshold_kwh:"Ab kWh",time_from:"Von (HH:MM)",time_to:"Bis (HH:MM)"}[param]||param;const pi=document.createElement("input");pi.type="text";pi.value=c[param]||"";pi.style.cssText="width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px";pi.addEventListener("input",()=>{c[param]=pi.value.trim();this._saveSystem(card);});pr.append(pl,pi);rb.appendChild(pr);}
+        else{
+          const pr=document.createElement("div");
+          const pl=document.createElement("div");
+          pl.style.cssText="font-size:6.5px;color:#445566;margin-bottom:1px";
+          pl.textContent={
+            threshold_w:"Schwellwert (Watt)",threshold_pct:"Schwellwert (%)",
+            threshold_kwh:"Schwellwert (kWh)",time_from:"Von (HH:MM)",time_to:"Bis (HH:MM)",
+            compare_value:"Vergleichswert"
+          }[param]||param;
+          const pi=document.createElement("input");pi.type="text";pi.value=c[param]||"";
+          pi.placeholder=param==="compare_value"?"z.B. on / off / 22.5":"";
+          pi.style.cssText="width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px";
+          pi.addEventListener("input",()=>{c[param]=pi.value.trim();this._saveSystem(card);});
+          pr.append(pl,pi);rb.appendChild(pr);
+        }
       });
       const db=document.createElement("button");db.style.cssText="width:100%;padding:2px;border-radius:3px;border:1px solid #ef444466;background:transparent;color:#ef4444;font-size:7px;cursor:pointer;margin-top:3px";db.textContent="Entfernen";db.addEventListener("click",()=>{auto.conditions.splice(ci2,1);this._saveSystem(card);card._rebuildSidebar?.();});rb.appendChild(db);div.appendChild(rb);
     });
-    const cs=document.createElement("select");cs.style.cssText="width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px";cs.appendChild(Object.assign(document.createElement("option"),{value:"",textContent:"+ Bedingung\u2026"}));
-    const grpE=document.createElement("optgroup");grpE.label="Energie";const grpF=document.createElement("optgroup");grpF.label="\u2600 Forecast";
-    Object.entries(COND).forEach(([id,ct])=>{const o=document.createElement("option");o.value=id;o.textContent=`${ct.icon} ${ct.label}`;(id.startsWith("forecast")||id==="weather_is"?grpF:grpE).appendChild(o);});cs.append(grpE,grpF);
+    const cs=document.createElement("select");cs.style.cssText="width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px";
+    cs.appendChild(Object.assign(document.createElement("option"),{value:"",textContent:"+ Bedingung hinzuf\u00fcgen\u2026"}));
+    const grpDefs={energie:"\u26A1 Energie",zeit:"\uD83D\uDD50 Zeit",entity:"\uD83D\uDCA1 Eigene Entity",forecast:"\u2600 Forecast & Wetter"};
+    const grps={};
+    Object.entries(grpDefs).forEach(([k,l])=>{const g=document.createElement("optgroup");g.label=l;grps[k]=g;});
+    Object.entries(COND).forEach(([id,ct])=>{
+      const o=document.createElement("option");o.value=id;o.textContent=`${ct.icon} ${ct.label}`;
+      (grps[ct.grp]||grps.energie).appendChild(o);
+    });
+    Object.values(grps).forEach(g=>{if(g.children.length)cs.appendChild(g);});
     cs.addEventListener("change",()=>{if(!cs.value)return;auto.conditions.push({type:cs.value});cs.value="";this._saveSystem(card);card._rebuildSidebar?.();});div.appendChild(cs);
 
     const ah=document.createElement("div");ah.style.cssText="font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:2px";ah.textContent="DANN";div.appendChild(ah);
@@ -1677,11 +1802,41 @@ _parsePeakHour(val){
       case"forecast_today_gt":  return (parseFloat(fc.today)||0)>v;
       case"forecast_today_lt":  return (parseFloat(fc.today)||0)<v;
       case"forecast_tomorrow_gt":return(parseFloat(fc.tomorrow)||0)>v;
-      case"weather_is": return (this._weatherCache?.condition||"").includes(c.weather_cond||"");
+      case"weather_is":     return (this._weatherCache?.condition||"").includes(c.weather_cond||"");
+      case"entity_state":   return (this._getSimState(c.entity,this._card)||"")===(c.compare_value||"");
+      case"entity_num_gt":  return parseFloat(this._getSimState(c.entity,this._card)||0)>parseFloat(c.compare_value||0);
+      case"entity_num_lt":  return parseFloat(this._getSimState(c.entity,this._card)||0)<parseFloat(c.compare_value||0);
       default:return false;
     }
   },
   _runActions(actions,hass,card){const cfg=card._opts?.elektro_v4_cfg||{};const res=s=>s?.replace(/\{\{(\w+)\}\}/g,(_,k)=>cfg[k]||s);actions.forEach(a=>{const eid=res(a.entity);switch(a.type){case"switch_on":if(eid)hass.callService("switch","turn_on",{entity_id:eid}).catch(()=>{});break;case"switch_off":if(eid)hass.callService("switch","turn_off",{entity_id:eid}).catch(()=>{});break;case"switch_toggle":if(eid)hass.callService("switch","toggle",{entity_id:eid}).catch(()=>{});break;case"notify":hass.callService("notify","notify",{message:a.message||""}).catch(()=>{});break;}});},
+
+  // Sofortiger Simulations-Durchlauf (ohne Poll-Wartezeit)
+  _runSimCycle(card){
+    if(!this._simActive||!card?._hass)return;
+    const vals=this._getVals(card);
+    const cfg=card?._opts?.elektro_v4_cfg||{};
+    this._autos.forEach(auto=>{
+      if(auto.enabled===false)return;
+      const met=this._evalAuto(auto,vals,card._hass,cfg);
+      const now=Date.now();
+      // Im Sim-Modus: Cooldown stark reduziert (3 Sekunden statt Minuten)
+      const last=this._lastAutoRun[auto.id]||0;
+      const cd=3000;
+      if(met&&now-last>cd){
+        this._runSimActions(auto.actions||[],card);
+        this._lastAutoRun[auto.id]=now;
+        auto._lastState=true;
+        this._log.unshift({ts:now,name:auto.name,sim:true,
+          vals:{solarW:vals.solarW.toFixed(0),battPct:vals.battPct.toFixed(0)}});
+        if(this._log.length>200)this._log.pop();
+        card._showToast?.(`\u25C6 ${auto.name} [SIM]`);
+      }else if(!met&&auto._lastState){
+        if((auto.actions_else||[]).length)this._runSimActions(auto.actions_else,card);
+        auto._lastState=false;
+      }
+    });
+  },
 
   // Simulierter State einer Entity (sim-Wert hat Vorrang vor echtem HA-State)
   _getSimState(entityId,card){
@@ -1717,10 +1872,19 @@ function _parsePeakHour(val){
   if(!val)return 13;
   if(typeof val==="number")return val;
   if(typeof val==="string"){
-    // ISO-Datetime oder HH:MM
-    if(val.includes("T")){try{return new Date(val).getHours();}catch(e){return 13;}}
-    const m=val.match(/(\d{1,2}):(\d{2})/);if(m)return parseInt(m[1]);
-    const n=parseFloat(val);if(!isNaN(n))return n;
+    // ISO-Datetime: "2026-03-22T10:00:00+00:00" → lokale Stunde
+    if(val.includes("T")){
+      try{
+        const d=new Date(val);
+        if(!isNaN(d.getTime()))return d.getHours()+d.getMinutes()/60;
+      }catch(e){}
+    }
+    // "10:30" → 10.5
+    const m=val.match(/^(\d{1,2}):(\d{2})/);
+    if(m)return parseInt(m[1])+parseInt(m[2])/60;
+    // reine Zahl "13"
+    const n=parseFloat(val);
+    if(!isNaN(n)&&n>=0&&n<=24)return n;
   }
   return 13;
 }
