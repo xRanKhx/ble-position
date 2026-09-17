@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.13.1";
+const CARD_VERSION = "6.13.3";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -25327,6 +25327,31 @@ const MmwaveModul = {
       BLEModuleRegistry.register(MmwaveModul);
       BLEModuleRegistry._loaded["mmwave"] = true;
       BLEModuleRegistry._loadTimes["mmwave"] = 0;
+
+      // Methoden auf die Card legen – das ist der Kern der Integration.
+      // Die mmwave-Funktionen rufen sich gegenseitig ueber this auf, und
+      // this ist beim Rendern die Card. Liegt eine Methode nur am
+      // Modulobjekt, bricht der Aufbau mittendrin ab und die Sidebar
+      // bleibt leer – genau das ist beim Auslagern passiert.
+      if (typeof BLEPositioningCard !== "undefined") {
+        const proto = BLEPositioningCard.prototype;
+        const _base = (typeof BLEModuleBase !== "undefined") ? BLEModuleBase : (window.BLEModuleBase || {});
+        // Schnittstelle des Moduls – die bleibt am Modul und gehoert
+        // nicht auf die Card.
+        const _api = new Set(["draw", "renderSidebar", "isActive", "_getValsForSim"]);
+        for (const k of Object.keys(MmwaveModul)) {
+          if (typeof MmwaveModul[k] !== "function") continue;
+          if (_api.has(k)) continue;
+          // Nichts aus BLEModuleBase: das ist geteilter Code aller Module
+          if (typeof _base[k] === "function") continue;
+          // Nie eine vorhandene Card-Methode ueberschreiben
+          if (proto[k]) continue;
+          // Nach dem Namen zu filtern war zu eng: Helfer wie
+          // _mmwAccordion, _postureIcon oder _wizStep0 heissen anders,
+          // werden aber ueber this aufgerufen und fehlten dadurch.
+          proto[k] = MmwaveModul[k];
+        }
+      }
     }
   } catch (err) {
     console.error("BLE Positioning: mmWave konnte nicht eingebunden werden", err);
