@@ -464,6 +464,11 @@ class BLEFloorCoordinator(DataUpdateCoordinator):
         self.custom_designs = designs
         await self._save_floor_store()
 
+    async def async_update_decos(self, decos: list[dict]) -> None:
+        """Persist decos."""
+        self.decos = decos
+        await self._save_floor_store()
+
     async def async_update_alarms(self, alarms: list[dict]) -> None:
         """Persist alarm sensors."""
         self.alarms = alarms
