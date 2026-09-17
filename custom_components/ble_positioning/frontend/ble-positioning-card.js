@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "4.5.8";
+const CARD_VERSION = "4.5.7";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -5315,14 +5315,9 @@ class BLEPositioningCard extends HTMLElement {
     // Abonniere HA state_changed Events für BLE-Positioning Entities
     this._hass.connection.subscribeEvents((event) => {
       const eid = event.data?.entity_id || "";
-      // BLE-Positioning Entities + Deko-relevante Entities (Media Player, Lights, Switches, Covers)
-      // → Damit Canvas neu gezeichnet wird, wenn TV/Speaker/Lights den Status ändern
-      const isRelevant = eid.includes("ble_position") || eid.includes("mmwave_sensor") ||
-                        eid.includes("media_player") || eid.includes("light") || 
-                        eid.includes("switch") || eid.includes("cover") ||
-                        eid.includes("climate") || eid.includes("sensor");
-      if (!isRelevant) return;
-      // Status geändert → dirty markieren + sofort poll
+      // Nur BLE-Positioning relevante Entities
+      if (!eid.includes("ble_position") && !eid.includes("mmwave_sensor")) return;
+      // Position geändert → dirty markieren + sofort poll
       this._markDirty();
       // Sofort Daten holen (kein Warten auf nächsten Poll-Zyklus)
       this._pollPositions();
