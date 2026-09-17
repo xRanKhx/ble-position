@@ -329,26 +329,36 @@ export class SkyDome {
       // dagegen als geschlossene Wolkendecke.
       const geo = new THREE.PlaneGeometry(1, 1, 1, 1);
       const mat = new THREE.MeshStandardMaterial({
-        color: 0x222730, roughness: 1, metalness: 0, side: THREE.DoubleSide,
-        transparent: true, opacity: 0.9, fog: false,
+        // Kuehles Dunkelgrau. Entscheidend ist envMapIntensity 0: mit
+        // Rauheit 1 spiegelte die Flaeche diffus die Umgebungsmap, und
+        // deren Bodenhaelfte ist warmes Braun – daher der braune Block.
+        color: 0x1a1d24, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+        transparent: true, opacity: 0.88, fog: false,
+        envMapIntensity: 0,
         emissive: 0x000000, emissiveIntensity: 0,
+        // Ohne depthWrite:false blockiert die Decke den Tiefenpuffer und
+        // verdeckt alles, was danach gezeichnet wird.
+        depthWrite: false,
       });
       this._stormLayer = new THREE.Mesh(geo, mat);
       this._stormLayer.rotation.x = -Math.PI / 2;    // waagerecht
       this._stormLayer.frustumCulled = false;
-      this._stormLayer.renderOrder = -1;
+      this._stormLayer.renderOrder = -3;   // ganz hinten, vor der Kuppel
       this.scene.add(this._stormLayer);
     }
     if (this._stormLayer) {
       this._stormLayer.visible = overcast;
       // Weit ausgedehnt und hoch genug, dass die Kante nie ins Bild kommt
-      this._stormLayer.scale.set(extent * 4, extent * 4, 1);
+      // Innerhalb der Kuppel bleiben: eine Flaeche, die darueber
+      // hinausragt, schneidet den Himmel an und wird selbst zur Wand.
+      const rr = (this._radius || 24);
+      this._stormLayer.scale.set(rr * 1.7, rr * 1.7, 1);
       this._stormLayer.position.set(this._center?.x || 0,
-                                    Math.max(26, height * 1.6),
+                                    Math.min(rr * 0.62, Math.max(26, height * 1.4)),
                                     this._center?.z || 0);
       // Bei Schnee heller als bei Gewitter
       this._stormLayer.material.color.setHex(
-        /snow|sleet|hail/.test(c) ? 0x6b7381 : this._storm ? 0x20242c : 0x39404b);
+        /snow|sleet|hail/.test(c) ? 0x5e6773 : this._storm ? 0x1a1d24 : 0x2b323c);
     }
     // Gestirn hinter geschlossener Decke: es waere ohnehin nicht zu sehen
     if (this._body) this._body.visible = !overcast;
@@ -366,6 +376,7 @@ export class SkyDome {
         for (let i = 0; i < want; i++) {
           const sp = new THREE.Sprite(new THREE.SpriteMaterial({
             map: this._cloudTex, transparent: true, depthWrite: false, fog: false,
+            depthTest: true,
             opacity: 0.55 + Math.random() * 0.25,
           }));
           const sc = extent * (0.22 + Math.random() * 0.2);
@@ -529,7 +540,7 @@ export class SkyDome {
           this._flash.intensity = v;
           if (this._stormLayer) {
             // Entladung IN der Wolke, nicht davor
-            this._stormLayer.material.emissive.setHex(v > 0 ? 0xd8e8ff : 0x000000);
+            this._stormLayer.material.emissive.setHex(v > 0 ? 0x88aaff : 0x000000);
             this._stormLayer.material.emissiveIntensity = v > 0 ? 0.35 + v * 0.06 : 0;
           }
         }
