@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "5.0.0";
+const CARD_VERSION = "3.6.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -52,14 +52,12 @@ const CARD_CSS = `
 .card-header {
   background: var(--surf);
   border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
+  padding: 8px 12px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
   gap: 8px;
-  /* iOS safe area - Abstand zum Kontrollzentrum */
-  padding-top: max(10px, env(safe-area-inset-top, 10px));
 }
 .card-title {
   font-size: 12px;
@@ -95,7 +93,7 @@ const CARD_CSS = `
   display: flex;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
   overflow-y: hidden;
   flex: 1;
@@ -103,7 +101,6 @@ const CARD_CSS = `
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
-  min-height: 44px;
 }
 .mode-tabs::-webkit-scrollbar { display: none; }
 
@@ -209,8 +206,8 @@ const CARD_CSS = `
 .ss-weather-detail { font-size: 8px; color: #445566; }
 
 .mode-tab {
-  padding: 8px 11px;
-  font-size: 10px;
+  padding: 3px 9px;
+  font-size: 9px;
   font-weight: 700;
   cursor: pointer;
   border: none;
@@ -221,11 +218,6 @@ const CARD_CSS = `
   letter-spacing: .05em;
   transition: all .15s;
   font-family: inherit;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 .mode-tab.active            { background: var(--accent);  color: var(--bg); }
 .mode-tab.active.cal        { background: var(--green);   color: var(--bg); }
@@ -237,7 +229,6 @@ const CARD_CSS = `
 .mode-tab.active.settings   { background: #94a3b8;        color: #07090d; }
 .mode-tab.active.automate   { background: #a855f7;        color: #fff; }
 .mode-tab.active.journey    { background: #38bdf8;        color: #07090d; }
-.mode-tab.active.ki         { background: #06b6d4;        color: #07090d; }
 .mode-tab.active.info       { background: #00bcd4;        color: #07090d; }
 .mode-tab.active.deko       { background: #10b981;        color: #07090d; }
 .floor-btn { background:var(--surf3);border:1px solid var(--border);color:var(--muted);border-radius:4px;padding:2px 8px;font-size:8px;cursor:pointer;font-family:inherit;font-weight:700;white-space:nowrap;flex-shrink:0; }
@@ -536,165 +527,35 @@ textarea {
 // eval() erst wenn Nutzer das Modul in ⚙ OPT aktiviert
 // ════════════════════════════════════════════════════════════════════════
 
+// Modul-Code als Strings (werden erst bei Aktivierung geparst)
+const _MODULE_SOURCES = {
+  energie: "// \u2500\u2500 Presets f\u00fcr bekannte Solar-Systeme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst ENERGIE_PRESETS = {\n  generic: {\n    label: \"Generisch (freie Felder)\",\n    icon: \"\u26a1\",\n    fields: {}\n  },\n  epever: {\n    label: \"Epever MPPT (ESPHome / ep-ever Integration)\",\n    icon: \"\u2600\",\n    fields: {\n      solar_power:    \"sensor.epever_solar_w\",\n      solar_voltage:  \"sensor.epever_solar_v\",\n      solar_current:  \"sensor.epever_solar_a\",\n      solar_max_v:    \"sensor.epever_solar_max\",\n      battery_soc:    \"sensor.epever_batt_soc\",\n      battery_volt:   \"sensor.epever_batt_v\",\n      battery_curr:   \"sensor.epever_batt_a\",\n      battery_power:  \"sensor.epever_batt_w\",\n      battery_temp:   \"sensor.epever_batt_temp\",\n      battery_state:  \"sensor.epever_batt_state\",\n      charge_state:   \"sensor.epever_charger_state\",\n      load_power:     \"sensor.epever_load_w\",\n      load_voltage:   \"sensor.epever_load_v\",\n      load_current:   \"sensor.epever_load_a\",\n      load_switch:    \"switch.epever_load_state\",\n      gen_day:        \"sensor.epever_gen_day\",\n      gen_month:      \"sensor.epever_gen_mon\",\n      gen_total:      \"sensor.epever_gen_tot\",\n      cons_day:       \"sensor.epever_cons_day\",\n      device_temp:    \"sensor.epever_device_temp\",\n    }\n  },\n  victron_smartshunt: {\n    label: \"Victron SmartShunt (BLE via ESP32)\",\n    icon: \"\ud83d\udd0b\",\n    // Entity-Namen vom esp32-bluetooth-proxy (BLE-Integration)\n    // Ger\u00e4tename \"Victronsmart\" \u2192 Entity-Prefix anpassen!\n    fields: {\n      battery_soc:       \"sensor.victronsmart_battery_soc\",\n      battery_volt:      \"sensor.victronsmart_battery_voltage\",\n      battery_curr:      \"sensor.victronsmart_battery_current\",\n      battery_power:     \"sensor.victronsmart_battery_power\",\n      battery_state:     \"sensor.victronsmart_battery_state\",\n      consumed_ah:       \"sensor.victronsmart_consumed_ah\",\n      time_to_go:        \"sensor.victronsmart_time_remaining\",\n      // Relais A-D (Wechselrichter, 12V Dose, 230V Steckdose, Reserve)\n      relay_a:           \"switch.victronsmart_relay_a\",   // Wechselrichter\n      relay_b:           \"switch.victronsmart_relay_b\",   // 12V Dose\n      relay_c:           \"switch.victronsmart_relay_c\",   // 230V Steckdosen\n      relay_d:           \"switch.victronsmart_relay_d\",   // Reserviert\n    }\n  },\n  victron: {\n    label: \"Victron (VE.Direct/Cerbo)\",\n    icon: \"\ud83d\udd0b\",\n    fields: {\n      solar_power:   \"sensor.victron_pv_power\",\n      battery_soc:   \"sensor.victron_battery_soc\",\n      battery_volt:  \"sensor.victron_battery_voltage\",\n      load_power:    \"sensor.victron_ac_consumption\",\n      grid_power:    \"sensor.victron_grid_power\",\n      charge_state:  \"sensor.victron_battery_state\",\n    }\n  },\n  hybrid_inverter: {\n    label: \"Hybrid-Wechselrichter (Off-Grid, PI30/SBU)\",\n    icon: \"\ud83d\udd0c\",\n    // F\u00fcr Noname-Wechselrichter mit PI30-Protokoll (SBU first, Off Grid)\n    fields: {\n      solar_power:        \"sensor.hybridwechselrichter_pv_input_power\",\n      solar_voltage:      \"sensor.hybridwechselrichter_pv_input_voltage\",\n      solar_current:      \"sensor.hybridwechselrichter_pv_input_current\",\n      solar_charging:     \"sensor.hybridwechselrichter_pv_charging_power\",\n      solar_total:        \"sensor.hybridwechselrichter_pv_generation_sum\",\n      battery_soc:        \"sensor.hybridwechselrichter_battery_percent\",\n      battery_volt:       \"sensor.hybridwechselrichter_battery_voltage\",\n      battery_curr:       \"sensor.hybridwechselrichter_battery_load\",\n      charge_state:       \"sensor.hybridwechselrichter_inverter_operation_mode\",\n      load_power:         \"sensor.hybridwechselrichter_ac_out_watt\",\n      load_voltage:       \"sensor.hybridwechselrichter_ac_out_voltage\",\n      load_percent:       \"sensor.hybridwechselrichter_ac_out_percent\",\n      inverter_mode:      \"sensor.hybridwechselrichter_inverter_operation_mode\",\n      output_priority:    \"sensor.hybridwechselrichter_output_source_priority\",\n      inverter_sw:        \"switch.victronsmart_relay_a\",  // Relais A = WR an/aus\n    }\n  },\n  fronius: {\n    label: \"Fronius Solar\",\n    icon: \"\ud83c\udf1e\",\n    fields: {\n      solar_power:   \"sensor.fronius_power_photovoltaics\",\n      grid_power:    \"sensor.fronius_power_grid\",\n      battery_soc:   \"sensor.fronius_state_of_charge\",\n      load_power:    \"sensor.fronius_power_load\",\n      charge_state:  \"sensor.fronius_storage_state\",\n    }\n  },\n  shelly_em: {\n    label: \"Shelly EM Stromz\u00e4hler\",\n    icon: \"\ud83d\udcca\",\n    fields: {\n      grid_power:    \"sensor.shelly_em_channel_1_power\",\n      grid_energy:   \"sensor.shelly_em_channel_1_energy\",\n      load_power:    \"sensor.shelly_em_channel_2_power\",\n    }\n  },\n};\n\n// \u2500\u2500 Power-Routing Stufen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Nutzer definiert Priorit\u00e4ten: \u00dcberschuss wird in dieser Reihenfolge geleitet\nconst DEFAULT_ROUTING = [\n  { id:\"battery\",   name:\"Batterie laden\",    icon:\"\ud83d\udd0b\", threshold_w: 0   },\n  { id:\"boiler\",    name:\"Boiler/Warmwasser\", icon:\"\u2668\",  threshold_w: 200 },\n  { id:\"wallbox\",   name:\"E-Auto Wallbox\",    icon:\"\ud83d\ude97\", threshold_w: 1400},\n  { id:\"pool\",      name:\"Pool-Pumpe\",        icon:\"\ud83c\udfca\", threshold_w: 200 },\n  { id:\"powerbank\", name:\"Powerbank\",         icon:\"\ud83d\udcf1\", threshold_w: 10  },\n];\n\n// Relais-Definitionen f\u00fcr Victron SmartShunt (Relais A-D)\n// Wird angezeigt wenn victron_smartshunt Preset aktiv\nconst VICTRON_RELAIS = [\n  {\n    id: \"relay_a\",\n    name: \"Relais A \u2013 Wechselrichter\",\n    icon: \"\ud83d\udd0c\",\n    desc: \"Hybrid-WR ein/aus (Leerlauf ~30W \u2192 im Winter aus!)\",\n    threshold_w: 300,       // WR nur bei >300W Solar\n    min_batt_pct: 40,       // Und Batterie > 40%\n    auto_off_batt_pct: 20,  // Ausschalten bei < 20%\n    seasonal: false,        // Ganzj\u00e4hrig steuerbar\n  },\n  {\n    id: \"relay_b\",\n    name: \"Relais B \u2013 12V Dose\",\n    icon: \"\ud83d\udd0b\",\n    desc: \"Winter: Batterie-Heizung | Sommer: Powerbank laden\",\n    summer_threshold_w: 50,  // Sommer: ab 50W \u00dcberschuss\n    winter_auto: true,        // Winter: automatisch wenn Temp < 5\u00b0C\n    winter_temp_entity: \"\",   // optional: Au\u00dfentemperatur-Sensor\n  },\n  {\n    id: \"relay_c\",\n    name: \"Relais C \u2013 230V Steckdose\",\n    icon: \"\ud83d\udd0c\",\n    desc: \"Garten-Akkus / Werkzeug laden (braucht WR aktiv!)\",\n    threshold_w: 400,\n    requires_relay: \"relay_a\",  // Nur wenn WR (Relay A) an\n  },\n  {\n    id: \"relay_d\",\n    name: \"Relais D \u2013 Reserviert\",\n    icon: \"\u2753\",\n    desc: \"Noch nicht belegt\",\n    threshold_w: 0,\n  },\n];\n\n// \u2500\u2500 Modul-Objekt \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nconst EnergieModul = {\n  id:          \"energie\",\n  name:        \"Energie\",\n  icon:        \"\u26a1\",\n  tabId:       \"energie_modul\",\n  version:     \"1.0.0\",\n  description: \"Solar, Verbrauch, Power-Routing\",\n\n  _card:    null,\n  _pollBuf: [],   // Letzten N Werte f\u00fcr Sparkline\n  _lastData: {},\n\n  // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  init(card) {\n    this._card = card;\n    console.info(\"[BLE Energie] Modul initialisiert\");\n    // Saison-Check beim Start\n    if (!this.isActive(card)) {\n      console.info(\"[BLE Energie] Modul au\u00dferhalb der konfigurierten Saison \u2013 pausiert\");\n    }\n  },\n\n  destroy() {\n    this._card = null;\n    this._pollBuf = [];\n    this._lastData = {};\n  },\n\n  // Saison-Check (opt-in, default: immer aktiv)\n  isActive(card) {\n    const cfg = card?._opts?.energie_cfg || {};\n    if (!cfg.saison_active) return true; // Saison-Modus aus \u2192 immer aktiv\n    const now = new Date();\n    const mm = now.getMonth() + 1; // 1-12\n    const from = parseInt(cfg.saison_from || 1);\n    const to   = parseInt(cfg.saison_to   || 12);\n    if (from <= to) return mm >= from && mm <= to;\n    return mm >= from || mm <= to; // Jahreswechsel (z.B. Nov-Feb)\n  },\n\n  // \u2500\u2500 Poll-Hook: Werte aus HA lesen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onPoll(data, card) {\n    const cfg  = card?._opts?.energie_cfg || {};\n    const hass = card?._hass;\n    if (!hass) return;\n\n    const get = (key) => {\n      const eid = cfg[key];\n      if (!eid) return null;\n      const s = hass.states[eid];\n      if (!s || s.state === 'unavailable' || s.state === 'unknown') return null;\n      return parseFloat(s.state) || null;\n    };\n\n    // Epever MPPT Daten\n    const epever_solar = get('solar_power');\n    // Hybrid-WR Solar (addieren wenn beide vorhanden)\n    const wr_solar = get('solar_charging') || get('solar_power');\n    const total_solar = (epever_solar || 0) + (wr_solar && wr_solar !== epever_solar ? wr_solar : 0) || epever_solar || wr_solar;\n\n    // Victron SmartShunt: pr\u00e4zise Batterie-Daten (bevorzugt vor Epever)\n    const vict_soc  = get('victron_soc')  || get('battery_soc');\n    const vict_volt = get('victron_volt') || get('battery_volt');\n    const vict_curr = get('victron_curr') || get('battery_curr');\n\n    // Wechselrichter Status\n    const wr_mode = cfg.inverter_mode ? hass.states[cfg.inverter_mode]?.state : null;\n    const wr_active = wr_mode && !['Standby','standby','off','Off'].includes(wr_mode);\n\n    this._lastData = {\n      solar_w:      total_solar,\n      solar_v:      get('solar_voltage'),\n      batt_pct:     vict_soc,\n      batt_v:       vict_volt,\n      batt_curr:    vict_curr,\n      batt_w:       get('battery_power'),\n      batt_temp:    get('battery_temp'),\n      batt_state:   cfg.battery_state ? hass.states[cfg.battery_state]?.state : null,\n      load_w:       get('load_power'),\n      load_v:       get('load_voltage'),\n      load_pct:     get('load_percent'),\n      grid_w:       get('grid_power'),\n      charge:       cfg.charge_state ? hass.states[cfg.charge_state]?.state : null,\n      inverter_on:  wr_active,\n      inverter_mode: wr_mode,\n      gen_day:      get('gen_day'),\n      gen_month:    get('gen_month'),\n      cons_day:     get('cons_day'),\n      device_temp:  get('device_temp'),\n      // Relais-Status\n      relay_a: cfg.relay_a ? hass.states[cfg.relay_a]?.state : null,\n      relay_b: cfg.relay_b ? hass.states[cfg.relay_b]?.state : null,\n      relay_c: cfg.relay_c ? hass.states[cfg.relay_c]?.state : null,\n      relay_d: cfg.relay_d ? hass.states[cfg.relay_d]?.state : null,\n      ts: Date.now(),\n    };\n\n    // Sparkline-Buffer (letzten 60 Werte)\n    if (this._lastData.solar_w !== null) {\n      this._pollBuf.push({ ts: Date.now(), w: this._lastData.solar_w });\n      if (this._pollBuf.length > 60) this._pollBuf.shift();\n    }\n\n    // Power-Routing: \u00dcberschuss berechnen und Automationen triggern\n    if (cfg.routing_active) this._checkRouting(card);\n  },\n\n  // \u2500\u2500 Power-Routing Logik \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _checkRouting(card) {\n    const d    = this._lastData;\n    const cfg  = card?._opts?.energie_cfg || {};\n    const hass = card?._hass;\n    if (!hass || d.solar_w === null) return;\n\n    const surplus = (d.solar_w || 0) - (d.load_w || 0);\n    const routing = cfg.routing || DEFAULT_ROUTING;\n\n    routing.forEach(step => {\n      const entity = cfg[`routing_${step.id}_entity`];\n      if (!entity) return;\n      const shouldOn = surplus >= step.threshold_w;\n      const curState = hass.states[entity]?.state;\n      if (shouldOn && curState === 'off') {\n        hass.callService('switch', 'turn_on', { entity_id: entity })\n          .catch(() => {});\n      } else if (!shouldOn && curState === 'on' && cfg[`routing_${step.id}_auto_off`]) {\n        hass.callService('switch', 'turn_off', { entity_id: entity })\n          .catch(() => {});\n      }\n    });\n  },\n\n  // \u2500\u2500 Sidebar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildSidebar(card) {\n    const wrap = document.createElement('div');\n    wrap.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:8px';\n\n    const hdr = document.createElement('div');\n    hdr.style.cssText = 'font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:1px';\n    hdr.textContent = '\u26a1 ENERGIE';\n    wrap.appendChild(hdr);\n\n    if (!this.isActive(card)) {\n      const offNote = document.createElement('div');\n      offNote.style.cssText = 'padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center';\n      const cfg = card?._opts?.energie_cfg || {};\n      offNote.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from || 1}.\u2013${cfg.saison_to || 12}. Monat)`;\n      wrap.appendChild(offNote);\n      return wrap;\n    }\n\n    const d = this._lastData;\n\n    // \u2500\u2500 Solar-\u00dcbersicht \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const solarBox = this._mkBox('Solar & Batterie');\n    const grid2 = document.createElement('div');\n    grid2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px';\n\n    [\n      { label:'Solar',    val: d.solar_w != null ? `${Math.round(d.solar_w)} W` : '\u2013', color:'#f59e0b', icon:'\u2600' },\n      { label:'Batterie', val: d.batt_pct != null ? `${Math.round(d.batt_pct)} %` : '\u2013', color: this._battColor(d.batt_pct), icon:'\ud83d\udd0b' },\n      { label:'Verbrauch',val: d.load_w  != null ? `${Math.round(d.load_w)} W` : '\u2013', color:'#94a3b8', icon:'\ud83d\udca1' },\n      { label:'Netz',     val: d.grid_w  != null ? `${d.grid_w >= 0 ? '+' : ''}${Math.round(d.grid_w)} W` : '\u2013', color: d.grid_w >= 0 ? '#22c55e' : '#ef4444', icon:'\ud83d\udd0c' },\n    ].forEach(({label, val, color, icon}) => {\n      const tile = document.createElement('div');\n      tile.style.cssText = `background:var(--bg);border-radius:6px;padding:6px 8px;border:1px solid #1c2535`;\n      tile.innerHTML = `<div style=\"font-size:7px;color:#445566;margin-bottom:2px\">${icon} ${label}</div>\n        <div style=\"font-size:14px;font-weight:700;color:${color}\">${val}</div>`;\n      grid2.appendChild(tile);\n    });\n    solarBox.appendChild(grid2);\n\n    // Batterie-Ladebalken\n    if (d.batt_pct != null) {\n      const barWrap = document.createElement('div');\n      barWrap.style.cssText = 'height:6px;background:#1c2535;border-radius:3px;overflow:hidden;margin-bottom:4px';\n      const bar = document.createElement('div');\n      bar.style.cssText = `height:100%;width:${Math.min(100,d.batt_pct)}%;background:${this._battColor(d.batt_pct)};border-radius:3px;transition:width 0.5s`;\n      barWrap.appendChild(bar);\n      solarBox.appendChild(barWrap);\n    }\n\n    // Sparkline Solar (letzten 60 Polls)\n    if (this._pollBuf.length > 2) {\n      const spark = this._mkSparkline(this._pollBuf.map(p => p.w), '#f59e0b', 180, 32);\n      solarBox.appendChild(spark);\n    }\n\n    // \u00dcberschuss-Anzeige\n    if (d.solar_w != null && d.load_w != null) {\n      const surplus = d.solar_w - d.load_w;\n      const surEl = document.createElement('div');\n      surEl.style.cssText = 'text-align:center;font-size:8px;margin-top:4px';\n      surEl.innerHTML = `\u00dcberschuss: <span style=\"font-weight:700;color:${surplus >= 0 ? '#22c55e' : '#ef4444'}\">${surplus >= 0 ? '+' : ''}${Math.round(surplus)} W</span>`;\n      solarBox.appendChild(surEl);\n    }\n\n    wrap.appendChild(solarBox);\n\n    // \u2500\u2500 Wechselrichter & Relais Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const cfg = card?._opts?.energie_cfg || {};\n    const hasRelais = cfg.relay_a || cfg.relay_b || cfg.relay_c || cfg.relay_d;\n    if (hasRelais) {\n      const relBox = this._mkBox('Relais & Verbraucher');\n\n      // WR-Status prominent anzeigen\n      if (cfg.relay_a) {\n        const wrOn = d.relay_a === 'on';\n        const wrRow = document.createElement('div');\n        wrRow.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:6px;background:${wrOn ? '#22c55e18' : '#ef444418'};border:1px solid ${wrOn ? '#22c55e44' : '#ef444444'}`;\n        wrRow.innerHTML = `<span style=\"font-size:18px\">\ud83d\udd0c</span>\n          <div style=\"flex:1\">\n            <div style=\"font-size:9px;font-weight:700;color:var(--text)\">Wechselrichter (230V)</div>\n            <div style=\"font-size:7.5px;color:#445566\">Leerlauf ~30W \u00b7 Relay A</div>\n          </div>\n          <span style=\"font-size:11px;font-weight:700;color:${wrOn ? '#22c55e' : '#ef4444'}\">${wrOn ? '\u25cf AN' : '\u25cb AUS'}</span>`;\n        // Toggle-Button\n        const wrBtn = document.createElement('button');\n        wrBtn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${wrOn ? '#ef4444' : '#22c55e'};background:transparent;color:${wrOn ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;\n        wrBtn.textContent = wrOn ? 'AUS' : 'AN';\n        wrBtn.addEventListener('click', () => {\n          const svc = wrOn ? 'turn_off' : 'turn_on';\n          card._hass.callService('switch', svc, { entity_id: cfg.relay_a }).catch(()=>{});\n          card._showToast(`Wechselrichter ${wrOn ? 'ausschalten' : 'einschalten'}...`);\n        });\n        wrRow.appendChild(wrBtn);\n        relBox.appendChild(wrRow);\n      }\n\n      // Relais B-D\n      [\n        { key:'relay_b', name:'12V Dose (B)',   icon:'\ud83d\udd0b', desc: 'Winter: Heizung | Sommer: Powerbank' },\n        { key:'relay_c', name:'230V Steckdose (C)', icon:'\ud83d\udd0c', desc:'Garten-Akkus / Werkzeug' },\n        { key:'relay_d', name:'Relais D',        icon:'\u2753', desc:'Reserviert' },\n      ].forEach(({key, name, icon, desc}) => {\n        if (!cfg[key]) return;\n        const state = d[key];\n        if (state === null) return;\n        const on = state === 'on';\n        const row = document.createElement('div');\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:3px;background:${on ? '#22c55e11' : 'var(--surf2)'}`;\n        const btn = document.createElement('button');\n        btn.style.cssText = `padding:3px 8px;border-radius:4px;border:1px solid ${on ? '#ef4444' : '#22c55e'};background:transparent;color:${on ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;\n        btn.textContent = on ? 'AUS' : 'AN';\n        btn.addEventListener('click', () => {\n          card._hass.callService('switch', on ? 'turn_off' : 'turn_on', { entity_id: cfg[key] }).catch(()=>{});\n        });\n        row.innerHTML = `<span style=\"font-size:13px\">${icon}</span>\n          <div style=\"flex:1;min-width:0\">\n            <div style=\"font-size:8px;font-weight:700;color:var(--text)\">${name}</div>\n            <div style=\"font-size:7px;color:#445566;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${desc}</div>\n          </div>\n          <span style=\"font-size:8px;color:${on ? '#22c55e' : '#445566'}\">${on ? '\u25cf' : '\u25cb'}</span>`;\n        row.appendChild(btn);\n        relBox.appendChild(row);\n      });\n\n      wrap.appendChild(relBox);\n    }\n\n    // \u2500\u2500 Tagesstatistik \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if (d.gen_day != null || d.cons_day != null) {\n      const statBox = this._mkBox('Heute');\n      const statGrid = document.createElement('div');\n      statGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px';\n      [\n        { label:'Solar erzeugt', val: d.gen_day != null ? `${d.gen_day} kWh` : '\u2013', color:'#f59e0b' },\n        { label:'Verbrauch',     val: d.cons_day != null ? `${d.cons_day} kWh` : '\u2013', color:'#94a3b8' },\n        { label:'Batt. Temp.',   val: d.batt_temp != null ? `${d.batt_temp} \u00b0C` : '\u2013', color: (d.batt_temp||0) < 5 ? '#ef4444' : '#22c55e' },\n        { label:'Ger\u00e4t Temp.',   val: d.device_temp != null ? `${d.device_temp} \u00b0C` : '\u2013', color:'#94a3b8' },\n      ].forEach(({label, val, color}) => {\n        const tile = document.createElement('div');\n        tile.style.cssText = 'background:var(--bg);border-radius:4px;padding:4px 6px;border:1px solid #1c2535';\n        tile.innerHTML = `<div style=\"font-size:6.5px;color:#445566;margin-bottom:1px\">${label}</div>\n          <div style=\"font-size:11px;font-weight:700;color:${color}\">${val}</div>`;\n        statGrid.appendChild(tile);\n      });\n      statBox.appendChild(statGrid);\n      wrap.appendChild(statBox);\n    }\n\n    // \u2500\u2500 Power-Routing Status \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if (cfg.routing_active) {\n      const routeBox = this._mkBox('\u26a1 Power-Routing');\n      const routing  = cfg.routing || DEFAULT_ROUTING;\n      const surplus  = (d.solar_w || 0) - (d.load_w || 0);\n\n      routing.forEach(step => {\n        const entity = cfg[`routing_${step.id}_entity`];\n        if (!entity) return;\n        const state  = card?._hass?.states[entity]?.state || 'unknown';\n        const active = state === 'on';\n        const canOn  = surplus >= step.threshold_w;\n\n        const row = document.createElement('div');\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:2px;background:${active ? '#22c55e11' : 'var(--surf2)'}`;\n        row.innerHTML = `<span style=\"font-size:12px\">${step.icon}</span>\n          <span style=\"flex:1;font-size:8px;color:var(--text)\">${step.name}</span>\n          <span style=\"font-size:7px;color:${canOn ? '#22c55e' : '#445566'}\">\u2265${step.threshold_w}W</span>\n          <span style=\"font-size:8px;font-weight:700;color:${active ? '#22c55e' : '#445566'}\">${active ? '\u25cf AN' : '\u25cb AUS'}</span>`;\n        routeBox.appendChild(row);\n      });\n\n      wrap.appendChild(routeBox);\n    }\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Konfiguration (in \u2699 OPT eingebunden) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildConfig(card) {\n    const wrap = document.createElement('div');\n    wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';\n\n    const cfg = card?._opts?.energie_cfg || {};\n    const save = (key, val) => {\n      if (!card._opts) card._opts = {};\n      if (!card._opts.energie_cfg) card._opts.energie_cfg = {};\n      card._opts.energie_cfg[key] = val;\n      card._saveOptions();\n    };\n    const mkField = (label, key, placeholder, type='text') => {\n      const row = document.createElement('div');\n      const lbl = document.createElement('div');\n      lbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px';\n      lbl.textContent = label;\n      const inp = document.createElement('input');\n      inp.type = type; inp.value = cfg[key] || '';\n      inp.placeholder = placeholder;\n      inp.style.cssText = 'width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      inp.addEventListener('input', () => save(key, inp.value.trim()));\n      row.append(lbl, inp);\n      return row;\n    };\n\n    // Preset-Auswahl\n    const presetHdr = document.createElement('div');\n    presetHdr.style.cssText = 'font-size:8px;font-weight:700;color:#f59e0b;margin-bottom:4px';\n    presetHdr.textContent = 'System-Preset w\u00e4hlen:';\n    wrap.appendChild(presetHdr);\n\n    const presetRow = document.createElement('div');\n    presetRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px';\n    Object.entries(ENERGIE_PRESETS).forEach(([id, preset]) => {\n      const btn = document.createElement('button');\n      btn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer';\n      btn.textContent = `${preset.icon} ${preset.label}`;\n      btn.title = `Felder f\u00fcr ${preset.label} vorausf\u00fcllen`;\n      btn.addEventListener('click', () => {\n        if (!card._opts) card._opts = {};\n        if (!card._opts.energie_cfg) card._opts.energie_cfg = {};\n        Object.assign(card._opts.energie_cfg, preset.fields);\n        card._saveOptions();\n        card._rebuildSidebar();\n        card._showToast(`\u2705 Preset: ${preset.label}`);\n      });\n      presetRow.appendChild(btn);\n    });\n    wrap.appendChild(presetRow);\n\n    // Entity-Felder\n    const fieldsBox = document.createElement('div');\n    fieldsBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const fieldsHdr = document.createElement('div');\n    fieldsHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';\n    fieldsHdr.textContent = 'Entity-Zuordnung (alle optional):';\n    fieldsBox.appendChild(fieldsHdr);\n    // Sensor-Felder (generisch \u2013 Preset f\u00fcllt automatisch aus)\n    const sensorFields = [\n      ['Solar Leistung (W)',         'solar_power',    'sensor.epever_solar_w'],\n      ['Solar Spannung (V)',         'solar_voltage',  'sensor.epever_solar_v'],\n      ['Batterie SOC (%)',           'battery_soc',    'sensor.epever_batt_soc'],\n      ['Batterie Spannung (V)',      'battery_volt',   'sensor.epever_batt_v'],\n      ['Batterie Leistung (W)',      'battery_power',  'sensor.epever_batt_w'],\n      ['Batterie Temperatur (\u00b0C)',   'battery_temp',   'sensor.epever_batt_temp'],\n      ['Batterie Status (Text)',     'battery_state',  'sensor.epever_batt_state'],\n      ['Ladestatus (Text)',          'charge_state',   'sensor.epever_charger_state'],\n      ['Last / Verbrauch (W)',       'load_power',     'sensor.epever_load_w'],\n      ['WR-Modus (Text)',            'inverter_mode',  'sensor.hybridwechselrichter_inverter_operation_mode'],\n      ['WR AC-Ausgang (W)',          'ac_out_power',   'sensor.hybridwechselrichter_ac_out_watt'],\n      ['Erzeugung Heute (kWh)',      'gen_day',        'sensor.epever_gen_day'],\n      ['Erzeugung Monat (kWh)',      'gen_month',      'sensor.epever_gen_mon'],\n      ['Verbrauch Heute (kWh)',      'cons_day',       'sensor.epever_cons_day'],\n      ['Ger\u00e4t Temperatur (\u00b0C)',      'device_temp',    'sensor.epever_device_temp'],\n      ['Netz-Bezug (W, +/\u2212)',        'grid_power',     'sensor.grid_power'],\n    ];\n    sensorFields.forEach(([label, key, ph]) => fieldsBox.appendChild(mkField(label, key, ph)));\n\n    // Relais A-D (Victron SmartShunt)\n    const relaisBox = document.createElement('div');\n    relaisBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:6px';\n    const relaisHdr = document.createElement('div');\n    relaisHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';\n    relaisHdr.textContent = '\ud83d\udd0c Relais A\u2013D (Victron SmartShunt)';\n    relaisBox.appendChild(relaisHdr);\n    [\n      ['relay_a', 'Relais A \u2013 Wechselrichter',  'switch.victronsmart_relay_a'],\n      ['relay_b', 'Relais B \u2013 12V Dose',         'switch.victronsmart_relay_b'],\n      ['relay_c', 'Relais C \u2013 230V Steckdose',   'switch.victronsmart_relay_c'],\n      ['relay_d', 'Relais D \u2013 Reserviert',        'switch.victronsmart_relay_d'],\n    ].forEach(([key, label, ph]) => relaisBox.appendChild(mkField(label, key, ph)));\n    wrap.appendChild(relaisBox);\n    wrap.appendChild(fieldsBox);\n\n    // Saison-Modus (opt-in)\n    const saisonBox = document.createElement('div');\n    saisonBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const saisonHdr = document.createElement('div');\n    saisonHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';\n    const saisonCb = document.createElement('input');\n    saisonCb.type = 'checkbox'; saisonCb.checked = !!cfg.saison_active;\n    saisonCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';\n    saisonCb.addEventListener('change', () => save('saison_active', saisonCb.checked));\n    const saisonLbl = document.createElement('span');\n    saisonLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';\n    saisonLbl.textContent = '\ud83d\udcc5 Saison-Modus (Modul zeitlich begrenzen)';\n    saisonHdr.append(saisonCb, saisonLbl);\n    const saisonNote = document.createElement('div');\n    saisonNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:5px';\n    saisonNote.textContent = 'F\u00fcr Indoor-Anlagen oder ganzj\u00e4hrigen Betrieb: deaktiviert lassen.';\n    saisonBox.append(saisonHdr, saisonNote);\n    const monthRow = document.createElement('div');\n    monthRow.style.cssText = 'display:flex;align-items:center;gap:6px';\n    ['saison_from', 'saison_to'].forEach((key, i) => {\n      const lbl = document.createElement('span');\n      lbl.style.cssText = 'font-size:8px;color:#94a3b8';\n      lbl.textContent = i === 0 ? 'Von Monat:' : 'Bis Monat:';\n      const sel = document.createElement('select');\n      sel.style.cssText = 'padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      const months = ['Jan','Feb','M\u00e4r','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];\n      months.forEach((m,mi) => {\n        const o = document.createElement('option'); o.value = mi+1; o.textContent = m;\n        if ((parseInt(cfg[key])||1) === mi+1) o.selected = true;\n        sel.appendChild(o);\n      });\n      sel.addEventListener('change', () => save(key, parseInt(sel.value)));\n      monthRow.append(lbl, sel);\n    });\n    saisonBox.appendChild(monthRow);\n    wrap.appendChild(saisonBox);\n\n    // Power-Routing\n    const routeBox = document.createElement('div');\n    routeBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const routeHdr = document.createElement('div');\n    routeHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';\n    const routeCb = document.createElement('input');\n    routeCb.type = 'checkbox'; routeCb.checked = !!cfg.routing_active;\n    routeCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';\n    routeCb.addEventListener('change', () => save('routing_active', routeCb.checked));\n    const routeLbl = document.createElement('span');\n    routeLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';\n    routeLbl.textContent = '\u26a1 Power-Routing (Solar-\u00dcberschuss verteilen)';\n    routeHdr.append(routeCb, routeLbl);\n    const routeNote = document.createElement('div');\n    routeNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:6px';\n    routeNote.textContent = 'Schaltet Verbraucher automatisch bei \u00dcberschuss ein/aus.';\n    routeBox.append(routeHdr, routeNote);\n\n    DEFAULT_ROUTING.forEach(step => {\n      const stepBox = document.createElement('div');\n      stepBox.style.cssText = 'border:1px solid #1c2535;border-radius:4px;padding:5px 7px;margin-bottom:4px';\n      stepBox.innerHTML = `<div style=\"font-size:8px;font-weight:700;color:var(--text);margin-bottom:4px\">${step.icon} ${step.name}</div>`;\n      stepBox.appendChild(mkField('Entity (Switch)',\n        `routing_${step.id}_entity`, `switch.${step.id}_switch`));\n      // Schwellwert\n      const thrRow = document.createElement('div');\n      const thrLbl = document.createElement('div');\n      thrLbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px;margin-top:3px';\n      thrLbl.textContent = `Ab \u00dcberschuss (W):`;\n      const thrInp = document.createElement('input');\n      thrInp.type = 'number'; thrInp.min = 0; thrInp.max = 10000;\n      thrInp.value = cfg[`routing_${step.id}_threshold`] ?? step.threshold_w;\n      thrInp.style.cssText = 'width:80px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      thrInp.addEventListener('input', () => save(`routing_${step.id}_threshold`, parseInt(thrInp.value)||0));\n      // Auto-off Toggle\n      const offRow = document.createElement('div');\n      offRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-top:3px';\n      const offCb = document.createElement('input');\n      offCb.type = 'checkbox'; offCb.checked = !!cfg[`routing_${step.id}_auto_off`];\n      offCb.style.cssText = 'accent-color:#f59e0b;width:12px;height:12px';\n      offCb.addEventListener('change', () => save(`routing_${step.id}_auto_off`, offCb.checked));\n      const offLbl = document.createElement('span');\n      offLbl.style.cssText = 'font-size:7.5px;color:#445566';\n      offLbl.textContent = 'Automatisch ausschalten wenn kein \u00dcberschuss';\n      thrRow.append(thrLbl, thrInp);\n      offRow.append(offCb, offLbl);\n      stepBox.append(thrRow, offRow);\n      routeBox.appendChild(stepBox);\n    });\n    wrap.appendChild(routeBox);\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Hilfsfunktionen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _battColor(pct) {\n    if (pct == null) return '#445566';\n    if (pct >= 80) return '#22c55e';\n    if (pct >= 40) return '#f59e0b';\n    return '#ef4444';\n  },\n\n  _mkBox(title) {\n    const box = document.createElement('div');\n    box.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    if (title) {\n      const hdr = document.createElement('div');\n      hdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px';\n      hdr.textContent = title;\n      box.appendChild(hdr);\n    }\n    return box;\n  },\n\n  _mkSparkline(values, color, w=180, h=32) {\n    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');\n    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);\n    svg.style.cssText = `width:100%;height:${h}px;display:block;margin-top:4px`;\n    const max = Math.max(...values, 1);\n    const min = Math.min(...values, 0);\n    const range = max - min || 1;\n    const pts = values.map((v, i) => {\n      const x = (i / (values.length - 1)) * w;\n      const y = h - ((v - min) / range) * (h - 4) - 2;\n      return `${x.toFixed(1)},${y.toFixed(1)}`;\n    }).join(' ');\n    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');\n    poly.setAttribute('points', pts);\n    poly.setAttribute('fill', 'none');\n    poly.setAttribute('stroke', color);\n    poly.setAttribute('stroke-width', '1.5');\n    poly.setAttribute('stroke-linejoin', 'round');\n    svg.appendChild(poly);\n    return svg;\n  },\n};",
+  pool: "const PoolModul = {\n  id: \"pool\", name: \"Pool & Garten\", icon: \"\ud83c\udfca\", tabId: \"pool\",\n  version: \"1.0.0\", description: \"Pumpen, Bew\u00e4sserung, Smart Irrigation\",\n  _card: null,\n  init(card)    { this._card = card; },\n  destroy()     { this._card = null; },\n  isActive(card) {\n    const cfg = card?._opts?.pool_cfg || {};\n    if (!cfg.saison_active) return true;\n    const mm = new Date().getMonth() + 1;\n    const from = parseInt(cfg.saison_from || 4);\n    const to   = parseInt(cfg.saison_to   || 10);\n    return from <= to ? mm >= from && mm <= to : mm >= from || mm <= to;\n  },\n  buildSidebar(card) {\n    const w = document.createElement(\"div\");\n    w.style.cssText = \"padding:8px;display:flex;flex-direction:column;gap:8px\";\n    const hdr = document.createElement(\"div\");\n    hdr.style.cssText = \"font-size:10px;font-weight:700;color:#22c55e;letter-spacing:1px\";\n    hdr.textContent = \"\ud83c\udfca POOL & GARTEN\";\n    w.appendChild(hdr);\n    if (!this.isActive(card)) {\n      const note = document.createElement(\"div\");\n      note.style.cssText = \"padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center\";\n      const cfg = card?._opts?.pool_cfg || {};\n      note.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from||4}.\u2013${cfg.saison_to||10}. Monat)`;\n      w.appendChild(note); return w;\n    }\n    const cfg = card?._opts?.pool_cfg || {};\n    const hass = card?._hass;\n    // Pool-Pumpe\n    if (cfg.pool_pump) {\n      const pumpState = hass?.states[cfg.pool_pump]?.state;\n      const pumpOn = pumpState === \"on\";\n      const pumpBox = document.createElement(\"div\");\n      pumpBox.style.cssText = `padding:8px;background:${pumpOn?\"#22c55e18\":\"var(--surf2)\"};border-radius:6px;border:1px solid ${pumpOn?\"#22c55e44\":\"#1c2535\"};display:flex;align-items:center;gap:8px`;\n      pumpBox.innerHTML = `<span style=\"font-size:20px\">\ud83c\udfca</span>\n        <div style=\"flex:1\"><div style=\"font-size:9px;font-weight:700;color:var(--text)\">Pool-Pumpe</div>\n        <div style=\"font-size:7.5px;color:#445566\">${cfg.pool_pump}</div></div>\n        <span style=\"font-size:11px;font-weight:700;color:${pumpOn?\"#22c55e\":\"#445566\"}\">${pumpOn?\"\u25cf AN\":\"\u25cb AUS\"}</span>`;\n      const btn = document.createElement(\"button\");\n      btn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${pumpOn?\"#ef4444\":\"#22c55e\"};background:transparent;color:${pumpOn?\"#ef4444\":\"#22c55e\"};font-size:8px;cursor:pointer`;\n      btn.textContent = pumpOn ? \"AUS\" : \"AN\";\n      btn.addEventListener(\"click\", () => hass?.callService(\"switch\", pumpOn?\"turn_off\":\"turn_on\", {entity_id: cfg.pool_pump}).catch(()=>{}));\n      pumpBox.appendChild(btn);\n      w.appendChild(pumpBox);\n    }\n    // Smart Irrigation\n    const siEntities = Object.keys(hass?.states||{}).filter(id => id.startsWith(\"switch.\") && id.includes(\"irrigation\"));\n    if (siEntities.length) {\n      const siBox = document.createElement(\"div\");\n      siBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535\";\n      const siHdr = document.createElement(\"div\");\n      siHdr.style.cssText = \"font-size:8px;font-weight:700;color:#22c55e;margin-bottom:6px\";\n      siHdr.textContent = \"\ud83c\udf31 Smart Irrigation\";\n      siBox.appendChild(siHdr);\n      siEntities.slice(0,6).forEach(eid => {\n        const state = hass.states[eid];\n        const on = state?.state === \"on\";\n        const row = document.createElement(\"div\");\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933`;\n        const btn = document.createElement(\"button\");\n        btn.style.cssText = `padding:2px 7px;border-radius:3px;border:1px solid ${on?\"#ef4444\":\"#22c55e\"};background:transparent;color:${on?\"#ef4444\":\"#22c55e\"};font-size:7.5px;cursor:pointer;flex-shrink:0`;\n        btn.textContent = on ? \"Stop\" : \"Start\";\n        btn.addEventListener(\"click\", () => hass.callService(\"switch\", on?\"turn_off\":\"turn_on\", {entity_id: eid}).catch(()=>{}));\n        row.innerHTML = `<span style=\"font-size:10px\">\ud83d\udca7</span><span style=\"flex:1;font-size:7.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${state?.attributes?.friendly_name || eid.split(\".\")[1]}</span><span style=\"font-size:7.5px;font-weight:700;color:${on?\"#22c55e\":\"#445566\"}\">${on?\"\u25cf\":\"\u25cb\"}</span>`;\n        row.appendChild(btn);\n        siBox.appendChild(row);\n      });\n      w.appendChild(siBox);\n    } else if (!cfg.pool_pump) {\n      const empty = document.createElement(\"div\");\n      empty.style.cssText = \"padding:12px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center\";\n      empty.innerHTML = \"Keine Pumpen oder Smart Irrigation Entities gefunden.<br><b style='color:#94a3b8'>Konfigurieren unter \u2699 OPT \u2192 Module \u2192 Pool & Garten</b>\";\n      w.appendChild(empty);\n    }\n    return w;\n  },\n  buildConfig(card) {\n    const w = document.createElement(\"div\");\n    w.style.cssText = \"display:flex;flex-direction:column;gap:6px\";\n    const cfg = card?._opts?.pool_cfg || {};\n    const save = (key, val) => { if(!card._opts)card._opts={}; if(!card._opts.pool_cfg)card._opts.pool_cfg={}; card._opts.pool_cfg[key]=val; card._saveOptions(); };\n    const mkF = (label, key, ph) => {\n      const row = document.createElement(\"div\");\n      const lbl = document.createElement(\"div\"); lbl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\"; lbl.textContent=label;\n      const inp = document.createElement(\"input\"); inp.type=\"text\"; inp.value=cfg[key]||\"\"; inp.placeholder=ph;\n      inp.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      inp.addEventListener(\"input\", ()=>save(key, inp.value.trim()));\n      row.append(lbl,inp); return row;\n    };\n    const fieldsBox = document.createElement(\"div\");\n    fieldsBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535\";\n    const fHdr = document.createElement(\"div\"); fHdr.style.cssText=\"font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px\"; fHdr.textContent=\"Entities:\";\n    fieldsBox.appendChild(fHdr);\n    [[\"Pool-Pumpe\",\"pool_pump\",\"switch.pool_pumpe\"],[\"Brunnen-Pumpe\",\"well_pump\",\"switch.brunnen_pumpe\"],\n     [\"Pool-Heizung\",\"pool_heat\",\"switch.pool_heizung\"],[\"Filterlaufzeit Sensor\",\"filter_time\",\"sensor.pool_filter_h\"]\n    ].forEach(([l,k,p])=>fieldsBox.appendChild(mkF(l,k,p)));\n    w.appendChild(fieldsBox);\n    // Saison-Modus\n    const sBox = document.createElement(\"div\");\n    sBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:4px\";\n    const sCb = document.createElement(\"input\"); sCb.type=\"checkbox\"; sCb.checked=!!cfg.saison_active; sCb.style.cssText=\"accent-color:#22c55e;width:13px;height:13px\";\n    sCb.addEventListener(\"change\",()=>save(\"saison_active\",sCb.checked));\n    const sRow = document.createElement(\"div\"); sRow.style.cssText=\"display:flex;align-items:center;gap:6px;margin-bottom:4px\";\n    const sLbl = document.createElement(\"span\"); sLbl.style.cssText=\"font-size:8px;font-weight:700;color:#94a3b8\";\n    sLbl.textContent=\"\ud83d\udcc5 Saison-Modus\"; sRow.append(sCb,sLbl); sBox.appendChild(sRow);\n    const sNote = document.createElement(\"div\"); sNote.style.cssText=\"font-size:7.5px;color:#445566;margin-bottom:5px\";\n    sNote.textContent=\"F\u00fcr Indoor-Pools: deaktiviert lassen.\"; sBox.appendChild(sNote);\n    const mRow = document.createElement(\"div\"); mRow.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    [\"saison_from\",\"saison_to\"].forEach((key,i)=>{\n      const l=document.createElement(\"span\"); l.style.cssText=\"font-size:8px;color:#94a3b8\"; l.textContent=i===0?\"Von:\":\"Bis:\";\n      const sel=document.createElement(\"select\"); sel.style.cssText=\"padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      [\"Jan\",\"Feb\",\"M\u00e4r\",\"Apr\",\"Mai\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Okt\",\"Nov\",\"Dez\"].forEach((m,mi)=>{\n        const o=document.createElement(\"option\"); o.value=mi+1; o.textContent=m;\n        if((parseInt(cfg[key])||(i===0?4:10))===mi+1)o.selected=true; sel.appendChild(o);\n      });\n      sel.addEventListener(\"change\",()=>save(key,parseInt(sel.value)));\n      mRow.append(l,sel);\n    });\n    sBox.appendChild(mRow); w.appendChild(sBox);\n    return w;\n  },\n  onPoll(data, card) {\n    // Solar-\u00dcberschuss \u2192 Pool-Pumpe automatisch (wenn aktiviert)\n    const cfg = card?._opts?.pool_cfg || {};\n    if (!cfg.solar_auto || !cfg.pool_pump) return;\n    const hass = card?._hass;\n    if (!hass) return;\n    const energyCfg = card?._opts?.energie_cfg || {};\n    const solarW = parseFloat(hass.states[energyCfg.solar_power]?.state) || 0;\n    const loadW  = parseFloat(hass.states[energyCfg.load_power]?.state)  || 0;\n    const surplus = solarW - loadW;\n    const threshold = parseInt(cfg.solar_threshold || 300);\n    const pumpState = hass.states[cfg.pool_pump]?.state;\n    if (surplus >= threshold && pumpState === \"off\") {\n      hass.callService(\"switch\",\"turn_on\",{entity_id:cfg.pool_pump}).catch(()=>{});\n    } else if (surplus < threshold * 0.7 && pumpState === \"on\" && cfg.solar_auto_off) {\n      hass.callService(\"switch\",\"turn_off\",{entity_id:cfg.pool_pump}).catch(()=>{});\n    }\n  },\n};",
+  elektro: "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// ELEKTRO-MANAGEMENT MODUL v3.0.0\n// HA-Automationen visualisieren \u00b7 Entity-Picker \u00b7 Multi-System \u00b7 Log \u00b7 KI\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nconst ElektroModul = {\n  id: \"elektro\", name: \"Elektro\", icon: \"\ud83d\udd0c\", tabId: \"elektro\", version: \"3.0.0\",\n  description: \"Solar-Fluss \u00b7 HA-Automationen \u00b7 KI-Analyse\",\n\n  _card: null, _nodes: null, _wires: null, _autos: null,\n  _selNode: null, _selWire: null, _selAuto: null,\n  _sidebarTab: \"autos\",  // autos | elements | ha_import | ai\n  _haAutos: [],          // Aus HA importierte Automationen\n  _haAutoStates: {},     // Aktueller State jeder HA-Automation\n  _log: [],              // Lokales Ausf\u00fchrungs-Log (max 200)\n  _history: [],          // Sensor-Verlauf f\u00fcr KI\n  _lastAutoRun: {},\n  _systems: null,        // Multi-System: [{id, name, nodes, wires, autos}]\n  _activeSystem: 0,\n  _haEntities: null,     // Gecachte Entity-Liste f\u00fcr Picker\n  _connectFrom: null,\n\n  // \u2500\u2500 Node-Typen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  NODE_TYPES: {\n    solar:     {label:\"Solar-Panel\",    icon:\"\u2600\",  color:\"#fbbf24\",shape:\"circle\"},\n    mppt:      {label:\"MPPT Regler\",    icon:\"\u26a1\", color:\"#f59e0b\",shape:\"circle\"},\n    battery:   {label:\"Batterie\",       icon:\"\ud83d\udd0b\", color:\"#22c55e\",shape:\"rect\"  },\n    inverter:  {label:\"Wechselrichter\", icon:\"\ud83d\udd0c\", color:\"#a855f7\",shape:\"circle\"},\n    load_12v:  {label:\"12V Last\",       icon:\"\ud83d\udca1\", color:\"#38bdf8\",shape:\"circle\"},\n    load_230v: {label:\"230V Last\",      icon:\"\ud83d\udd0c\", color:\"#f97316\",shape:\"circle\"},\n    wallbox:   {label:\"Wallbox\",        icon:\"\ud83d\ude97\", color:\"#06b6d4\",shape:\"circle\"},\n    pool:      {label:\"Pool-Pumpe\",     icon:\"\ud83c\udfca\", color:\"#0ea5e9\",shape:\"circle\"},\n    boiler:    {label:\"Boiler\",         icon:\"\u2668\",  color:\"#ef4444\",shape:\"circle\"},\n    powerbank: {label:\"Powerbank\",      icon:\"\ud83d\udcf1\", color:\"#8b5cf6\",shape:\"circle\"},\n    meter:     {label:\"Stromz\u00e4hler\",    icon:\"\ud83d\udcca\", color:\"#64748b\",shape:\"rect\"  },\n    custom:    {label:\"Eigenes Ger\u00e4t\",  icon:\"\u2699\",  color:\"#475569\",shape:\"circle\"},\n  },\n\n  CONDITION_TYPES: {\n    surplus_gt: {label:\"\u00dcberschuss > X W\",  icon:\"\u26a1\",params:[\"threshold_w\"]},\n    surplus_lt: {label:\"\u00dcberschuss < X W\",  icon:\"\u26a1\",params:[\"threshold_w\"]},\n    soc_gt:     {label:\"Batterie > X %\",    icon:\"\ud83d\udd0b\",params:[\"threshold_pct\"]},\n    soc_lt:     {label:\"Batterie < X %\",    icon:\"\ud83d\udd0b\",params:[\"threshold_pct\"]},\n    watt_gt:    {label:\"Solar > X W\",       icon:\"\u2600\", params:[\"threshold_w\"]},\n    watt_lt:    {label:\"Solar < X W\",       icon:\"\u2600\", params:[\"threshold_w\"]},\n    time_between:{label:\"Uhrzeit zwischen\", icon:\"\ud83d\udd50\",params:[\"time_from\",\"time_to\"]},\n    weekday:    {label:\"Wochentag\",         icon:\"\ud83d\udcc5\",params:[\"days\"]},\n    entity_on:  {label:\"Entity ist AN\",     icon:\"\ud83d\udca1\",params:[\"entity\"]},\n    entity_off: {label:\"Entity ist AUS\",    icon:\"\ud83d\udca1\",params:[\"entity\"]},\n    temp_lt:    {label:\"Temperatur < X\u00b0C\",  icon:\"\ud83c\udf21\",params:[\"threshold_temp\",\"entity\"]},\n    temp_gt:    {label:\"Temperatur > X\u00b0C\",  icon:\"\ud83c\udf21\",params:[\"threshold_temp\",\"entity\"]},\n  },\n\n  ACTION_TYPES: {\n    switch_on:    {label:\"Schalter AN\",       icon:\"\u2705\",params:[\"entity\"]},\n    switch_off:   {label:\"Schalter AUS\",      icon:\"\u274c\",params:[\"entity\"]},\n    switch_toggle:{label:\"Schalter toggeln\",  icon:\"\ud83d\udd04\",params:[\"entity\"]},\n    notify:       {label:\"Benachrichtigung\",  icon:\"\ud83d\udd14\",params:[\"message\"]},\n    scene:        {label:\"Szene aktivieren\",  icon:\"\ud83c\udfad\",params:[\"scene_id\"]},\n    script:       {label:\"Script ausf\u00fchren\",  icon:\"\ud83d\udcdc\",params:[\"script_id\"]},\n  },\n\n  // KI-Vorschl\u00e4ge mit Saison-Awareness\n  AI_SUGGESTIONS: [\n    {id:\"s1\",title:\"\ud83d\udd0b Tiefentladungsschutz\",        risk:\"low\",  category:\"battery\",  season:\"all\",\n     desc:\"WR aus wenn SOC < 20% und kein Solar. Sch\u00fctzt die Batterie.\",\n     detect:(v)=>!v.hasSocProtection&&v.hasInverter,\n     auto:{name:\"Batterie Tiefentladungsschutz\",conditions:[{type:\"soc_lt\",threshold_pct:20},{type:\"watt_lt\",threshold_w:10}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{relay_a}}\"}],actions_else:[],cooldown_min:30}},\n    {id:\"s2\",title:\"\u2600 \u00dcberschuss \u2192 Warmwasser\",      risk:\"low\",  category:\"surplus\",  season:\"all\",\n     desc:\"Boiler bei > 500W \u00dcberschuss. G\u00fcnstiger als Netzstrom.\",\n     detect:(v)=>!v.hasBoilerAuto,\n     auto:{name:\"\u00dcberschuss Boiler\",conditions:[{type:\"surplus_gt\",threshold_w:500}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{boiler_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{boiler_entity}}\"}],cooldown_min:15}},\n    {id:\"s3\",title:\"\ud83d\ude97 Wallbox Solar-Laden\",          risk:\"low\",  category:\"surplus\",  season:\"all\",\n     desc:\"E-Auto nur laden wenn > 1400W \u00dcberschuss.\",\n     detect:(v)=>!v.hasWallboxAuto,\n     auto:{name:\"Wallbox Solar\",conditions:[{type:\"surplus_gt\",threshold_w:1400},{type:\"soc_gt\",threshold_pct:50}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{wallbox_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{wallbox_entity}}\"}],cooldown_min:30}},\n    {id:\"s4\",title:\"\u2744 Winter: Batterie-Heizung\",      risk:\"medium\",category:\"seasonal\",season:\"winter\",\n     desc:\"12V-Dose AN bei < 5\u00b0C Au\u00dfentemperatur. Wichtig f\u00fcr Batterie-Lebensdauer!\",\n     detect:(v)=>!v.hasTempProtection,\n     auto:{name:\"Batterie-Heizschutz\",conditions:[{type:\"temp_lt\",threshold_temp:5,entity:\"{{temp_entity}}\"}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{relay_b}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{relay_b}}\"}],cooldown_min:60}},\n    {id:\"s5\",title:\"\ud83c\udf19 Nacht: Wechselrichter aus\",    risk:\"low\",  category:\"efficiency\",season:\"all\",\n     desc:\"WR nachts aus = ~240Wh/Tag weniger Verlust. 87 kWh/Jahr.\",\n     detect:(v)=>v.hasInverter&&!v.hasNightOff,\n     auto:{name:\"WR Nacht-Aus\",conditions:[{type:\"time_between\",time_from:\"22:00\",time_to:\"06:00\"}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{relay_a}}\"}],actions_else:[],cooldown_min:120}},\n    {id:\"s6\",title:\"\ud83c\udfca Pool Solar-Betrieb\",           risk:\"low\",  category:\"surplus\",  season:\"summer\",\n     desc:\"Pool-Pumpe nur bei Solar\u00fcberschuss. Spart Netzstrom.\",\n     detect:(v)=>!v.hasPoolAuto,\n     auto:{name:\"Pool Solar-Pumpe\",conditions:[{type:\"surplus_gt\",threshold_w:200},{type:\"time_between\",time_from:\"08:00\",time_to:\"20:00\"}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{pool_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{pool_entity}}\"}],cooldown_min:20}},\n    {id:\"s7\",title:\"\ud83d\udcf1 Batterie voll \u2013 Hinweis\",      risk:\"low\",  category:\"notify\",   season:\"all\",\n     desc:\"Benachrichtigung wenn Batterie > 95% \u2192 Verbraucher einschalten.\",\n     detect:(v)=>!v.hasFullNotify,\n     auto:{name:\"Batterie voll\",conditions:[{type:\"soc_gt\",threshold_pct:95}],operator:\"AND\",actions:[{type:\"notify\",message:\"\u2600 Batterie voll! Schalte Verbraucher ein.\"}],actions_else:[],cooldown_min:480}},\n    {id:\"s8\",title:\"\u26a1 Lastspitzen-Schutz\",           risk:\"high\", category:\"protection\",season:\"all\",\n     desc:\"WR + Wallbox nie gleichzeitig. Verhindert \u00dcberlastung.\",\n     detect:(v)=>v.hasInverter&&!v.hasLoadManagement,\n     auto:{name:\"Anti-Peak\",conditions:[{type:\"entity_on\",entity:\"{{relay_a}}\"},{type:\"entity_on\",entity:\"{{wallbox_entity}}\"}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{boiler_entity}}\"},{type:\"notify\",message:\"\u26a0 Lastspitze: Boiler deaktiviert\"}],actions_else:[],cooldown_min:60}},\n  ],\n\n  // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  init(card) {\n    this._card = card;\n    // Multi-System initialisieren\n    this._systems = card._opts?.elektro_systems || [\n      {id:\"sys1\", name:\"Wohnung\", nodes:card._opts?.elektro_nodes||this._defaultNodes(), wires:card._opts?.elektro_wires||this._defaultWires(), autos:card._opts?.elektro_autos||[]},\n    ];\n    this._activeSystem = card._opts?.elektro_active_system || 0;\n    this._loadSystem();\n    this._haAutos = []; this._log = card._opts?.elektro_log || [];\n    this._history = []; this._lastAutoRun = {};\n    this._loadHaAutomations(card);\n    console.info(\"[BLE Elektro v3] initialisiert\");\n  },\n\n  destroy() { this._card=this._nodes=this._wires=this._autos=null; },\n\n  _loadSystem() {\n    const sys = this._systems[this._activeSystem] || this._systems[0];\n    this._nodes = sys.nodes; this._wires = sys.wires; this._autos = sys.autos;\n  },\n\n  _saveSystem(card) {\n    const sys = this._systems[this._activeSystem];\n    if (!sys) return;\n    sys.nodes = this._nodes; sys.wires = this._wires; sys.autos = this._autos;\n    if (!card._opts) card._opts = {};\n    card._opts.elektro_systems = this._systems;\n    card._opts.elektro_active_system = this._activeSystem;\n    // Kompatibilit\u00e4t\n    card._opts.elektro_nodes = this._nodes;\n    card._opts.elektro_wires = this._wires;\n    card._opts.elektro_autos = this._autos;\n    card._saveOptions();\n  },\n\n  _defaultNodes() {\n    return [\n      {id:\"solar1\",  type:\"solar\",    x:0.5,  y:0.07, label:\"Solar-Panel\",   entity:\"\"},\n      {id:\"mppt1\",   type:\"mppt\",     x:0.5,  y:0.27, label:\"MPPT\",          entity:\"\"},\n      {id:\"batt1\",   type:\"battery\",  x:0.22, y:0.52, label:\"Batterie\",      entity:\"\"},\n      {id:\"load12v\", type:\"load_12v\", x:0.78, y:0.52, label:\"12V Netz\",      entity:\"\"},\n      {id:\"inv1\",    type:\"inverter\", x:0.22, y:0.76, label:\"Wechselrichter\", entity:\"\"},\n      {id:\"load230v\",type:\"load_230v\",x:0.78, y:0.76, label:\"230V\",          entity:\"\"},\n    ];\n  },\n  _defaultWires() {\n    return [\n      {id:\"w1\",from:\"solar1\",  to:\"mppt1\",   sensor_key:\"solar_power\",   logics:[]},\n      {id:\"w2\",from:\"mppt1\",   to:\"batt1\",   sensor_key:\"battery_power\", logics:[]},\n      {id:\"w3\",from:\"mppt1\",   to:\"load12v\", sensor_key:\"load_power\",    logics:[]},\n      {id:\"w4\",from:\"batt1\",   to:\"inv1\",    sensor_key:\"battery_power\", logics:[]},\n      {id:\"w5\",from:\"inv1\",    to:\"load230v\",sensor_key:\"ac_out_power\",  logics:[]},\n    ];\n  },\n\n  // \u2500\u2500 HA-Automationen laden \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  async _loadHaAutomations(card) {\n    try {\n      const autos = await card._hass.callApi(\"GET\",\"config/automation/config\");\n      this._haAutos = (Array.isArray(autos) ? autos : Object.values(autos||{}))\n        .map(a=>({\n          id:     a.id||a.alias,\n          alias:  a.alias||a.id||\"Automation\",\n          state:  card._hass?.states[`automation.${(a.alias||\"\").toLowerCase().replace(/[^a-z0-9]/g,\"_\")}`]?.state || \"unknown\",\n          mode:   a.mode||\"single\",\n          conditions: a.condition||[],\n          actions:    a.action||[],\n          raw:        a,\n        }));\n      // States aus hass.states lesen\n      Object.keys(card._hass?.states||{}).filter(k=>k.startsWith(\"automation.\")).forEach(k=>{\n        const friendly = card._hass.states[k].attributes?.friendly_name||\"\";\n        const match = this._haAutos.find(a=>a.alias===friendly||k.includes((a.alias||\"\").toLowerCase().replace(/\\s/g,\"_\")));\n        if (match) { match.entity_id = k; match.state = card._hass.states[k].state; match.last_triggered = card._hass.states[k].attributes?.last_triggered; }\n      });\n      card._markDirty();\n    } catch(e) {\n      // Fallback: aus hass.states lesen\n      this._haAutos = Object.entries(card._hass?.states||{})\n        .filter(([k])=>k.startsWith(\"automation.\"))\n        .map(([k,s])=>({\n          id: k, alias: s.attributes?.friendly_name||k.replace(\"automation.\",\"\"),\n          entity_id: k, state: s.state,\n          last_triggered: s.attributes?.last_triggered,\n          mode: s.attributes?.mode||\"single\",\n          raw: s.attributes,\n        }));\n    }\n  },\n\n  // \u2500\u2500 Entity-Cache aufbauen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _getEntities(card, filter) {\n    if (!this._haEntities) {\n      this._haEntities = Object.entries(card._hass?.states||{}).map(([k,s])=>({\n        id: k, domain: k.split(\".\")[0],\n        name: s.attributes?.friendly_name || k,\n        state: s.state,\n      }));\n    }\n    if (!filter) return this._haEntities;\n    return this._haEntities.filter(e=>filter.includes(e.domain));\n  },\n\n  // \u2500\u2500 Canvas zeichnen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onDraw(ctx, card) {\n    if (card._mode !== \"elektro\") return;\n    const c = card._canvas;\n    if (!c) return;\n    const W=c.width, H=c.height, t=Date.now(), dpr=window.devicePixelRatio||1;\n    const hass=card._hass, cfg=card._opts?.energie_cfg||{};\n    const getW=(k)=>{const e=cfg[k];return e&&hass?.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const vals={solarW:getW(\"solar_power\"),battPct:getW(\"battery_soc\"),battW:getW(\"battery_power\"),loadW:getW(\"load_power\"),acW:getW(\"ac_out_power\")};\n    vals.surplus=Math.max(0,vals.solarW-vals.loadW);\n\n    ctx.fillStyle=\"#070a10\"; ctx.fillRect(0,0,W,H);\n    ctx.strokeStyle=\"#0d1829\"; ctx.lineWidth=1;\n    const gs=40*dpr;\n    for(let x=0;x<W;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}\n    for(let y=0;y<H;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}\n\n    // System-Name oben rechts\n    const sys=this._systems?.[this._activeSystem];\n    if(sys&&this._systems.length>1){\n      ctx.font=`bold ${8*dpr}px 'JetBrains Mono',monospace`;\n      ctx.fillStyle=\"#334155\"; ctx.textAlign=\"right\";\n      ctx.fillText(`\ud83d\udccd ${sys.name}`, W-10*dpr, 16*dpr);\n    }\n\n    // \u2500\u2500 Leitungen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._wires||[]).forEach(wire=>{\n      const nA=(this._nodes||[]).find(n=>n.id===wire.from);\n      const nB=(this._nodes||[]).find(n=>n.id===wire.to);\n      if(!nA||!nB)return;\n      const ax=nA.x*W, ay=nA.y*H, bx=nB.x*W, by=nB.y*H;\n      const watts=wire.sensor_key?(getW(wire.sensor_key)||0):0;\n      const color=this._wireColor(nA.type);\n      const lw=Math.max(1.5,Math.min(7,Math.abs(watts)/120))*dpr;\n      const active=Math.abs(watts)>5;\n      const cp1x=ax+(bx-ax)*0.15, cp1y=ay+(by-ay)*0.45;\n      const cp2x=bx-(bx-ax)*0.15, cp2y=by-(by-ay)*0.45;\n\n      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,bx,by);\n      ctx.strokeStyle=active?color:\"#1c2535\"; ctx.lineWidth=lw; ctx.lineCap=\"round\";\n      if(active&&Math.abs(watts)>300){ctx.shadowColor=color;ctx.shadowBlur=6*dpr;}\n      ctx.stroke(); ctx.shadowBlur=0;\n\n      // Richtungspfeil\n      const arrowT=0.72;\n      const px2=Math.pow(1-arrowT,3)*ax+3*Math.pow(1-arrowT,2)*arrowT*cp1x+3*(1-arrowT)*arrowT*arrowT*cp2x+arrowT*arrowT*arrowT*bx;\n      const py2=Math.pow(1-arrowT,3)*ay+3*Math.pow(1-arrowT,2)*arrowT*cp1y+3*(1-arrowT)*arrowT*arrowT*cp2y+arrowT*arrowT*arrowT*by;\n      const px3=Math.pow(1-0.78,3)*ax+3*Math.pow(1-0.78,2)*0.78*cp1x+3*(1-0.78)*0.78*0.78*cp2x+0.78*0.78*0.78*bx;\n      const py3=Math.pow(1-0.78,3)*ay+3*Math.pow(1-0.78,2)*0.78*cp1y+3*(1-0.78)*0.78*0.78*cp2y+0.78*0.78*0.78*by;\n      const ang=Math.atan2(py3-py2,px3-px2);\n      const as=5*dpr;\n      ctx.beginPath();\n      ctx.moveTo(px2+Math.cos(ang)*as, py2+Math.sin(ang)*as);\n      ctx.lineTo(px2+Math.cos(ang+2.4)*as*0.7, py2+Math.sin(ang+2.4)*as*0.7);\n      ctx.lineTo(px2+Math.cos(ang-2.4)*as*0.7, py2+Math.sin(ang-2.4)*as*0.7);\n      ctx.closePath();\n      ctx.fillStyle=active?color:\"#1c2535\"; ctx.fill();\n\n      // Partikel\n      if(active){\n        const speed=Math.min(2.5,Math.abs(watts)/300);\n        const count=Math.max(2,Math.floor(Math.abs(watts)/250));\n        for(let i=0;i<count;i++){\n          const ph=((t/800*speed+i/count)%1);\n          const u=ph;\n          const ppx=Math.pow(1-u,3)*ax+3*Math.pow(1-u,2)*u*cp1x+3*(1-u)*u*u*cp2x+u*u*u*bx;\n          const ppy=Math.pow(1-u,3)*ay+3*Math.pow(1-u,2)*u*cp1y+3*(1-u)*u*u*cp2y+u*u*u*by;\n          const al=Math.sin(Math.PI*ph)*0.9;\n          ctx.beginPath(); ctx.arc(ppx,ppy,lw*0.85,0,Math.PI*2);\n          ctx.fillStyle=color.replace(\"1)\",`${al})`); ctx.fill();\n        }\n        // Watt-Label\n        const mx2=ax+(bx-ax)*0.5, my2=ay+(by-ay)*0.5;\n        const lbl=Math.abs(watts)>=1000?`${(Math.abs(watts)/1000).toFixed(1)}kW`:`${Math.abs(watts).toFixed(0)}W`;\n        ctx.font=`bold ${7*dpr}px 'JetBrains Mono',monospace`;\n        ctx.fillStyle=color.replace(\"1)\",\"0.9)\"); ctx.textAlign=\"center\";\n        ctx.fillRect(mx2-20*dpr, my2-8*dpr, 40*dpr, 11*dpr);\n        ctx.fillStyle=\"#070a10\"; ctx.fillText(lbl, mx2, my2+1*dpr);\n      }\n\n      if(this._selWire===wire){\n        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,bx,by);\n        ctx.strokeStyle=\"#00e5ff55\"; ctx.lineWidth=lw+6; ctx.stroke();\n      }\n    });\n\n    // \u2500\u2500 Eigene Automations-Rauten \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._autos||[]).forEach(auto=>{\n      if(!auto.x||!auto.y) return;\n      const ax2=auto.x*W, ay2=auto.y*H;\n      const running=this._evalAuto(auto,vals,hass,cfg);\n      const dr=18*dpr;\n      ctx.save(); ctx.translate(ax2,ay2); ctx.rotate(Math.PI/4);\n      if(running){ctx.shadowColor=\"#22c55e\";ctx.shadowBlur=14*dpr;}\n      ctx.fillStyle=running?\"#22c55e22\":\"#0d1829\";\n      ctx.strokeStyle=running?\"#22c55e\":this._selAuto===auto?\"#00e5ff\":\"#334155\";\n      ctx.lineWidth=this._selAuto===auto?2.5:1.5;\n      ctx.fillRect(-dr,-dr,dr*2,dr*2); ctx.strokeRect(-dr,-dr,dr*2,dr*2);\n      ctx.shadowBlur=0; ctx.restore();\n      ctx.font=`${8*dpr}px serif`; ctx.fillStyle=running?\"#22c55e\":\"#64748b\"; ctx.textAlign=\"center\";\n      ctx.fillText(\"\u25c6\",ax2,ay2+3*dpr);\n      ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle=running?\"#22c55e\":\"#445566\";\n      ctx.fillText((auto.name||\"Auto\").slice(0,16), ax2, ay2+dr+9*dpr);\n      ctx.beginPath(); ctx.arc(ax2+dr+4*dpr, ay2-dr-4*dpr, 4*dpr,0,Math.PI*2);\n      ctx.fillStyle=auto.enabled===false?\"#334155\":running?\"#22c55e\":\"#f59e0b\"; ctx.fill();\n    });\n\n    // \u2500\u2500 Knoten \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._nodes||[]).forEach(node=>{\n      const nx=node.x*W, ny=node.y*H;\n      const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;\n      const r=28*dpr, sel=this._selNode===node;\n      const entityState=node.entity?hass?.states[node.entity]?.state:null;\n      const isActive=entityState&&[\"on\",\"playing\",\"heat\",\"cool\",\"active\"].includes(entityState.toLowerCase());\n      if((isActive||(node.type===\"solar\"&&vals.solarW>50))&&!sel){ctx.shadowColor=nt.color;ctx.shadowBlur=14*dpr;}\n      if(nt.shape===\"rect\"){\n        const rw=r*1.7,rh=r*1.25;\n        ctx.fillStyle=\"#0d1219\"; ctx.strokeStyle=sel?\"#00e5ff\":isActive?nt.color:\"#1c2535\"; ctx.lineWidth=sel?2.5:1.5;\n        ctx.beginPath(); ctx.roundRect(nx-rw/2,ny-rh/2,rw,rh,6); ctx.fill(); ctx.stroke();\n        if(node.type===\"battery\"&&vals.battPct>0){\n          const bw2=rw-8,bh2=rh-8;\n          const fh=bh2*0.85*(vals.battPct/100);\n          const bc=vals.battPct>60?\"#22c55e\":vals.battPct>30?\"#f59e0b\":\"#ef4444\";\n          ctx.fillStyle=bc+\"44\"; ctx.beginPath(); ctx.roundRect(nx-bw2/2,ny+bh2/2*0.85-fh-4*dpr,bw2,fh,3); ctx.fill();\n        }\n      } else {\n        ctx.fillStyle=\"#0d1219\"; ctx.strokeStyle=sel?\"#00e5ff\":isActive?nt.color:\"#1c2535\"; ctx.lineWidth=sel?2.5:1.5;\n        ctx.beginPath(); ctx.arc(nx,ny,r,0,Math.PI*2); ctx.fill(); ctx.stroke();\n      }\n      ctx.shadowBlur=0;\n      if(node.type===\"solar\"&&vals.solarW>30){\n        const phase=(t/1800)%1;\n        [0,1,2].forEach(ri=>{const rp=(phase+ri*0.33)%1;const rr=r*(1+rp*0.85);const al=(1-rp)*0.4*(vals.solarW/3000);ctx.beginPath();ctx.arc(nx,ny,rr,0,Math.PI*2);ctx.strokeStyle=`rgba(251,191,36,${al})`;ctx.lineWidth=1.5;ctx.stroke();});\n      }\n      ctx.font=`${15*dpr}px serif`; ctx.fillStyle=isActive?nt.color:\"#94a3b8\"; ctx.textAlign=\"center\";\n      ctx.fillText(nt.icon,nx,ny+5*dpr);\n      const vt=this._nodeValue(node,vals,hass,cfg);\n      if(vt){ctx.font=`bold ${7.5*dpr}px 'JetBrains Mono',monospace`;ctx.fillStyle=nt.color;ctx.fillText(vt,nx,ny+(nt.shape===\"rect\"?20:r+12)*dpr);}\n      ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle=\"#334155\";\n      ctx.fillText(node.label||nt.label,nx,ny+(nt.shape===\"rect\"?30:r+21)*dpr);\n    });\n\n    // \u2500\u2500 Status-Bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const runCount=(this._autos||[]).filter(a=>a.enabled!==false&&this._evalAuto(a,vals,hass,cfg)).length;\n    const haCount=this._haAutos.filter(a=>a.state===\"on\").length;\n    ctx.fillStyle=\"rgba(7,10,16,0.9)\"; ctx.fillRect(0,0,W,22*dpr);\n    ctx.font=`${7*dpr}px 'JetBrains Mono',monospace`; ctx.textAlign=\"left\"; ctx.fillStyle=\"#445566\";\n    ctx.fillText(`\u2600${vals.solarW.toFixed(0)}W  \ud83d\udd0b${vals.battPct.toFixed(0)}%  \u26a1+${vals.surplus.toFixed(0)}W  \u25c6${runCount}/${(this._autos||[]).length} eigen  \ud83c\udfe0${haCount}/${this._haAutos.length} HA`, 10*dpr, 14*dpr);\n    ctx.fillStyle=\"#1c2535\"; ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`;\n    ctx.fillText(\"Antippen = ausw\u00e4hlen  \u00b7  Sidebar: Automationen | Elemente | HA-Import | \ud83e\udd16 KI\", 10*dpr, H-8*dpr);\n  },\n\n  // \u2500\u2500 Poll \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onPoll(data, card) {\n    const hass=card?._hass, cfg=card?._opts?.energie_cfg||{};\n    if(!hass)return;\n    const getW=(k)=>{const e=cfg[k];return e&&hass.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const vals={solarW:getW(\"solar_power\"),battPct:getW(\"battery_soc\"),battW:getW(\"battery_power\"),loadW:getW(\"load_power\"),acW:getW(\"ac_out_power\")};\n    vals.surplus=Math.max(0,vals.solarW-vals.loadW);\n    this._history.push({ts:Date.now(),...vals});\n    if(this._history.length>360)this._history.shift();\n\n    // HA-Automation States aktualisieren\n    this._haAutos.forEach(a=>{\n      if(a.entity_id&&hass.states[a.entity_id]){\n        a.state=hass.states[a.entity_id].state;\n        a.last_triggered=hass.states[a.entity_id].attributes?.last_triggered;\n      }\n    });\n\n    // Eigene Automationen ausf\u00fchren\n    (this._autos||[]).forEach(auto=>{\n      if(auto.enabled===false)return;\n      const met=this._evalAuto(auto,vals,hass,cfg);\n      const now=Date.now(), cooldown=(auto.cooldown_min||5)*60000;\n      const last=this._lastAutoRun[auto.id]||0;\n      if(met&&now-last>cooldown){\n        this._runActions(auto.actions||[],hass,card,cfg);\n        this._lastAutoRun[auto.id]=now; auto._lastState=true;\n        const entry={ts:now,name:auto.name,type:\"own\",state:\"fired\",vals:{solarW:vals.solarW.toFixed(0),battPct:vals.battPct.toFixed(0),surplus:vals.surplus.toFixed(0)}};\n        this._log.unshift(entry); if(this._log.length>200)this._log.pop();\n        if(card._opts)card._opts.elektro_log=this._log.slice(0,50);\n        if(auto.actions?.length)card._showToast(`\u25c6 ${auto.name||\"Auto\"}: ausgef\u00fchrt`);\n      } else if(!met&&auto._lastState){\n        if((auto.actions_else||[]).length&&now-last>cooldown){this._runActions(auto.actions_else,hass,card,cfg);this._lastAutoRun[auto.id]=now;}\n        auto._lastState=false;\n      }\n    });\n  },\n\n  _evalAuto(auto,vals,hass,cfg){\n    if(!auto?.conditions?.length)return false;\n    const r=auto.conditions.map(c=>this._evalCond(c,vals,hass,cfg));\n    return auto.operator===\"OR\"?r.some(Boolean):r.every(Boolean);\n  },\n\n  _evalCond(c,vals,hass,cfg){\n    const v=parseFloat(c.threshold_w||c.threshold_pct||c.threshold_temp||0);\n    switch(c.type){\n      case\"watt_gt\":    return vals.solarW>v;\n      case\"watt_lt\":    return vals.solarW<v;\n      case\"surplus_gt\": return vals.surplus>v;\n      case\"surplus_lt\": return vals.surplus<v;\n      case\"soc_gt\":     return vals.battPct>v;\n      case\"soc_lt\":     return vals.battPct<v;\n      case\"entity_on\":  return hass?.states[c.entity]?.state===\"on\";\n      case\"entity_off\": return hass?.states[c.entity]?.state===\"off\";\n      case\"temp_gt\":    return(parseFloat(hass?.states[c.entity]?.state)||0)>v;\n      case\"temp_lt\":    return(parseFloat(hass?.states[c.entity]?.state)||0)<v;\n      case\"time_between\":{\n        const now=new Date(), hm=now.getHours()*60+now.getMinutes();\n        const[fh,fm]=(c.time_from||\"00:00\").split(\":\").map(Number);\n        const[th,tm]=(c.time_to||\"23:59\").split(\":\").map(Number);\n        const from=fh*60+fm, to=th*60+tm;\n        return from<=to?(hm>=from&&hm<=to):(hm>=from||hm<=to);\n      }\n      case\"weekday\":    return(c.days||[1,2,3,4,5]).includes(new Date().getDay());\n      default:          return false;\n    }\n  },\n\n  _runActions(actions,hass,card,cfg){\n    const res=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||s);\n    actions.forEach(a=>{\n      const eid=res(a.entity);\n      switch(a.type){\n        case\"switch_on\":     if(eid)hass.callService(\"switch\",\"turn_on\",{entity_id:eid}).catch(()=>{});break;\n        case\"switch_off\":    if(eid)hass.callService(\"switch\",\"turn_off\",{entity_id:eid}).catch(()=>{});break;\n        case\"switch_toggle\": if(eid)hass.callService(\"switch\",\"toggle\",{entity_id:eid}).catch(()=>{});break;\n        case\"notify\":        hass.callService(\"notify\",\"notify\",{message:a.message||\"\"}).catch(()=>{});break;\n        case\"scene\":         if(a.scene_id)hass.callService(\"scene\",\"turn_on\",{entity_id:a.scene_id}).catch(()=>{});break;\n        case\"script\":        if(a.script_id)hass.callService(\"script\",\"turn_on\",{entity_id:a.script_id}).catch(()=>{});break;\n      }\n    });\n  },\n\n  // \u2500\u2500 HA-Export \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  exportToHA(auto,cfg){\n    const r=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||`ENTITY_${k}`);\n    const cToY=(c)=>{\n      const v=c.threshold_w||c.threshold_pct||c.threshold_temp||0;\n      const sp=cfg.solar_power||\"sensor.solar\", lp=cfg.load_power||\"sensor.load\", bs=cfg.battery_soc||\"sensor.battery\";\n      switch(c.type){\n        case\"surplus_gt\": return `  - condition: template\\n    value_template: \"{{ (states('${sp}')|float - states('${lp}')|float) > ${v} }}\"`;\n        case\"soc_gt\":     return `  - condition: template\\n    value_template: \"{{ states('${bs}')|float > ${v} }}\"`;\n        case\"soc_lt\":     return `  - condition: template\\n    value_template: \"{{ states('${bs}')|float < ${v} }}\"`;\n        case\"entity_on\":  return `  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"on\"`;\n        case\"entity_off\": return `  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"off\"`;\n        case\"time_between\":return`  - condition: time\\n    after: \"${c.time_from}\"\\n    before: \"${c.time_to}\"`;\n        case\"temp_lt\":    return `  - condition: template\\n    value_template: \"{{ states('${r(c.entity)}')|float < ${v} }}\"`;\n        default:          return `  # ${c.type}`;\n      }\n    };\n    const aToY=(a)=>{\n      switch(a.type){\n        case\"switch_on\":  return `  - service: switch.turn_on\\n    target:\\n      entity_id: ${r(a.entity)}`;\n        case\"switch_off\": return `  - service: switch.turn_off\\n    target:\\n      entity_id: ${r(a.entity)}`;\n        case\"notify\":     return `  - service: notify.notify\\n    data:\\n      message: \"${a.message}\"`;\n        default:          return `  # ${a.type}`;\n      }\n    };\n    return `alias: \"${auto.name||'BLE Export'}\"\\ndescription: \"Export aus BLE Positioning\"\\ntrigger:\\n  - platform: time_pattern\\n    minutes: \"/5\"\\ncondition:\\n${(auto.conditions||[]).map(cToY).join(\"\\n\")}\\naction:\\n${(auto.actions||[]).map(aToY).join(\"\\n\")}\\nmode: single`;\n  },\n\n  // \u2500\u2500 Dynamische KI-Analyse \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _analyzeSystem(card){\n    const cfg=card._opts?.energie_cfg||{};\n    const history=this._history;\n    const insights=[];\n    if(history.length<10) return [\"Zu wenig Daten \u2013 bitte l\u00e4nger warten.\"];\n\n    const avgSurplus=history.reduce((a,v)=>a+v.surplus,0)/history.length;\n    const maxSolar=Math.max(...history.map(v=>v.solarW));\n    const minBatt=Math.min(...history.map(v=>v.battPct));\n    const existingIds=(this._autos||[]).map(a=>a.source_suggestion).filter(Boolean);\n    const month=new Date().getMonth()+1;\n    const isWinter=month<=3||month>=10;\n\n    if(avgSurplus>300&&!existingIds.includes(\"s2\"))\n      insights.push(`\ud83d\udca1 \u00d8 ${avgSurplus.toFixed(0)}W \u00dcberschuss \u2192 Boiler-Automation w\u00fcrde ~${(avgSurplus*0.3/1000*0.3).toFixed(2)}\u20ac/Tag sparen`);\n    if(minBatt<25&&!existingIds.includes(\"s1\"))\n      insights.push(`\u26a0 Batterie war bei ${minBatt.toFixed(0)}% \u2192 Tiefentladungsschutz empfohlen`);\n    if(maxSolar>1000&&!existingIds.includes(\"s5\"))\n      insights.push(`\ud83c\udf19 ${maxSolar.toFixed(0)}W Spitze \u2192 WR-Nacht-Aus spart ~240Wh t\u00e4glich`);\n    if(isWinter&&!existingIds.includes(\"s4\"))\n      insights.push(`\u2744 Winter erkannt \u2192 Batterie-Heizschutz pr\u00fcfen`);\n    if(avgSurplus>1400&&!existingIds.includes(\"s3\"))\n      insights.push(`\ud83d\ude97 Genug \u00dcberschuss f\u00fcr Wallbox-Laden (> 1400W)`);\n    if(this._log.length>0){\n      const today=this._log.filter(l=>Date.now()-l.ts<86400000);\n      if(today.length>0)insights.push(`\u25c6 ${today.length} Automationen heute ausgef\u00fchrt`);\n    }\n    if(this._haAutos.filter(a=>a.state===\"off\").length>5)\n      insights.push(`\ud83c\udfe0 ${this._haAutos.filter(a=>a.state===\"off\").length} HA-Automationen deaktiviert \u2013 \u00dcberblick n\u00f6tig?`);\n\n    return insights.length?insights:[\"\u2705 System optimal konfiguriert. Keine weiteren Vorschl\u00e4ge.\"];\n  },\n\n  // \u2500\u2500 Sidebar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildSidebar(card){\n    const wrap=document.createElement(\"div\");\n    wrap.style.cssText=\"padding:8px;display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:100%\";\n\n    if(this._selNode) return(wrap.appendChild(this._buildNodeEditor(card)),wrap);\n    if(this._selWire) return(wrap.appendChild(this._buildWireEditor(card)),wrap);\n    if(this._selAuto) return(wrap.appendChild(this._buildAutoEditor(card)),wrap);\n\n    // System-W\u00e4hler\n    if((this._systems||[]).length>0){\n      const sysRow=document.createElement(\"div\");\n      sysRow.style.cssText=\"display:flex;align-items:center;gap:4px;margin-bottom:2px\";\n      const sysLbl=document.createElement(\"span\"); sysLbl.style.cssText=\"font-size:7px;color:#445566\"; sysLbl.textContent=\"System:\";\n      const sysSel=document.createElement(\"select\"); sysSel.style.cssText=\"flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n      this._systems.forEach((s,i)=>{const o=document.createElement(\"option\");o.value=i;o.textContent=s.name||`System ${i+1}`;if(i===this._activeSystem)o.selected=true;sysSel.appendChild(o);});\n      sysSel.addEventListener(\"change\",()=>{this._activeSystem=parseInt(sysSel.value);this._loadSystem();card._markDirty();card._rebuildSidebar();});\n      const addSysBtn=document.createElement(\"button\"); addSysBtn.style.cssText=\"padding:3px 7px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:7.5px;cursor:pointer\"; addSysBtn.textContent=\"+\";\n      addSysBtn.addEventListener(\"click\",()=>{\n        const name=prompt(\"Name des neuen Systems (z.B. Grundst\u00fcck 2):\");\n        if(!name)return;\n        this._systems.push({id:\"sys_\"+Date.now(),name,nodes:this._defaultNodes(),wires:this._defaultWires(),autos:[]});\n        this._activeSystem=this._systems.length-1; this._loadSystem(); this._saveSystem(card); card._rebuildSidebar();\n      });\n      sysRow.append(sysLbl,sysSel,addSysBtn); wrap.appendChild(sysRow);\n    }\n\n    // Status\n    const cfg=card._opts?.energie_cfg||{}, hass=card._hass;\n    const getW=(k)=>{const e=cfg[k];return e&&hass?.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const sW=getW(\"solar_power\"),lW=getW(\"load_power\"),bPct=getW(\"battery_soc\"),surp=sW-lW;\n    const sb=document.createElement(\"div\"); sb.style.cssText=\"background:var(--surf2);border-radius:5px;padding:5px 8px;border:1px solid #1c2535\";\n    sb.innerHTML=`<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px\"><div><div style=\"font-size:6px;color:#445566\">\u2600 Solar</div><div style=\"font-size:11px;font-weight:700;color:#fbbf24\">${sW.toFixed(0)}W</div></div><div><div style=\"font-size:6px;color:#445566\">\ud83d\udd0b SOC</div><div style=\"font-size:11px;font-weight:700;color:${bPct>60?\"#22c55e\":bPct>30?\"#f59e0b\":\"#ef4444\"}\">${bPct.toFixed(0)}%</div></div><div><div style=\"font-size:6px;color:#445566\">\u26a1 \u00dcberschuss</div><div style=\"font-size:11px;font-weight:700;color:${surp>=0?\"#22c55e\":\"#ef4444\"}\">${surp>=0?\"+\":\"\"}${surp.toFixed(0)}W</div></div></div>`;\n    wrap.appendChild(sb);\n\n    // Tabs\n    const tabs=[[\"autos\",\"\u25c6 Eigene\"],[\"ha_import\",\"\ud83c\udfe0 HA\"],[\"elements\",\"\ud83d\udd27 Elemente\"],[\"ai\",\"\ud83e\udd16 KI\"]];\n    const tabBar=document.createElement(\"div\"); tabBar.style.cssText=\"display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px\";\n    const active=this._sidebarTab||\"autos\";\n    tabs.forEach(([tid,label])=>{\n      const btn=document.createElement(\"button\");\n      btn.style.cssText=`padding:4px 2px;border-radius:4px;border:1px solid ${active===tid?\"#f59e0b\":\"#1c2535\"};background:${active===tid?\"#f59e0b22\":\"var(--surf2)\"};color:${active===tid?\"#f59e0b\":\"#445566\"};font-size:7px;cursor:pointer`;\n      btn.textContent=label;\n      btn.addEventListener(\"click\",()=>{this._sidebarTab=tid;card._rebuildSidebar();});\n      tabBar.appendChild(btn);\n    });\n    wrap.appendChild(tabBar);\n\n    // \u2500\u2500 TAB: Eigene Automationen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"autos\"){\n      const hdr=document.createElement(\"div\"); hdr.style.cssText=\"display:flex;align-items:center;gap:5px;margin-top:3px\";\n      const t=document.createElement(\"div\"); t.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;flex:1\"; t.textContent=`EIGENE (${(this._autos||[]).length})`;\n      const add=document.createElement(\"button\"); add.style.cssText=\"padding:3px 8px;border-radius:4px;border:1px solid #22c55e;background:transparent;color:#22c55e;font-size:7.5px;cursor:pointer\"; add.textContent=\"+ Neu\";\n      add.addEventListener(\"click\",()=>{\n        const na={id:\"auto_\"+Date.now(),name:\"Neue Automation\",enabled:true,conditions:[],operator:\"AND\",actions:[],actions_else:[],cooldown_min:15,x:0.4+Math.random()*0.2,y:0.4+Math.random()*0.2};\n        if(!card._opts.elektro_autos)card._opts.elektro_autos=[];\n        card._opts.elektro_autos.push(na); this._autos=card._opts.elektro_autos;\n        this._selAuto=na; this._saveSystem(card); card._rebuildSidebar();\n      });\n      hdr.append(t,add); wrap.appendChild(hdr);\n\n      const vals2={solarW:sW,battPct:bPct,surplus:surp};\n      (this._autos||[]).forEach(auto=>{\n        const running=this._evalAuto(auto,vals2,hass,cfg);\n        const row=document.createElement(\"div\");\n        row.style.cssText=`display:flex;align-items:center;gap:5px;padding:5px 6px;border-radius:5px;border:1px solid ${running?\"#22c55e44\":\"#1c2535\"};background:${running?\"#22c55e0a\":\"var(--surf2)\"};cursor:pointer;margin-bottom:2px`;\n        const tog=document.createElement(\"input\"); tog.type=\"checkbox\"; tog.checked=auto.enabled!==false; tog.style.cssText=\"accent-color:#22c55e;width:12px;height:12px;cursor:pointer\";\n        tog.addEventListener(\"click\",(e)=>{e.stopPropagation();auto.enabled=tog.checked;this._saveSystem(card);card._markDirty();});\n        row.innerHTML=`<span style=\"font-size:11px\">\u25c6</span><div style=\"flex:1;min-width:0\"><div style=\"font-size:8px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${auto.name||\"Auto\"}</div><div style=\"font-size:6.5px;color:#445566\">${auto.conditions?.length||0} Bed \u00b7 ${auto.actions?.length||0} Akt \u00b7 ${auto.cooldown_min||5}min</div></div><span style=\"font-size:7px;font-weight:700;color:${running?\"#22c55e\":\"#445566\"}\">${running?\"\u25b6\":\"\u25cf\"}</span>`;\n        row.insertBefore(tog,row.firstChild);\n        row.addEventListener(\"click\",()=>{this._selAuto=auto;card._rebuildSidebar();});\n        wrap.appendChild(row);\n      });\n\n      // Log\n      if(this._log.length>0){\n        const logHdr=document.createElement(\"div\"); logHdr.style.cssText=\"font-size:7px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:3px\"; logHdr.textContent=`LOG (${this._log.length})`;\n        wrap.appendChild(logHdr);\n        this._log.slice(0,8).forEach(entry=>{\n          const r=document.createElement(\"div\"); r.style.cssText=\"font-size:6.5px;color:#445566;padding:2px 0;border-bottom:1px solid #0d121944\";\n          const ts=new Date(entry.ts); const hhmm=`${ts.getHours().toString().padStart(2,\"0\")}:${ts.getMinutes().toString().padStart(2,\"0\")}`;\n          r.textContent=`${hhmm} \u25c6 ${entry.name} (\u2600${entry.vals?.solarW}W, \ud83d\udd0b${entry.vals?.battPct}%)`;\n          wrap.appendChild(r);\n        });\n      }\n    }\n\n    // \u2500\u2500 TAB: HA-Automationen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"ha_import\"){\n      const hdr2=document.createElement(\"div\"); hdr2.style.cssText=\"display:flex;align-items:center;gap:5px;margin-top:3px\";\n      const t2=document.createElement(\"div\"); t2.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;flex:1\"; t2.textContent=`HA-AUTOMATIONEN (${this._haAutos.length})`;\n      const reload=document.createElement(\"button\"); reload.style.cssText=\"padding:3px 7px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:7.5px;cursor:pointer\"; reload.textContent=\"\u21bb\";\n      reload.addEventListener(\"click\",()=>{this._haEntities=null;this._loadHaAutomations(card).then(()=>card._rebuildSidebar());});\n      hdr2.append(t2,reload); wrap.appendChild(hdr2);\n\n      // Filter\n      const filterInp=document.createElement(\"input\"); filterInp.type=\"text\"; filterInp.placeholder=\"Suchen\u2026\";\n      filterInp.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n      wrap.appendChild(filterInp);\n\n      const listEl=document.createElement(\"div\");\n      const renderHaList=(filter)=>{\n        listEl.innerHTML=\"\";\n        const filtered=this._haAutos.filter(a=>!filter||(a.alias||\"\").toLowerCase().includes(filter.toLowerCase()));\n        filtered.slice(0,40).forEach(ha=>{\n          const on=ha.state===\"on\";\n          const row=document.createElement(\"div\");\n          row.style.cssText=`display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;border:1px solid ${on?\"#22c55e22\":\"#1c2535\"};background:${on?\"#22c55e08\":\"var(--surf2)\"};margin-bottom:2px`;\n          const tog=document.createElement(\"input\"); tog.type=\"checkbox\"; tog.checked=on; tog.style.cssText=\"accent-color:#22c55e;width:12px;height:12px;cursor:pointer\";\n          tog.addEventListener(\"change\",()=>{\n            if(ha.entity_id){card._hass.callService(\"automation\",tog.checked?\"turn_on\":\"turn_off\",{entity_id:ha.entity_id}).then(()=>{ha.state=tog.checked?\"on\":\"off\";}).catch(()=>{});}\n          });\n          const lastT=ha.last_triggered?new Date(ha.last_triggered):null;\n          const lastStr=lastT?`${lastT.getDate()}.${lastT.getMonth()+1} ${lastT.getHours()}:${String(lastT.getMinutes()).padStart(2,\"0\")}`:\"nie\";\n          row.innerHTML=`<div style=\"flex:1;min-width:0\"><div style=\"font-size:7.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${ha.alias}</div><div style=\"font-size:6px;color:#445566\">Letzte Ausf.: ${lastStr} \u00b7 ${ha.mode||\"single\"}</div></div><span style=\"font-size:7px;font-weight:700;color:${on?\"#22c55e\":\"#445566\"}\">${on?\"AN\":\"AUS\"}</span>`;\n          row.insertBefore(tog,row.firstChild);\n          wrap.appendChild; listEl.appendChild(row);\n        });\n        if(filtered.length===0){const e=document.createElement(\"div\");e.style.cssText=\"font-size:8px;color:#445566;text-align:center;padding:10px\";e.textContent=\"Keine Automationen gefunden\";listEl.appendChild(e);}\n      };\n      filterInp.addEventListener(\"input\",()=>renderHaList(filterInp.value));\n      renderHaList(\"\");\n      wrap.appendChild(listEl);\n    }\n\n    // \u2500\u2500 TAB: Elemente \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"elements\"){\n      const addHdr=document.createElement(\"div\"); addHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:4px;margin-bottom:4px\"; addHdr.textContent=\"HARDWARE HINZUF\u00dcGEN\";\n      wrap.appendChild(addHdr);\n      const grid=document.createElement(\"div\"); grid.style.cssText=\"display:grid;grid-template-columns:1fr 1fr;gap:3px\";\n      Object.entries(this.NODE_TYPES).forEach(([type,def])=>{\n        const btn=document.createElement(\"button\"); btn.style.cssText=\"padding:4px;border-radius:4px;border:1px solid #1c2535;background:var(--surf2);color:var(--text);font-size:7.5px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:4px\";\n        btn.innerHTML=`<span style=\"font-size:11px\">${def.icon}</span><span>${def.label}</span>`;\n        btn.addEventListener(\"click\",()=>{\n          const n={id:type+\"_\"+Date.now(),type,label:def.label,entity:\"\",x:0.3+Math.random()*0.4,y:0.3+Math.random()*0.4};\n          if(!this._nodes)this._nodes=[];\n          this._nodes.push(n); this._selNode=n; this._saveSystem(card); card._rebuildSidebar();\n        });\n        grid.appendChild(btn);\n      });\n      wrap.appendChild(grid);\n      const connHdr=document.createElement(\"div\"); connHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:3px\"; connHdr.textContent=`LEITUNGEN (${(this._wires||[]).length})`;\n      wrap.appendChild(connHdr);\n      const connBtn=document.createElement(\"button\"); connBtn.style.cssText=\"width:100%;padding:5px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer\"; connBtn.textContent=\"\u2192 Knoten verbinden\";\n      connBtn.addEventListener(\"click\",()=>{card._showToast(\"Ersten Knoten antippen \u2192 dann zweiten\");if(!card._opts)card._opts={};card._opts._elektro_connecting=true;});\n      wrap.appendChild(connBtn);\n    }\n\n    // \u2500\u2500 TAB: KI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"ai\"){\n      const insights=this._analyzeSystem(card);\n      if(insights.length){\n        const iHdr=document.createElement(\"div\"); iHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#f59e0b;margin-top:4px;margin-bottom:4px\"; iHdr.textContent=\"\ud83e\udd16 DYNAMISCHE ANALYSE\";\n        wrap.appendChild(iHdr);\n        insights.forEach(ins=>{\n          const r=document.createElement(\"div\"); r.style.cssText=\"font-size:7.5px;color:#94a3b8;padding:5px 7px;background:var(--surf2);border-radius:4px;border:1px solid #1c2535;margin-bottom:3px\"; r.textContent=ins;\n          wrap.appendChild(r);\n        });\n      }\n      const sugHdr=document.createElement(\"div\"); sugHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:4px\"; sugHdr.textContent=\"VORSCHL\u00c4GE\";\n      wrap.appendChild(sugHdr);\n      const vals3={solarW:sW,battPct:bPct,surplus:surp,hasInverter:!!(this._nodes||[]).find(n=>n.type===\"inverter\"),hasSocProtection:false,hasBoilerAuto:false,hasWallboxAuto:false,hasTempProtection:false,hasNightOff:false,hasPoolAuto:false,hasFullNotify:false,hasLoadManagement:false};\n      const existIds=(this._autos||[]).map(a=>a.source_suggestion).filter(Boolean);\n      this.AI_SUGGESTIONS.filter(s=>!existIds.includes(s.id)).forEach(s=>{\n        const rc=s.risk===\"high\"?\"#ef4444\":s.risk===\"medium\"?\"#f59e0b\":\"#22c55e\";\n        const card2=document.createElement(\"div\"); card2.style.cssText=`border-radius:5px;border:1px solid ${rc}33;background:${rc}0a;padding:6px;margin-bottom:4px`;\n        card2.innerHTML=`<div style=\"font-size:8px;font-weight:700;color:var(--text);margin-bottom:2px\">${s.title}</div><div style=\"font-size:7px;color:#64748b;margin-bottom:4px\">${s.desc}</div>`;\n        const add2=document.createElement(\"button\"); add2.style.cssText=`width:100%;padding:3px;border-radius:4px;border:1px solid ${rc};background:transparent;color:${rc};font-size:7.5px;cursor:pointer`; add2.textContent=\"\u25c6 Hinzuf\u00fcgen\";\n        add2.addEventListener(\"click\",()=>{\n          const na={...s.auto,id:\"auto_\"+Date.now(),enabled:true,source_suggestion:s.id,x:0.35+Math.random()*0.3,y:0.35+Math.random()*0.3};\n          if(!card._opts.elektro_autos)card._opts.elektro_autos=[];\n          card._opts.elektro_autos.push(na); this._autos=card._opts.elektro_autos;\n          this._selAuto=na; this._saveSystem(card); card._rebuildSidebar();\n        });\n        card2.appendChild(add2); wrap.appendChild(card2);\n      });\n    }\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Entity-Picker (Dropdown mit HA-Entities) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _mkEntityPicker(label, value, domains, onChange, card){\n    const wrap=document.createElement(\"div\");\n    const lbl=document.createElement(\"div\"); lbl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\"; lbl.textContent=label;\n    const row=document.createElement(\"div\"); row.style.cssText=\"display:flex;gap:3px\";\n    const inp=document.createElement(\"input\"); inp.type=\"text\"; inp.value=value||\"\"; inp.placeholder=`${(domains||[]).join(\"/\")} Entity`;\n    inp.style.cssText=\"flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n    inp.addEventListener(\"input\",()=>onChange(inp.value.trim()));\n    const pickerBtn=document.createElement(\"button\"); pickerBtn.style.cssText=\"padding:3px 6px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer\"; pickerBtn.textContent=\"\ud83d\udd0d\";\n    pickerBtn.addEventListener(\"click\",()=>{\n      const entities=this._getEntities(card,domains);\n      const dl=document.createElement(\"div\"); dl.style.cssText=\"position:absolute;z-index:100;background:#0d1219;border:1px solid #334155;border-radius:6px;max-height:180px;overflow-y:auto;width:220px;box-shadow:0 4px 12px #000a\";\n      const si=document.createElement(\"input\"); si.type=\"text\"; si.placeholder=\"Suchen\u2026\"; si.style.cssText=\"width:100%;padding:4px 6px;border:none;border-bottom:1px solid #334155;background:transparent;color:var(--text);font-size:8px;box-sizing:border-box\";\n      dl.appendChild(si);\n      const renderList=(filter)=>{\n        dl.querySelectorAll(\".pick-item\").forEach(e=>e.remove());\n        entities.filter(e=>!filter||e.name.toLowerCase().includes(filter.toLowerCase())||e.id.includes(filter)).slice(0,30).forEach(e=>{\n          const item=document.createElement(\"div\"); item.className=\"pick-item\";\n          item.style.cssText=\"padding:4px 8px;cursor:pointer;font-size:7.5px;border-bottom:1px solid #0d121966;display:flex;align-items:center;gap:6px\";\n          item.innerHTML=`<span style=\"color:#445566;font-size:6.5px\">${e.id}</span><span style=\"flex:1;color:var(--text)\">${e.name}</span><span style=\"color:${e.state===\"on\"?\"#22c55e\":\"#445566\"};font-size:6.5px\">${e.state}</span>`;\n          item.addEventListener(\"click\",()=>{inp.value=e.id;onChange(e.id);dl.remove();});\n          item.addEventListener(\"mouseenter\",()=>item.style.background=\"#1c2535\");\n          item.addEventListener(\"mouseleave\",()=>item.style.background=\"\");\n          dl.appendChild(item);\n        });\n      };\n      si.addEventListener(\"input\",()=>renderList(si.value));\n      renderList(\"\");\n      document.body.appendChild(dl);\n      const rect=pickerBtn.getBoundingClientRect();\n      dl.style.top=(rect.bottom+4)+\"px\"; dl.style.left=Math.max(4,rect.left-80)+\"px\";\n      setTimeout(()=>document.addEventListener(\"click\",function h(e){if(!dl.contains(e.target)&&e.target!==pickerBtn){dl.remove();document.removeEventListener(\"click\",h);}},{once:false}),100);\n    });\n    row.append(inp,pickerBtn); wrap.append(lbl,row); return wrap;\n  },\n\n  // \u2500\u2500 Auto-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildAutoEditor(card){\n    const auto=this._selAuto;\n    const div=document.createElement(\"div\"); div.style.cssText=\"display:flex;flex-direction:column;gap:4px\";\n    const hdr=document.createElement(\"div\"); hdr.style.cssText=\"display:flex;align-items:center;gap:6px;margin-bottom:3px\";\n    hdr.innerHTML=`<span style=\"font-size:13px\">\u25c6</span><span style=\"font-size:9px;font-weight:700;color:#22c55e\">Automation</span>`;\n    const back=document.createElement(\"button\"); back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\"; back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selAuto=null;card._rebuildSidebar();});\n    hdr.appendChild(back); div.appendChild(hdr);\n    const save=(k,v)=>{auto[k]=v;this._saveSystem(card);card._markDirty();};\n    // Name\n    div.appendChild(this._mkEntityPicker? (() => {\n      const r=document.createElement(\"div\"); const l=document.createElement(\"div\");l.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";l.textContent=\"Name\";\n      const i=document.createElement(\"input\");i.type=\"text\";i.value=auto.name||\"\";i.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      i.addEventListener(\"input\",()=>save(\"name\",i.value));r.append(l,i);return r;\n    })():null);\n    // Aktiv + Cooldown\n    const tr=document.createElement(\"div\"); tr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    const ec=document.createElement(\"input\");ec.type=\"checkbox\";ec.checked=auto.enabled!==false;ec.style.cssText=\"accent-color:#22c55e;width:13px;height:13px\";\n    ec.addEventListener(\"change\",()=>save(\"enabled\",ec.checked));\n    const el=document.createElement(\"span\");el.style.cssText=\"font-size:8px;color:#94a3b8;flex:1\";el.textContent=\"Aktiv\";\n    const cl=document.createElement(\"span\");cl.style.cssText=\"font-size:7px;color:#445566\";cl.textContent=\"Cooldown:\";\n    const ci=document.createElement(\"input\");ci.type=\"number\";ci.value=auto.cooldown_min||15;ci.min=1;ci.max=1440;\n    ci.style.cssText=\"width:40px;padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    ci.addEventListener(\"input\",()=>save(\"cooldown_min\",parseInt(ci.value)||15));\n    const cm=document.createElement(\"span\");cm.style.cssText=\"font-size:6.5px;color:#445566\";cm.textContent=\"min\";\n    tr.append(ec,el,cl,ci,cm); div.appendChild(tr);\n    // Operator\n    const op=document.createElement(\"div\"); op.style.cssText=\"display:flex;align-items:center;gap:5px\";\n    const ol=document.createElement(\"span\");ol.style.cssText=\"font-size:7px;color:#445566\";ol.textContent=\"Verkn\u00fcpfung:\";\n    [\"AND\",\"OR\"].forEach(o=>{\n      const b=document.createElement(\"button\");b.style.cssText=`padding:2px 10px;border-radius:4px;border:1px solid ${auto.operator===o?\"#38bdf8\":\"#1c2535\"};background:${auto.operator===o?\"#38bdf822\":\"var(--surf2)\"};color:${auto.operator===o?\"#38bdf8\":\"#445566\"};font-size:8px;cursor:pointer`;b.textContent=o;\n      b.addEventListener(\"click\",()=>{save(\"operator\",o);card._rebuildSidebar();});op.appendChild(b);\n    });\n    op.insertBefore(ol,op.firstChild); div.appendChild(op);\n    // Bedingungen\n    const ch=document.createElement(\"div\");ch.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:3px\";ch.textContent=\"WENN\";div.appendChild(ch);\n    if(!auto.conditions)auto.conditions=[];\n    auto.conditions.forEach((c,ci2)=>{\n      const ct=this.CONDITION_TYPES[c.type]||{};\n      const rb=document.createElement(\"div\");rb.style.cssText=\"background:var(--surf2);border-radius:4px;padding:5px;border:1px solid #38bdf822;margin-bottom:3px\";\n      rb.innerHTML=`<div style=\"font-size:7.5px;font-weight:700;color:#38bdf8;margin-bottom:3px\">${ct.icon||\"\"} ${ct.label||c.type}</div>`;\n      (ct.params||[]).forEach(param=>{\n        const isEntity=param===\"entity\";\n        if(isEntity){\n          rb.appendChild(this._mkEntityPicker({threshold_w:\"Ab Watt\",threshold_pct:\"Ab %\",threshold_temp:\"Ab \u00b0C\",entity:\"Entity\",time_from:\"Von\",time_to:\"Bis\",days:\"Tage\"}[param]||param,c[param],[\"switch\",\"sensor\",\"binary_sensor\",\"input_boolean\"],(v)=>{c[param]=v;this._saveSystem(card);},card));\n        } else {\n          const pr=document.createElement(\"div\");const pl=document.createElement(\"div\");pl.style.cssText=\"font-size:6.5px;color:#445566;margin-bottom:1px\";pl.textContent={threshold_w:\"Ab Watt\",threshold_pct:\"Ab %\",threshold_temp:\"Ab \u00b0C\",time_from:\"Von (HH:MM)\",time_to:\"Bis (HH:MM)\"}[param]||param;\n          const pi=document.createElement(\"input\");pi.type=\"text\";pi.value=c[param]||\"\";pi.style.cssText=\"width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n          pi.addEventListener(\"input\",()=>{c[param]=pi.value.trim();this._saveSystem(card);});pr.append(pl,pi);rb.appendChild(pr);\n        }\n      });\n      const db=document.createElement(\"button\");db.style.cssText=\"width:100%;padding:2px;border-radius:3px;border:1px solid #ef444466;background:transparent;color:#ef4444;font-size:7px;cursor:pointer;margin-top:3px\";db.textContent=\"Entfernen\";\n      db.addEventListener(\"click\",()=>{auto.conditions.splice(ci2,1);this._saveSystem(card);card._rebuildSidebar();});rb.appendChild(db);div.appendChild(rb);\n    });\n    const cs=document.createElement(\"select\");cs.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n    const cd=document.createElement(\"option\");cd.value=\"\";cd.textContent=\"+ Bedingung\u2026\";cs.appendChild(cd);\n    Object.entries(this.CONDITION_TYPES).forEach(([id,ct])=>{const o=document.createElement(\"option\");o.value=id;o.textContent=`${ct.icon} ${ct.label}`;cs.appendChild(o);});\n    cs.addEventListener(\"change\",()=>{if(!cs.value)return;auto.conditions.push({type:cs.value});cs.value=\"\";this._saveSystem(card);card._rebuildSidebar();});div.appendChild(cs);\n    // Aktionen\n    const ah=document.createElement(\"div\");ah.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:2px\";ah.textContent=\"DANN\";div.appendChild(ah);\n    if(!auto.actions)auto.actions=[];\n    auto.actions.forEach((a,ai)=>{\n      const at=this.ACTION_TYPES[a.type]||{};\n      const rb=document.createElement(\"div\");rb.style.cssText=\"background:var(--surf2);border-radius:4px;padding:5px;border:1px solid #22c55e22;margin-bottom:3px\";\n      rb.innerHTML=`<div style=\"font-size:7.5px;font-weight:700;color:#22c55e;margin-bottom:3px\">${at.icon||\"\"} ${at.label||a.type}</div>`;\n      (at.params||[]).forEach(param=>{\n        const isEntity=param===\"entity\";\n        if(isEntity){\n          rb.appendChild(this._mkEntityPicker(\"Entity\",a[param],[\"switch\",\"light\",\"input_boolean\"],(v)=>{a[param]=v;this._saveSystem(card);},card));\n        } else {\n          const pr=document.createElement(\"div\");const pl=document.createElement(\"div\");pl.style.cssText=\"font-size:6.5px;color:#445566;margin-bottom:1px\";pl.textContent={message:\"Nachricht\",scene_id:\"Szenen-ID\",script_id:\"Script-ID\"}[param]||param;\n          const pi=document.createElement(\"input\");pi.type=\"text\";pi.value=a[param]||\"\";pi.style.cssText=\"width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n          pi.addEventListener(\"input\",()=>{a[param]=pi.value.trim();this._saveSystem(card);});pr.append(pl,pi);rb.appendChild(pr);\n        }\n      });\n      const db=document.createElement(\"button\");db.style.cssText=\"width:100%;padding:2px;border-radius:3px;border:1px solid #ef444466;background:transparent;color:#ef4444;font-size:7px;cursor:pointer;margin-top:3px\";db.textContent=\"Entfernen\";\n      db.addEventListener(\"click\",()=>{auto.actions.splice(ai,1);this._saveSystem(card);card._rebuildSidebar();});rb.appendChild(db);div.appendChild(rb);\n    });\n    const as=document.createElement(\"select\");as.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n    const ad=document.createElement(\"option\");ad.value=\"\";ad.textContent=\"+ Aktion\u2026\";as.appendChild(ad);\n    Object.entries(this.ACTION_TYPES).forEach(([id,at])=>{const o=document.createElement(\"option\");o.value=id;o.textContent=`${at.icon} ${at.label}`;as.appendChild(o);});\n    as.addEventListener(\"change\",()=>{if(!as.value)return;auto.actions.push({type:as.value});as.value=\"\";this._saveSystem(card);card._rebuildSidebar();});div.appendChild(as);\n    // Export\n    const exp=document.createElement(\"button\");exp.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer;margin-top:3px\";exp.textContent=\"\ud83d\udce4 Als HA-Automation exportieren\";\n    exp.addEventListener(\"click\",()=>{\n      const yaml=this.exportToHA(auto,card._opts?.energie_cfg||{});\n      const ta=document.createElement(\"textarea\");ta.value=yaml;ta.style.cssText=\"width:100%;height:130px;font-size:6.5px;font-family:monospace;background:#0d1219;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:5px;margin-top:4px;resize:vertical\";\n      const cp=document.createElement(\"button\");cp.style.cssText=\"width:100%;padding:3px;border-radius:4px;border:1px solid #22c55e;background:transparent;color:#22c55e;font-size:7.5px;cursor:pointer;margin-top:2px\";cp.textContent=\"\ud83d\udccb Kopieren\";\n      cp.addEventListener(\"click\",()=>navigator.clipboard?.writeText(yaml).then(()=>card._showToast(\"\u2705 YAML kopiert\")));\n      div.appendChild(ta);div.appendChild(cp);\n    });\n    div.appendChild(exp);\n    const del2=document.createElement(\"button\");del2.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:2px\";del2.textContent=\"\ud83d\uddd1 L\u00f6schen\";\n    del2.addEventListener(\"click\",()=>{card._opts.elektro_autos=(card._opts.elektro_autos||[]).filter(a=>a.id!==auto.id);this._autos=card._opts.elektro_autos;this._selAuto=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del2);\n    return div;\n  },\n\n  // \u2500\u2500 Node-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildNodeEditor(card){\n    const node=this._selNode, nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;\n    const div=document.createElement(\"div\");div.style.cssText=\"display:flex;flex-direction:column;gap:5px\";\n    const hdr=document.createElement(\"div\");hdr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    hdr.innerHTML=`<span style=\"font-size:15px\">${nt.icon}</span><span style=\"font-size:9px;font-weight:700;color:${nt.color}\">${nt.label}</span>`;\n    const back=document.createElement(\"button\");back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\";back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selNode=null;card._rebuildSidebar();});\n    hdr.appendChild(back);div.appendChild(hdr);\n    const save=(k,v)=>{node[k]=v;this._saveSystem(card);card._markDirty();};\n    // Label\n    const lr=document.createElement(\"div\");const ll=document.createElement(\"div\");ll.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";ll.textContent=\"Label\";\n    const li=document.createElement(\"input\");li.type=\"text\";li.value=node.label||\"\";li.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    li.addEventListener(\"input\",()=>save(\"label\",li.value));lr.append(ll,li);div.appendChild(lr);\n    // Entity-Picker\n    const domains={solar:[\"sensor\"],mppt:[\"sensor\"],battery:[\"sensor\",\"input_number\"],inverter:[\"switch\",\"input_boolean\"],load_12v:[\"sensor\",\"switch\"],load_230v:[\"switch\",\"sensor\"],wallbox:[\"switch\",\"sensor\"],pool:[\"switch\"],boiler:[\"switch\"],powerbank:[\"sensor\"],meter:[\"sensor\"],custom:[\"switch\",\"sensor\",\"light\"]}[node.type]||[\"switch\",\"sensor\"];\n    div.appendChild(this._mkEntityPicker(\"Entity (Sensor/Switch)\", node.entity, domains, (v)=>save(\"entity\",v), card));\n    // Sensor-Key\n    const skr=document.createElement(\"div\");const skl=document.createElement(\"div\");skl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";skl.textContent=\"Leitungs-Messwert-Key\";\n    const sks=document.createElement(\"select\");sks.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n    [\"\",\"solar_power\",\"battery_power\",\"load_power\",\"ac_out_power\",\"grid_power\"].forEach(k=>{const o=document.createElement(\"option\");o.value=k;o.textContent=k||\"(automatisch)\";if(node.sensor_key===k)o.selected=true;sks.appendChild(o);});\n    sks.addEventListener(\"change\",()=>save(\"sensor_key\",sks.value));skr.append(skl,sks);div.appendChild(skr);\n    const del=document.createElement(\"button\");del.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:4px\";del.textContent=\"\ud83d\uddd1 Knoten l\u00f6schen\";\n    del.addEventListener(\"click\",()=>{if(!this._nodes)return;const idx=this._nodes.indexOf(node);if(idx>=0)this._nodes.splice(idx,1);this._wires=(this._wires||[]).filter(w=>w.from!==node.id&&w.to!==node.id);this._selNode=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del);return div;\n  },\n\n  // \u2500\u2500 Wire-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildWireEditor(card){\n    const wire=this._selWire;\n    const div=document.createElement(\"div\");div.style.cssText=\"display:flex;flex-direction:column;gap:5px\";\n    const hdr=document.createElement(\"div\");hdr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    hdr.innerHTML=`<span style=\"font-size:12px\">\u21c9</span><span style=\"font-size:9px;font-weight:700;color:#38bdf8\">Leitung</span>`;\n    const back=document.createElement(\"button\");back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\";back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selWire=null;card._rebuildSidebar();});\n    hdr.appendChild(back);div.appendChild(hdr);\n    const fN=(this._nodes||[]).find(n=>n.id===wire.from), tN=(this._nodes||[]).find(n=>n.id===wire.to);\n    const info=document.createElement(\"div\");info.style.cssText=\"font-size:7.5px;color:#445566;background:var(--surf2);padding:4px 6px;border-radius:4px\";\n    info.textContent=`${fN?.label||wire.from} \u2192 ${tN?.label||wire.to}`;div.appendChild(info);\n    const sks=document.createElement(\"select\");sks.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    const skl=document.createElement(\"div\");skl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";skl.textContent=\"Messwert (Watt auf Leitung)\";\n    [\"solar_power\",\"battery_power\",\"load_power\",\"ac_out_power\",\"grid_power\",\"\"].forEach(k=>{const o=document.createElement(\"option\");o.value=k;o.textContent=k||\"(keiner)\";if(wire.sensor_key===k)o.selected=true;sks.appendChild(o);});\n    sks.addEventListener(\"change\",()=>{wire.sensor_key=sks.value;this._saveSystem(card);card._markDirty();});\n    div.appendChild(skl);div.appendChild(sks);\n    const del=document.createElement(\"button\");del.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:4px\";del.textContent=\"\ud83d\uddd1 Leitung l\u00f6schen\";\n    del.addEventListener(\"click\",()=>{if(!this._wires)return;const idx=this._wires.indexOf(wire);if(idx>=0)this._wires.splice(idx,1);this._selWire=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del);return div;\n  },\n\n  // \u2500\u2500 Helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _wireColor(t){return({solar:\"rgba(251,191,36,1)\",mppt:\"rgba(245,158,11,1)\",battery:\"rgba(34,197,94,1)\",inverter:\"rgba(168,85,247,1)\",load_12v:\"rgba(56,189,248,1)\"})[t]||\"rgba(100,116,139,1)\";},\n  _nodeValue(node,vals,hass,cfg){\n    if(node.type===\"solar\")   return `${vals.solarW.toFixed(0)}W`;\n    if(node.type===\"battery\") return `${vals.battPct.toFixed(0)}%`;\n    if(node.type===\"inverter\"&&vals.acW>0) return `${vals.acW.toFixed(0)}W`;\n    if(node.type===\"load_12v\"&&vals.loadW>0) return `${vals.loadW.toFixed(0)}W`;\n    if(node.entity&&hass?.states[node.entity]){const s=hass.states[node.entity];const v=parseFloat(s.state);if(!isNaN(v))return v>1000?`${(v/1000).toFixed(1)}kW`:`${v.toFixed(0)}${v>5?\"W\":s.attributes?.unit_of_measurement||\"\"}`;return s.state.slice(0,8);}\n    return null;\n  },\n  exportToHA(auto,cfg){\n    const r=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||`ENTITY_${k}`);\n    const sp=cfg.solar_power||\"sensor.solar\",lp=cfg.load_power||\"sensor.load\",bs=cfg.battery_soc||\"sensor.battery\";\n    const cToY=(c)=>{const v=c.threshold_w||c.threshold_pct||c.threshold_temp||0;switch(c.type){case\"surplus_gt\":return`  - condition: template\\n    value_template: \"{{ (states('${sp}')|float-states('${lp}')|float)>${v} }}\"`;case\"soc_gt\":return`  - condition: template\\n    value_template: \"{{ states('${bs}')|float>${v} }}\"`;case\"soc_lt\":return`  - condition: template\\n    value_template: \"{{ states('${bs}')|float<${v} }}\"`;case\"entity_on\":return`  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"on\"`;case\"entity_off\":return`  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"off\"`;case\"time_between\":return`  - condition: time\\n    after: \"${c.time_from}\"\\n    before: \"${c.time_to}\"`;default:return`  # ${c.type}`;}};\n    const aToY=(a)=>{switch(a.type){case\"switch_on\":return`  - service: switch.turn_on\\n    target:\\n      entity_id: ${r(a.entity)}`;case\"switch_off\":return`  - service: switch.turn_off\\n    target:\\n      entity_id: ${r(a.entity)}`;case\"notify\":return`  - service: notify.notify\\n    data:\\n      message: \"${a.message}\"`;default:return`  # ${a.type}`;}};\n    return `alias: \"${auto.name||'BLE Export'}\"\\ndescription: \"Export aus BLE Positioning\"\\ntrigger:\\n  - platform: time_pattern\\n    minutes: \"/5\"\\ncondition:\\n${(auto.conditions||[]).map(cToY).join(\"\\n\")}\\naction:\\n${(auto.actions||[]).map(aToY).join(\"\\n\")}\\nmode: single`;\n  },\n};\n// Ende ElektroModul v3\n"
+};
 
-// Module-IDs registrieren (werden per fetch() geladen, nicht mehr inline)
+// Module-IDs die per lazy eval geladen werden können
 function _registerInlineModules() {
-  // Bekannte Modul-IDs vormerken damit die Sidebar sie anzeigen kann
-  ['elektro', 'energie', 'pool', 'mmwave', 'ki'].forEach(id => {
+  // Nur IDs registrieren, kein eval() beim Start
+  Object.keys(_MODULE_SOURCES).forEach(id => {
     BLEModuleRegistry._knownIds = BLEModuleRegistry._knownIds || new Set();
     BLEModuleRegistry._knownIds.add(id);
   });
 }
+
 const BLEModuleRegistry = {
-  _modules:    {},   // id → Modul-Objekt
-  _loaded:     {},   // id → true wenn geladen
-  _loading:    {},   // id → Promise (verhindert Doppel-Load)
-  _etags:      {},   // id → Last-Modified Header (für Update-Detect)
-  _loadTimes:  {},   // id → Ladezeit in ms
-  _errors:     {},   // id → Fehlermeldung
-  _updateAvail:{},   // id → true wenn neue Version auf Server
+  _modules: {},     // id → Modul-Objekt
+  _loaded: {},      // id → true wenn JS bereits geladen
 
-  // Basis-URL für Modul-Dateien
-  get _baseUrl() {
-    return '/local/ble_positioning/modules/';
-  },
-
-  // Modul registrieren (wird vom Modul selbst aufgerufen nach fetch)
+  // Modul registrieren (wird vom Modul selbst aufgerufen)
   register(module) {
     if (!module?.id) return;
     this._modules[module.id] = module;
-    this._loaded[module.id]  = true;
-    delete this._errors[module.id];
+    this._loaded[module.id] = true;
     console.info(`[BLE Modules] ✅ ${module.name} v${module.version} registriert`);
-    window.BLEModuleRegistry = BLEModuleRegistry;
   },
 
-  // Modul laden: erst fetch(), dann eval im sicheren Scope
-  async load(id, card) {
-    // Bereits geladen?
-    if (this._modules[id]) {
-      const m = this._modules[id];
-      if (typeof m.init === 'function') m.init(card);
-      return m;
-    }
-
-    // Bereits am Laden? (Promise teilen)
-    if (this._loading[id]) {
-      const m = await this._loading[id];
-      if (m && typeof m.init === 'function') m.init(card);
-      return m;
-    }
-
-    // Neu laden
-    this._loading[id] = this._fetchModule(id, card);
-    const mod = await this._loading[id];
-    delete this._loading[id];
-    return mod;
-  },
-
-  async _fetchModule(id, card) {
-    const url = `${this._baseUrl}${id}.js`;
-    const t0  = performance.now();
-    try {
-      const resp = await fetch(url, { cache: 'no-cache' });
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-
-      const src = await resp.text();
-      this._etags[id]     = resp.headers.get('Last-Modified') || resp.headers.get('ETag') || Date.now().toString();
-      this._loadTimes[id] = Math.round(performance.now() - t0);
-
-      // eval im sicheren Scope
-      const factory = new Function('BLEModuleRegistry', 'BLEModuleBase', src + `\nreturn typeof ElektroModul!=="undefined"?ElektroModul:typeof EnergieModul!=="undefined"?EnergieModul:typeof PoolModul!=="undefined"?PoolModul:typeof GartenModul!=="undefined"?GartenModul:typeof MmwaveModul!=="undefined"?MmwaveModul:typeof KiModul!=="undefined"?KiModul:null;`);
-      // base.js braucht BLEModuleBase nicht zurückgeben
-      const baseObj = BLEModuleRegistry._base || {};
-      const mod = factory(BLEModuleRegistry, baseObj);
-
-      // base.js ist kein registrierbares Modul - nur Basis-Objekt
-      if (id === 'base') {
-        try {
-          // Direkt ausführen - setzt window.BLEModuleBase
-          const baseExec = new Function(src);
-          baseExec();
-          const baseObj = window.BLEModuleBase;
-          if (baseObj) {
-            BLEModuleRegistry._base = baseObj;
-            console.info('[BLE Modules] ✅ base.js geladen');
-            return baseObj;
-          }
-        } catch(e) { console.warn('[BLE Modules] base.js Fehler:', e.message); }
-        return null;
-      }
-
-      if (mod) {
-        this.register(mod);
-        if (typeof mod.init === 'function') mod.init(card);
-        console.info(`[BLE Modules] ✅ ${id} geladen in ${this._loadTimes[id]}ms`);
-        return mod;
-      }
-      throw new Error('Modul-Objekt nicht gefunden nach eval');
-    } catch(e) {
-      this._errors[id] = e.message;
-      console.error(`[BLE Modules] ❌ ${id} Fehler: ${e.message}`);
-      return null;
-    }
-  },
-
-  // Update-Check: HEAD-Request auf Modul-Datei
-  async checkUpdates(ids) {
-    let anyUpdate = false;
-    for (const id of (ids || Object.keys(this._modules))) {
-      if (!this._etags[id]) continue;
-      try {
-        const resp = await fetch(`${this._baseUrl}${id}.js`, { method: 'HEAD', cache: 'no-cache' });
-        const serverEtag = resp.headers.get('Last-Modified') || resp.headers.get('ETag');
-        if (serverEtag && serverEtag !== this._etags[id]) {
-          this._updateAvail[id] = true;
-          anyUpdate = true;
-          console.info(`[BLE Modules] ⟳ Update verfügbar: ${id}`);
-        }
-      } catch(e) { /* offline/Netzwerkfehler ignorieren */ }
-    }
-    return anyUpdate;
-  },
-
-  // Hot-Reload: Modul neu laden ohne HA-Neustart
-  async reload(id, card) {
-    const old = this._modules[id];
-    if (old && typeof old.destroy === 'function') {
-      try { old.destroy(); } catch(e) {}
-    }
-    delete this._modules[id];
-    delete this._loaded[id];
-    delete this._etags[id];
-    delete this._updateAvail[id];
-    const mod = await this.load(id, card);
-    if (mod) {
-      console.info(`[BLE Modules] ♻ ${id} hot-reloaded`);
-      card?._rebuildSidebar?.();
-      card?._markDirty?.();
-    }
-    return mod;
-  },
-
-  // Modul deaktivieren
-  unload(id) {
-    const m = this._modules[id];
-    if (m && typeof m.destroy === 'function') {
-      try { m.destroy(); } catch(e) {}
-    }
-    delete this._modules[id];
-    delete this._loaded[id];
-  },
-
-  // Status eines Moduls
-  status(id) {
-    if (this._errors[id])        return 'error';
-    if (this._updateAvail[id])   return 'update';
-    if (this._modules[id])       return 'loaded';
-    if (this._loading[id])       return 'loading';
-    return 'unloaded';
-  },
-
+  // Prüft ob ein Modul verfügbar (geladen + aktiviert + isActive)
   isAvailable(id, card) {
     const m = this._modules[id];
     if (!m) return false;
@@ -703,15 +564,59 @@ const BLEModuleRegistry = {
     return true;
   },
 
+  // Alle aktiven Module (aktiviert + loaded)
   activeModules(card) {
     return Object.values(this._modules).filter(m =>
+      card?._opts?.['module_' + m.id] !== false &&
       card?._opts?.['module_' + m.id] === true
     );
   },
 
+  // Modul aktivieren: lazy eval des Modul-Codes erst hier
+  async load(id, card) {
+    // Bereits geladen?
+    if (this._modules[id]) {
+      const m = this._modules[id];
+      if (typeof m.init === "function") m.init(card);
+      return m;
+    }
+    // Inline-Source verfügbar? → jetzt erst eval
+    const src = _MODULE_SOURCES?.[id];
+    if (src) {
+      try {
+        // new Function erzeugt den Code im eigenen Scope
+        // kein globaler Namespace, kein Parse beim Start
+        const factory = new Function(
+          "BLEModuleRegistry",
+          src + "\nreturn typeof ElektroModul !== \"undefined\" ? ElektroModul : typeof EnergieModul !== \"undefined\" ? EnergieModul : typeof PoolModul !== \"undefined\" ? PoolModul : null;"
+        );
+        const mod = factory(BLEModuleRegistry);
+        if (mod) {
+          this.register(mod);
+          if (typeof mod.init === "function") mod.init(card);
+          console.info(`[BLE Modules] ✅ ${id} lazy-evaluiert und geladen`);
+          return mod;
+        }
+      } catch(e) {
+        console.error(`[BLE Modules] ❌ Fehler beim Laden von '${id}':`, e);
+        return null;
+      }
+    }
+    console.warn(`[BLE Modules] Modul '${id}' nicht gefunden`);
+    return null;
+  },
+
+  // Modul deaktivieren + destroy aufrufen
+  unload(id) {
+    const m = this._modules[id];
+    if (m && typeof m.destroy === 'function') {
+      try { m.destroy(); } catch(e) {}
+    }
+  },
+
+  // Alle registrierten Module-IDs
   get ids() { return Object.keys(this._modules); },
 };
-
 
 class BLEPositioningCard extends HTMLElement {
 
@@ -897,7 +802,6 @@ class BLEPositioningCard extends HTMLElement {
     } else {
       // Update live entity values in sidebar
       this._updateSidebarLive();
-      this._updateWeatherStatus();
       if (!this._scannerHistory) this._scannerHistory = {};
     const _sh_now = Date.now();
     (this._data?.scanners||[]).forEach(s => {
@@ -1360,13 +1264,6 @@ class BLEPositioningCard extends HTMLElement {
         setTimeout(() => { this._onResize(); this._markDirty(); }, 250);
       }
     }
-    // ── Modul onActivate Hook ───────────────────────────────────────────────
-    {
-      const _onActMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === mode
-      );
-      _onActMod?.onActivate?.(this);
-    }
     this._rebuildSidebar();
   }
 
@@ -1418,7 +1315,6 @@ class BLEPositioningCard extends HTMLElement {
       case "alarm":      sb.appendChild(this._sidebarAlarm());      break;
       case "energie":    sb.appendChild(this._sidebarEnergie());     break;
       case "settings":   sb.appendChild(this._sidebarSettings());    break;
-      case "ki":         sb.appendChild(this._sidebarKi());          break;
       case "automate":   sb.appendChild(this._sidebarAutomate());    break;
       case "journey":    sb.appendChild(this._sidebarJourney());      break;
       case "info":       sb.appendChild(this._sidebarInfo());        break;
@@ -3727,10 +3623,151 @@ class BLEPositioningCard extends HTMLElement {
   _updateSidebarLive() {
     if (!this._data || this._mode !== "view") return;
     this._updateSidebarFromData(this._data.devices || []);
-    this._updateMmwavePersonsSidebar?.();
+    this._updateMmwavePersonsSidebar();
   }
 
   // ── mmWave Personen Live-Update ────────────────────────────────────────────
+  _updateMmwavePersonsSidebar() {
+    const sr = this.shadowRoot;
+    if (!sr) return;
+    const sensors = (this._pendingMmwave?.length > 0 ? this._pendingMmwave : this._data?.mmwave_sensors) || [];
+    if (!sensors.length) return;
+
+    // Alle aktiven Targets über alle Sensoren sammeln
+    const allPersons = [];
+    sensors.forEach(sensor => {
+      if (sensor.mx == null || sensor.my == null) return;
+      const numTargets = sensor.targets || 3;
+      let sensorCount = 0;
+      for (let ti = 1; ti <= numTargets; ti++) {
+        const target = this._getMmwaveTarget ? this._getMmwaveTarget(sensor, ti) : null;
+        if (!target || !target.present) continue;
+        sensorCount++;
+        const tName = (sensor.target_names || [])[ti-1] || ("Person " + ti);
+        const tCol  = ["#ff6b35","#00e5ff","#22c55e"][ti-1] || "#a78bfa";
+        const room  = this._getRoomForPoint ? this._getRoomForPoint(target.floor_mx, target.floor_my) : null;
+        const roomName = room?.name || "Unbekannter Raum";
+        // Zone
+        const zone = this._getMmwaveZoneForTarget ? this._getMmwaveZoneForTarget(sensor, target) : "";
+        // Distanz Sensor→Person
+        const dx = target.floor_mx - (sensor.mx || 0);
+        const dy = target.floor_my - (sensor.my || 0);
+        const dist = Math.sqrt(dx*dx + dy*dy).toFixed(2);
+        // Klasse + Haltung
+        const clsResult = this._mmwaveClassify ? this._mmwaveClassify(sensor, target) : { cls:"unknown", confidence:0 };
+        const clsInfo   = this._mmwaveClasses  ? this._mmwaveClasses()[clsResult.cls] : null;
+        const posture   = this._mmwaveDetectPosture ? this._mmwaveDetectPosture(sensor, target) : "unknown";
+        const fallState = (this._mmwaveFallState||{})[sensor.id+"_"+target.id];
+        allPersons.push({
+          tName, tCol, roomName, zone, dist, speed: target.speed || 0,
+          moving: target.moving, clsResult, clsInfo, posture, fallState,
+          sensorName: sensor.name || sensor.id, sensorId: sensor.id,
+          floor_mx: target.floor_mx, floor_my: target.floor_my,
+        });
+      }
+      // Sensor-Zähler aktualisieren
+      const sEl = sr.getElementById(`mmw_sens_${sensor.id}_cnt`);
+      if (sEl) sEl.textContent = sensorCount + " P";
+    });
+
+    // Gesamt-Zähler
+    const totalEl = sr.getElementById("mmw_total_count");
+    if (totalEl) totalEl.textContent = allPersons.length;
+
+    // Personen-Karten neu rendern
+    const container = sr.getElementById("mmw_persons_container");
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (allPersons.length === 0) {
+      const emptyEl = document.createElement("div");
+      emptyEl.style.cssText = "text-align:center;padding:8px;font-size:9px;color:#445566;font-style:italic";
+      emptyEl.textContent = "Keine Personen erkannt";
+      container.appendChild(emptyEl);
+      return;
+    }
+
+    allPersons.forEach((p, idx) => {
+      const card = document.createElement("div");
+      const isAlarm = p.fallState?.phase === "alarm";
+      card.style.cssText = `border-radius:6px;border:1px solid ${isAlarm ? "#ef4444" : p.tCol+"44"};
+        background:${isAlarm ? "rgba(239,68,68,0.12)" : "#07090d"};padding:6px 8px;`;
+
+      // ── Header: Name + Klasse-Icon ──────────────────────────────────────
+      const hdr = document.createElement("div");
+      hdr.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:4px";
+      const nameSpan = document.createElement("div");
+      nameSpan.style.cssText = `font-size:10px;font-weight:700;color:${p.tCol};font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:4px`;
+      const clsIcon = p.clsInfo?.icon || (p.clsResult.cls !== "unknown" ? "👤" : "❓");
+      nameSpan.innerHTML = `<span style="font-size:12px">${clsIcon}</span>${p.tName}`;
+      const statusBadge = document.createElement("span");
+      statusBadge.style.cssText = `font-size:8px;padding:2px 5px;border-radius:10px;font-weight:700;
+        background:${isAlarm ? "#ef4444" : (p.moving ? p.tCol+"33" : "#1c2535")};
+        color:${isAlarm ? "#fff" : (p.moving ? p.tCol : "#445566")}`;
+      statusBadge.textContent = isAlarm ? "🆘 STURZ" : (p.moving ? "▶ bewegt" : "● still");
+      hdr.appendChild(nameSpan);
+      hdr.appendChild(statusBadge);
+      card.appendChild(hdr);
+
+      // ── Raum + Zone ─────────────────────────────────────────────────────
+      const roomRow = document.createElement("div");
+      roomRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:3px";
+      roomRow.innerHTML = `<span style="font-size:10px">🏠</span>
+        <span style="font-size:10px;font-weight:700;color:#c8d8ec;flex:1">${p.roomName}</span>
+        ${p.zone ? `<span style="font-size:8px;padding:1px 5px;border-radius:8px;background:#a78bfa22;color:#a78bfa">${p.zone}</span>` : ""}`;
+      card.appendChild(roomRow);
+
+      // ── Sensor + Distanz ────────────────────────────────────────────────
+      const sensRow = document.createElement("div");
+      sensRow.style.cssText = "display:flex;justify-content:space-between;margin-bottom:3px";
+      sensRow.innerHTML = `
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:9px">📡</span>
+          <span style="font-size:9px;color:#94a3b8">${p.sensorName}</span>
+        </div>
+        <span style="font-size:9px;font-weight:700;color:${p.tCol};font-family:'JetBrains Mono',monospace">${p.dist}m</span>`;
+      card.appendChild(sensRow);
+
+      // ── Detail-Zeile: Haltung + Geschwindigkeit ─────────────────────────
+      const detailRow = document.createElement("div");
+      detailRow.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin-top:2px";
+      // Haltung
+      if (p.posture && p.posture !== "unknown") {
+        const postureIcon = { standing:"🧍",sitting:"🪑",lying:"🛌" }[p.posture] || "👤";
+        const postureEl = document.createElement("span");
+        postureEl.style.cssText = "font-size:8px;padding:1px 5px;border-radius:8px;background:#1c2535;color:#94a3b8;display:flex;align-items:center;gap:2px";
+        postureEl.innerHTML = `${postureIcon} ${p.posture}`;
+        detailRow.appendChild(postureEl);
+      }
+      // Geschwindigkeit
+      if (Math.abs(p.speed) > 0.05) {
+        const speedEl = document.createElement("span");
+        speedEl.style.cssText = "font-size:8px;padding:1px 5px;border-radius:8px;background:#1c253588;color:#00e5ff;font-family:'JetBrains Mono',monospace";
+        speedEl.textContent = `${p.speed.toFixed(1)} m/s`;
+        detailRow.appendChild(speedEl);
+      }
+      // Klassen-Konfidenz
+      if (p.clsResult.cls !== "unknown" && p.clsResult.confidence > 0.4) {
+        const confEl = document.createElement("span");
+        const confPct = Math.round(p.clsResult.confidence * 100);
+        confEl.style.cssText = `font-size:8px;padding:1px 5px;border-radius:8px;background:${(p.clsInfo?.color||p.tCol)+"22"};color:${p.clsInfo?.color||p.tCol}`;
+        confEl.textContent = `${p.clsInfo?.label || p.clsResult.cls} ${confPct}%`;
+        detailRow.appendChild(confEl);
+      }
+      if (detailRow.children.length > 0) card.appendChild(detailRow);
+
+      // ── Positions-Bar (visuell wo auf Grundriss) ────────────────────────
+      const posBar = document.createElement("div");
+      posBar.style.cssText = "margin-top:4px;font-size:7.5px;color:#445566;display:flex;justify-content:space-between";
+      posBar.innerHTML = `<span>📍 ${p.floor_mx?.toFixed(1)}m / ${p.floor_my?.toFixed(1)}m</span>
+        <span style="color:#1c2535">${p.sensorName}</span>`;
+      card.appendChild(posBar);
+
+      container.appendChild(card);
+    });
+  }
+
+  // ── Canvas setup ─────────────────────────────────────────────────────────
 
   _loadBgImage() {
     const path = this._data?.image_path;
@@ -3930,28 +3967,6 @@ class BLEPositioningCard extends HTMLElement {
     return { x: ox + mx * scale, y: oy + my * scale };
   }
 
-  // ── Zoom-bewusste Skalierung ────────────────────────────────────────────
-  // _floorScale() liefert den UNGEZOOMTEN Maßstab. Wer damit Größen rechnet,
-  // muss den Zoom selbst dazunehmen – sonst bleiben Flächen, Texturen und
-  // Deko stehen, während die über _f2c() gezeichneten Räume mitwachsen.
-  _zoomFactor() {
-    return this._opts?.zoomPan ? (this._zoom || 1) : 1;
-  }
-
-  // px pro Meter inklusive Zoom – die richtige Basis für alle Größen in 2D.
-  _zoomScale() {
-    return this._floorScale().scale * this._zoomFactor();
-  }
-
-  // Grundriss-Rechteck in Canvas-Pixeln, inklusive Zoom und Pan.
-  _floorRectC() {
-    const fw = this._data?.floor_w || 10;
-    const fh = this._data?.floor_h || 10;
-    const a = this._f2c(0, 0);
-    const b = this._f2c(fw, fh);
-    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
-  }
-
   _c2f(cx, cy) {
     const d = this._data;
     if (!d) return { mx: 0, my: 0 };
@@ -4114,38 +4129,6 @@ class BLEPositioningCard extends HTMLElement {
   // ── Canvas events ────────────────────────────────────────────────────────
 
   async _onCanvasClick(e) {
-    // ── Musik-Bubble: Leiste öffnen bzw. Transport steuern ──────────────────
-    // Steht bewusst ganz vorn: im 3D-Modus verlässt dieser Handler die
-    // Methode weiter unten mit return, dort käme die Prüfung nie an.
-    // _canvasXY liefert physische Canvas-Pixel, genau wie die gemerkten
-    // Zonen – hier darf nicht nochmal mit dpr multipliziert werden.
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
-      // Ein Verschieben endet nicht als Klick
-      if (this._musicDidDrag) { this._musicDidDrag = false; return; }
-      const { cx: mcx, cy: mcy } = this._canvasXY(e);
-      const hit = this._musicClickZonesFrame.find(z =>
-        mcx >= z.x && mcx <= z.x + z.w && mcy >= z.y && mcy <= z.y + z.h);
-      if (hit && hit.kind === "ctl") {
-        const svc = { play: "media_play_pause", next: "media_next_track",
-                      prev: "media_previous_track" }[hit.act];
-        this._musicCtlHot = hit.entity + ":" + hit.act;
-        setTimeout(() => { this._musicCtlHot = null; this._markDirty(); }, 180);
-        try {
-          await this._hass.callService("media_player", svc, { entity_id: hit.entity });
-        } catch (e2) {
-          this._showToast("Steuerung fehlgeschlagen");
-        }
-        this._markDirty();
-        return;
-      }
-      if (hit && hit.kind === "bubble") {
-        this._musicCtlOpen = this._musicCtlOpen === hit.entity ? null : hit.entity;
-        this._markDirty();
-        return;
-      }
-      if (this._musicCtlOpen) { this._musicCtlOpen = null; this._markDirty(); }
-    }
-
     // ── 3D: Reset-Button prüfen ─────────────────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       if (this._3dResetBtn) {
@@ -4351,16 +4334,53 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
-    // ── Aktives Modul: Tap delegieren (generisch für alle Module) ────
-    {
-      const activeMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
-      );
-      if (activeMod && typeof activeMod.onTap === "function") {
-        const rect = this._canvas.getBoundingClientRect();
-        activeMod.onTap(e.clientX - rect.left, e.clientY - rect.top, this);
-        return;
+    // ── Musik-Bubble: Play/Pause per Klick ──────────────────────
+    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
+      const {cx:mcx,cy:mcy} = this._canvasXY(e);
+      const dpr = window.devicePixelRatio||1;
+      for (const z of this._musicClickZonesFrame) {
+        if (mcx>=z.x*dpr && mcx<=(z.x+z.w)*dpr && mcy>=z.y*dpr && mcy<=(z.y+z.h)*dpr) {
+          try { await this._hass.callService("media_player","media_play_pause",{entity_id:z.entity}); this._showToast("\u23ef Play/Pause"); } catch(e2){}
+          return;
+        }
       }
+    }
+
+    // ── Elektro-Modul: Knoten + Leitungen anklicken ─────────────
+    if (this._mode === "elektro") {
+      const em = BLEModuleRegistry._modules?.elektro;
+      if (em?._nodes) {
+        const {cx:ecx,cy:ecy} = this._canvasXY(e);
+        const c2=this._canvas, W2=c2.width, H2=c2.height;
+        const dpr2 = window.devicePixelRatio||1;
+        const r = 28*dpr2;
+        const hit = em._nodes.find(n=>Math.hypot(ecx-n.x*W2,ecy-n.y*H2)<=r);
+        if (hit) {
+          if (this._opts?._elektro_connecting && em._connectFrom) {
+            if (em._connectFrom.id!==hit.id) {
+              if (!this._opts.elektro_wires) this._opts.elektro_wires=[];
+              this._opts.elektro_wires.push({from:em._connectFrom.id,to:hit.id,logics:[]});
+              em._wires=this._opts.elektro_wires; em._connectFrom=null;
+              this._opts._elektro_connecting=false; em._saveState(this);
+              this._showToast("\u2705 Leitung verbunden"); this._markDirty();
+            }
+          } else if (this._opts?._elektro_connecting) {
+            em._connectFrom=hit; this._showToast(`\u2192 Von "${hit.label}" \u2013 jetzt Ziel tippen`);
+          } else {
+            em._selNode=hit; em._selWire=null; this._rebuildSidebar();
+          }
+          return;
+        }
+        const hitW = em._wires?.find(wire=>{
+          const nA=em._nodes.find(n=>n.id===wire.from), nB=em._nodes.find(n=>n.id===wire.to);
+          if(!nA||!nB) return false;
+          const mx2=(nA.x*W2+nB.x*W2)/2, my2=(nA.y*H2+nB.y*H2)/2;
+          return Math.hypot(ecx-mx2,ecy-my2)<24*dpr2;
+        });
+        if (hitW) { em._selWire=hitW; em._selNode=null; this._rebuildSidebar(); return; }
+        em._selNode=null; em._selWire=null; this._rebuildSidebar();
+      }
+      return;
     }
 
     // Room tap → light toggle (view + screensaver mode, optional)
@@ -4413,39 +4433,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasDown(e) {
-    // ── Musik-Bubble: Ziehen, auch in 3D ──────────────────────────────────
-    // Muss vor dem Orbit-Drag stehen, sonst verschluckt der die Geste.
-    // Bei Treffer wird abgebrochen, damit sich die Szene nicht mitdreht.
-    const _m3d = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
-    this._musicDidDrag = false;
-    // Touch liefert kein button-Feld (_touchToMouse setzt es nicht),
-    // ein Vergleich auf 0 schlägt in der Companion App immer fehl.
-    const _primary = e.button === 0 || e.button == null;
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length
-        && _primary) {
-      const { cx: dcx, cy: dcy } = this._canvasXY(e);
-      const z = this._musicClickZonesFrame.find(q =>
-        dcx >= q.x && dcx <= q.x + q.w && dcy >= q.y && dcy <= q.y + q.h);
-      if (z) {
-        const cur = this._musicOffset(z.entity);
-        this._musicPress = {
-          entity: z.entity, sx: dcx, sy: dcy,
-          ox: cur.dx, oy: cur.dy,
-          timer: setTimeout(() => {
-            if (!this._musicPress) return;
-            this._musicDrag = { ...this._musicPress };
-            this._musicDidDrag = true;
-            this._canvas.style.cursor = "grabbing";
-            this._markDirty();
-          }, 420),
-        };
-        // In 3D hier aussteigen: sonst startet gleichzeitig der Orbit-Drag.
-        // Der anschließende click öffnet die Leiste weiterhin.
-        if (_m3d) return;
-        // kein return in 2D: dort stört der restliche Handler nicht
-      }
-    }
-
     // ── 3D mode: intercept for orbit drag ──────────────────────────────────
     if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
       this._3dDrag = { x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
@@ -4480,22 +4467,6 @@ class BLEPositioningCard extends HTMLElement {
       this._canvas.style.cursor = "grabbing";
       return;
     }
-    // ── Aktives Modul: Drag/Resize starten (generisch) ────────────────────
-    {
-      const activeMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
-      );
-      if (activeMod && typeof activeMod.onDragStart === "function") {
-        const rect = this._canvas.getBoundingClientRect();
-        const px = (e.clientX - rect.left);
-        const py = (e.clientY - rect.top);
-        if (activeMod.onDragStart(px, py, this)) {
-          this._canvas.style.cursor = "grabbing";
-          return;
-        }
-      }
-    }
-
     // ── Deko drag: pick up existing deco element ──────────────────────────────
     if (this._mode === "deko" && !this._dekoPlacing) {
       const { cx: dCx, cy: dCy } = this._canvasXY(e);
@@ -4653,54 +4624,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasMove(e) {
-    // ── Musik-Bubble wird verschoben ────────────────────────────────────
-    if (this._musicDrag) {
-      const { cx: mx, cy: my } = this._canvasXY(e);
-      const _ddpr = window.devicePixelRatio || 1;
-      this._setMusicOffset(this._musicDrag.entity,
-        this._musicDrag.ox + (mx - this._musicDrag.sx) / _ddpr,
-        this._musicDrag.oy + (my - this._musicDrag.sy) / _ddpr);
-      this._musicDidDrag = true;
-      this._markDirty();
-      return;
-    }
-    // Solange gedrückt: eine deutliche Bewegung startet das Ziehen sofort.
-    // Vorher brach sie es ab – bei dpr 2 reichten 3 CSS-Pixel Wackeln.
-    if (this._musicPress) {
-      const { cx: mx, cy: my } = this._canvasXY(e);
-      const dpr = window.devicePixelRatio || 1;
-      if (Math.hypot(mx - this._musicPress.sx, my - this._musicPress.sy) > 5 * dpr) {
-        clearTimeout(this._musicPress.timer);
-        this._musicDrag = { ...this._musicPress };
-        this._musicPress = null;
-        this._musicDidDrag = true;
-        this._canvas.style.cursor = "grabbing";
-        this._markDirty();
-      }
-    }
-
-    // ── Aktives Modul: Drag/Resize bewegen (generisch) ───────────────────
-    {
-      const activeMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
-      );
-      if (activeMod && (activeMod._dragNode || activeMod._resizeNode || activeMod._panelDrag || activeMod._panelResize) && typeof activeMod.onDragMove === "function") {
-        const rect = this._canvas.getBoundingClientRect();
-        const px = (e.clientX - rect.left);
-        const py = (e.clientY - rect.top);
-        activeMod.onDragMove(px, py, this);
-        this._canvas.style.cursor = activeMod._resizeNode ? "nwse-resize" : "grabbing";
-        return;
-      }
-      // Elektro: Connecting-Cursor aktualisieren
-      const em = BLEModuleRegistry._modules?.elektro;
-      if (this._mode === "elektro" && em?._connectFrom) {
-        const rect = this._canvas.getBoundingClientRect();
-        const dpr  = window.devicePixelRatio || 1;
-        em._connectCursor = { x: (e.clientX - rect.left) * dpr, y: (e.clientY - rect.top) * dpr };
-        this._markDirty();
-      }
-    }
     // ── 3D orbit + pan drag ─────────────────────────────────────────────────
     if (this._mode === "view" && this._opts?.show3D) {
       const cx = e.clientX ?? e.touches?.[0]?.clientX ?? 0;
@@ -4998,29 +4921,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   _onCanvasUp(e) {
-    // ── Musik-Bubble: Halten bzw. Ziehen beenden ────────────────────────
-    if (this._musicPress) { clearTimeout(this._musicPress.timer); this._musicPress = null; }
-    if (this._musicDrag) {
-      this._musicDrag = null;
-      this._canvas.style.cursor = "default";
-      this._markDirty();
-      // _musicDidDrag bleibt gesetzt, damit der folgende click nicht
-      // als Tippen gewertet wird; _onCanvasClick setzt es zurück.
-      return;
-    }
-
-    // ── Aktives Modul: Drag/Resize beenden (generisch) ──────────────────
-    {
-      const activeMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
-      );
-      if (activeMod && (activeMod._dragNode || activeMod._resizeNode || activeMod._panelDrag || activeMod._panelResize) && typeof activeMod.onDragEnd === "function") {
-        const rect = this._canvas.getBoundingClientRect();
-        activeMod.onDragEnd((e.clientX - rect.left), (e.clientY - rect.top), this);
-        this._canvas.style.cursor = activeMod._editMode ? "move" : "default";
-        return;
-      }
-    }
     // ── 3D orbit release ────────────────────────────────────────────────────
     if (this._mode === "view" && this._opts?.show3D) {
       this._3dDrag = null;
@@ -5041,7 +4941,6 @@ class BLEPositioningCard extends HTMLElement {
     if (this._mode === "deko" && this._dekoDragging >= 0) {
       this._dekoDragging = -1;
       this._canvas.style.cursor = this._dekoPlacing ? "crosshair" : "default";
-      this._saveDecoNow(); // Position nach Drag persistieren
       return;
     }
     if (this._mode === "deko") return; // no drag active, let touchend call _onCanvasClick
@@ -5254,6 +5153,89 @@ class BLEPositioningCard extends HTMLElement {
 
   // Sensor-Fusion: wenn 2+ Sensoren die gleiche Person sehen → gewichteter Durchschnitt
   // Gewichtung: 1/d² (quadratisch nach Distanz → näherer Sensor dominiert)
+  _fuseMmwaveTargets(targets) {
+    // targets: [{floor_mx, floor_my, dist_m, sensor}, ...]
+    // Proximity-Check: gleiche Person wenn Abstand < 0.8m
+    const groups = [];
+    for (const t of targets) {
+      let merged = false;
+      for (const g of groups) {
+        const dx = g.mx - t.floor_mx, dy = g.my - t.floor_my;
+        if (Math.sqrt(dx*dx+dy*dy) < 0.8) {
+          // Gleiche Person – zum Cluster hinzufügen
+          g.members.push(t); merged = true; break;
+        }
+      }
+      if (!merged) groups.push({mx:t.floor_mx, my:t.floor_my, members:[t]});
+    }
+    // Für jeden Cluster: gewichteter Durchschnitt
+    return groups.map(g => {
+      if (g.members.length === 1) return g.members[0];
+      let sumW=0, sumX=0, sumY=0;
+      for (const m of g.members) {
+        const d = Math.max(0.1, m.dist_m || 1);
+        const w = 1 / (d*d);
+        sumW += w; sumX += w * m.floor_mx; sumY += w * m.floor_my;
+      }
+      return {...g.members[0], floor_mx: sumX/sumW, floor_my: sumY/sumW, fused: g.members.length};
+    });
+  }
+
+  // Gibt mmWave-Position zurück wenn Sensor aktiv, Person erkannt und still
+  _getMmwavePositionForCalib() {
+    const sensors = this._data?.mmwave_sensors || [];
+    for (const sensor of sensors) {
+      if (!sensor.entity_prefix) continue;
+      const t = this._getMmwaveTarget(sensor, 1);
+      if (!t || !t.present) continue;
+      // Nur wenn Person still steht (speed < 50mm/s)
+      if (Math.abs(t.speed || 0) > 0.05) continue;
+      return { mx: t.floor_mx, my: t.floor_my, sensor: sensor.name };
+    }
+    return null;
+  }
+
+  // Auto-Cal: wenn mmWave Person still erkennt → automatisch Fingerprint aufnehmen
+  // Auto-Cal: automatisch Fingerprint aufnehmen – BLE (ungenau) oder mmWave (präzise)
+  _tryAutoMmwCalibrate() {
+    if (this._autoMmwCooldown) return;
+    const mode = this._opts?.auto_cal_mode || "off";
+    if (mode === "off") return;
+
+    let mx, my, source;
+    if (mode === "mmwave") {
+      // Präzise: mmWave-Position nutzen
+      const mmwPos = this._getMmwavePositionForCalib();
+      if (!mmwPos) return;
+      mx = mmwPos.mx; my = mmwPos.my; source = "mmWave";
+    } else if (mode === "ble") {
+      // Ungenau: aktuelle BLE-Position des Geräts (mind. 3s still)
+      const devs = this._data?.devices || [];
+      const dev = devs.find(d => d.device_id === this._devId) || devs[0];
+      if (!dev || dev.x == null || dev.y == null) return;
+      if ((dev.still_seconds || 0) < 3) return;
+      mx = dev.x; my = dev.y; source = "BLE ⚠";
+    } else return;
+
+    // Auf Grid-Punkt runden
+    const step = this._data?.grid_step ?? 0.5;
+    mx = Math.round(mx / step) * step;
+    my = Math.round(my / step) * step;
+    const key = `${mx.toFixed(2)}_${my.toFixed(2)}`;
+    if (this._localFpHints[key]) return; // schon kalibriert
+
+    this._autoMmwCooldown = true;
+    setTimeout(() => { this._autoMmwCooldown = false; }, 10000);
+    // Direkt API aufrufen (nicht _captureAt – das würde mmw_fp_source nochmals prüfen)
+    this._hass.callApi("POST",
+      `ble_positioning/${this._entryId}/capture`,
+      { device_id: this._devId, x: mx, y: my }
+    ).then(() => {
+      this._localFpHints[key] = true;
+      this._showToast(`🤖 Auto-FP (${source}): ${mx.toFixed(1)}/${my.toFixed(1)}m`);
+      this._loadData();
+    }).catch(e => this._showToast("✗ Auto-Cal: " + (e?.message||e)));
+  }
 
   async _captureFingerprint() {
     if (!this._selGridPt) return;
@@ -5384,27 +5366,6 @@ class BLEPositioningCard extends HTMLElement {
     this._calStatusTimer = setTimeout(() => { el.textContent = ""; }, 3000);
   }
 
-  // ── Deko-Elemente sofort persistieren (z.B. nach Entity-Änderung) ─────────
-  _saveDecoNow() {
-    if (!this._opts) this._opts = {};
-    // Sync pendingDecos → data.decos → opts
-    if (this._data) this._data.decos = this._pendingDecos ? [...this._pendingDecos] : [];
-    this._saveOptions();
-  }
-
-  _errText(e) {
-    if (!e) return "Unbekannter Fehler";
-    if (typeof e === "string") return e;
-    const b = e.body;
-    if (typeof b === "string" && b) return b;
-    if (b && typeof b === "object" && b.message) return b.message;
-    if (e.message) return e.message;
-    if (e.error) return String(e.error);
-    const code = e.status_code || e.status;
-    if (code) return `HTTP ${code}`;
-    try { return JSON.stringify(e); } catch { return String(e); }
-  }
-
   _showToast(msg) {
     const t = this.shadowRoot.getElementById("toast");
     if (!t) return;
@@ -5442,7 +5403,6 @@ class BLEPositioningCard extends HTMLElement {
     this._hass.connection.subscribeEvents((event) => {
       const eid = event.data?.entity_id || "";
       // Nur BLE-Positioning relevante Entities
-      // (Deko/Licht/Media werden bereits über den hass-Setter neu gezeichnet)
       if (!eid.includes("ble_position") && !eid.includes("mmwave_sensor")) return;
       // Position geändert → dirty markieren + sofort poll
       this._markDirty();
@@ -5502,7 +5462,7 @@ class BLEPositioningCard extends HTMLElement {
     let lastFrame = 0;
     this._dirty = true; // Erstes Frame immer zeichnen
     const loop = (ts) => {
-      const { fps, pollMs, scale } = this._getLoopParams();
+      const { fps, pollMs } = this._getLoopParams();
 
       // FPS-Drosselung: nur zeichnen wenn genug Zeit vergangen
       const minFrameMs = fps > 0 ? 1000 / fps : Infinity;
@@ -5511,23 +5471,11 @@ class BLEPositioningCard extends HTMLElement {
         const useDirty = this._opts?.dirty_render !== false;
         // Immer zeichnen wenn: Animationen aktiv, Screensaver, oder dirty
         const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
-        // Dieselbe Deko-Quelle wie die Zeichenroutinen verwenden. Vorher
-        // schaute das Gate nur in _data.decos: lagen die Decos in
-        // _pendingDecos, wurde die Bubble zwar gezeichnet, aber nie
-        // erneut – die Platte stand still.
-        const _animDecos = this._pendingDecos?.length
-          ? this._pendingDecos : (this._data?.decos || []);
         const hasMusicAnim = this._opts?.show_music_bubble &&
-          _animDecos.some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
-            this._hass?.states?.[d.entity]?.state==="playing");        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
-        const hasWeatherAnim = this._opts?.show_weather && this._opts?.weather_animate !== false
-          && !!this._weatherState();
-        const hasCoverAnim = this._opts?.cover_motion !== false &&
-          (this._data?.windows||[]).some(w => w.cover_entity &&
-            ["opening","closing"].includes(
-              String(this._hass?.states?.[w.cover_entity]?.state||"").toLowerCase()));
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim
-            || hasElektroAnim || hasWeatherAnim || hasCoverAnim) {
+          (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
+            this._hass?.states?.[d.entity]?.state==="playing");
+        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
+        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasElektroAnim) {
           lastFrame = ts;
           this._dirty = false;
           // Canvas-Auflösung anpassen (optional)
@@ -5548,17 +5496,6 @@ class BLEPositioningCard extends HTMLElement {
   }
 
   async _pollPositions() {
-    // Update-Check für Module (alle 5 Minuten)
-    const now = Date.now();
-    if (!this._lastModuleUpdateCheck || now - this._lastModuleUpdateCheck > 300000) {
-      this._lastModuleUpdateCheck = now;
-      const loadedIds = Object.keys(BLEModuleRegistry._modules);
-      if (loadedIds.length > 0) {
-        BLEModuleRegistry.checkUpdates(loadedIds).then(anyUpdate => {
-          if (anyUpdate) this._rebuildSidebar?.();
-        });
-      }
-    }
     // Poll in view, lights AND calibrate mode (so FP dots stay fresh)
     if (!["view", "lights", "calibrate", "energie", "screensaver"].includes(this._mode)) return;
     // Auto-Cal: wenn im cal-Modus und ein Modus gewählt ist (BLE oder mmWave)
@@ -6075,11 +6012,10 @@ class BLEPositioningCard extends HTMLElement {
       const delBtn = document.createElement("button");
       delBtn.style.cssText = "background:none;border:none;color:var(--muted);cursor:pointer;font-size:10px;padding:0 2px";
       delBtn.textContent = "✕";
-      delBtn.addEventListener("click", async e => {
+      delBtn.addEventListener("click", e => {
         e.stopPropagation();
         this._pendingAlarms.splice(idx, 1);
         this._editAlarm = null;
-        await this._saveAlarms();
         this._rebuildSidebar();
       });
       hdr.append(dot, nm, stateDot, delBtn);
@@ -6187,17 +6123,6 @@ class BLEPositioningCard extends HTMLElement {
         // Sichtbarkeit initial
         roomSelRow.style.display = (al.scope || "all") === "room" ? "" : "none";
 
-        // Speichern-Button im Edit-Formular
-        const saveEdBtn = document.createElement("button");
-        saveEdBtn.style.cssText = "width:100%;margin-top:5px;padding:4px;border-radius:4px;border:1px solid var(--red);background:transparent;color:var(--red);font-size:8px;cursor:pointer";
-        saveEdBtn.textContent = "✓ Änderungen speichern";
-        saveEdBtn.addEventListener("click", async e => {
-          e.stopPropagation();
-          await this._saveAlarms();
-          this._editAlarm = null;
-          this._rebuildSidebar();
-        });
-        form.appendChild(saveEdBtn);
         box.appendChild(form);
       }
 
@@ -6586,9 +6511,775 @@ class BLEPositioningCard extends HTMLElement {
   // ══════════════════════════════════════════════════════════════════════════
   // MMWAVE SENSOR TAB – Sidebar
   // ══════════════════════════════════════════════════════════════════════════
+  _sidebarMmwave() {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:0;min-height:0";
+    if (!this._pendingMmwave) this._pendingMmwave = [];
+    const sensors = this._pendingMmwave;
+
+    // ── HEADER ──────────────────────────────────────────────────────────────
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "padding:8px 10px 6px;border-bottom:1px solid #1c2535;flex-shrink:0";
+    hdr.innerHTML = `<div style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:1px;margin-bottom:5px">📡 MMWAVE SENSOREN</div>`;
+    const addBtn = document.createElement("button");
+    addBtn.style.cssText = "width:100%;padding:6px;border-radius:6px;border:1px solid #f59e0b55;background:#f59e0b11;color:#f59e0b;font-size:9px;font-weight:700;cursor:pointer;font-family:inherit";
+    addBtn.textContent = "+ Sensor hinzufügen";
+    addBtn.addEventListener("click", () => {
+      sensors.push({ id:"mmw_"+Date.now(), name:"Sensor "+( sensors.length+1),
+        entity_prefix:"", mx:1.0, my:1.0, rotation:0,
+        fov_angle:120, fov_range:6, color:"#ff6b35",
+        show_fov:true, target_names:["Person 1","Person 2","Person 3"],
+        targets:3, mount_type:"wall", mount_height_m:1.5, mount_tilt_deg:0 });
+      this._mmwaveEditIdx = sensors.length-1;
+      this._rebuildSidebar();
+    });
+    hdr.appendChild(addBtn);
+    wrap.appendChild(hdr);
+
+    // ── SENSOR LIST ──────────────────────────────────────────────────────────
+    const list = document.createElement("div");
+    list.style.cssText = "padding:8px 10px";
+
+    if (sensors.length === 0) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "text-align:center;color:#445566;font-size:9px;padding:20px 0;line-height:2";
+      empty.innerHTML = "Keine mmWave Sensoren konfiguriert.<br><b>+ Sensor hinzufügen</b> um zu beginnen.";
+      list.appendChild(empty);
+    }
+
+    sensors.forEach((s, idx) => {
+      const isEdit = this._mmwaveEditIdx === idx;
+      const card = document.createElement("div");
+      card.style.cssText = `border-radius:8px;border:1px solid ${isEdit?"#f59e0b55":"#1c2535"};background:${isEdit?"#f59e0b08":"#111820"};margin-bottom:6px;overflow:hidden`;
+
+      // Card header row
+      const crow = document.createElement("div");
+      crow.style.cssText = "display:flex;align-items:center;gap:5px;padding:6px 8px;cursor:pointer";
+      crow.addEventListener("click", () => {
+        this._mmwaveEditIdx = isEdit ? null : idx;
+        this._rebuildSidebar();
+      });
+      const dot = document.createElement("div");
+      dot.style.cssText = `width:10px;height:10px;border-radius:50%;background:${s.color||"#ff6b35"};flex-shrink:0`;
+      const nameLbl = document.createElement("span");
+      nameLbl.style.cssText = "flex:1;font-size:9px;font-weight:700;color:#c8d8ec";
+      nameLbl.textContent = s.name;
+      const prefLbl = document.createElement("span");
+      prefLbl.style.cssText = "font-size:7.5px;color:#445566;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80px";
+      prefLbl.textContent = s.entity_prefix ? s.entity_prefix.split(".").pop() : "kein Prefix";
+      // Live target count
+      const liveCnt = this._getMmwaveLiveTargetCount(s);
+      const cntBadge = document.createElement("span");
+      cntBadge.style.cssText = `font-size:8px;padding:1px 5px;border-radius:10px;background:${liveCnt>0?"#22c55e33":"#0d1219"};color:${liveCnt>0?"#22c55e":"#445566"}`;
+      cntBadge.textContent = liveCnt > 0 ? `👤×${liveCnt}` : "—";
+      const chevron = document.createElement("span");
+      chevron.style.cssText = "font-size:8px;color:#445566";
+      chevron.textContent = isEdit ? "▲" : "▼";
+      const delBtn = document.createElement("button");
+      delBtn.style.cssText = "padding:2px 6px;border:1px solid #ef444433;border-radius:3px;background:#ef444411;color:#ef4444;font-size:8px;cursor:pointer;font-family:inherit";
+      delBtn.textContent = "✕";
+      delBtn.addEventListener("click", (e) => { e.stopPropagation(); sensors.splice(idx,1); this._mmwaveEditIdx=null; this._rebuildSidebar(); });
+      // Sichtbarkeits-Toggle
+      const visBtn = document.createElement("button");
+      visBtn.style.cssText = `padding:2px 5px;border:1px solid ${s.hidden?"#f59e0b44":"#1c253588"};border-radius:3px;background:${s.hidden?"#f59e0b22":"transparent"};color:${s.hidden?"#f59e0b":"#445566"};font-size:9px;cursor:pointer`;
+      visBtn.title = s.hidden ? "Sensor einblenden" : "Sensor ausblenden";
+      visBtn.textContent = s.hidden ? "👁" : "👁";
+      visBtn.style.opacity = s.hidden ? "0.4" : "1";
+      visBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        s.hidden = !s.hidden;
+        this._rebuildSidebar();
+        this._draw();
+      });
+      crow.append(dot, nameLbl, prefLbl, cntBadge, visBtn, chevron, delBtn);
+      card.appendChild(crow);
+
+      // Expanded editor
+      if (isEdit) {
+        const body = document.createElement("div");
+        body.style.cssText = "padding:6px 8px 8px;border-top:1px solid #1c2535";
+        this._buildMmwaveSensorEditor(body, s, idx);
+        card.appendChild(body);
+      }
+      list.appendChild(card);
+    });
+
+    // Save button
+    const saveBtn = document.createElement("button");
+    saveBtn.style.cssText = "width:100%;margin-top:4px;padding:8px;border-radius:6px;border:1px solid #22c55e55;background:#22c55e11;color:#22c55e;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit";
+    saveBtn.textContent = sensors.length
+      ? `💾 Speichern (${sensors.length} Sensor${sensors.length!==1?"en":""})`
+      : "💾 Alle Sensoren löschen";
+    saveBtn.disabled = false; // Auch 0 Sensoren darf gespeichert werden
+    saveBtn.addEventListener("click", async () => {
+      saveBtn.disabled=true; saveBtn.textContent="⏳...";
+      try {
+        await this._hass.callApi("POST",`ble_positioning/${this._entryId}/mmwave_sensors`,{ sensors });
+        if (this._data) this._data.mmwave_sensors = structuredClone(sensors);
+        this._pendingMmwave = structuredClone(sensors); // Sync pending mit gespeichertem Stand
+        this._showToast(`✓ ${sensors.length} Sensor${sensors.length!==1?"en":""} gespeichert`);
+        saveBtn.innerHTML="✓ Gespeichert";
+        this._setTimeout(()=>{saveBtn.disabled=false;saveBtn.textContent=`💾 Speichern (${sensors.length} Sensoren)`;},2000);
+      } catch(e){ saveBtn.disabled=false; saveBtn.textContent=`💾 Speichern (${sensors.length} Sensoren)`; this._showToast("Fehler: "+e.message); }
+    });
+    list.appendChild(saveBtn);
+    wrap.appendChild(list);
+    return wrap;
+  }
 
 
+  // ── Akkordeon-Sektion (wiederverwendbar) ──────────────────────────────────
+  _mmwAccordion(icon, title, color, defaultOpen, buildFn) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = `margin-top:5px;border-radius:6px;border:1px solid ${color}33;overflow:hidden`;
 
+    const hdr = document.createElement("div");
+    hdr.style.cssText = `display:flex;align-items:center;gap:5px;padding:5px 8px;background:${color}0d;cursor:pointer;user-select:none`;
+    const ico = document.createElement("span"); ico.style.cssText="font-size:11px"; ico.textContent=icon;
+    const ttl = document.createElement("span"); ttl.style.cssText=`font-size:8px;font-weight:700;color:${color};flex:1`; ttl.textContent=title;
+    const arr = document.createElement("span"); arr.style.cssText=`font-size:8px;color:${color};transition:transform 0.2s`; arr.textContent="▾";
+    hdr.append(ico, ttl, arr);
+
+    const body = document.createElement("div");
+    body.style.cssText = `padding:6px 8px;display:${defaultOpen?"block":"none"}`;
+    if (defaultOpen) arr.style.transform="rotate(0deg)"; else arr.style.transform="rotate(-90deg)";
+
+    hdr.addEventListener("click", () => {
+      const open = body.style.display !== "none";
+      body.style.display = open ? "none" : "block";
+      arr.style.transform = open ? "rotate(-90deg)" : "rotate(0deg)";
+      if (!open && !body._built) { body._built=true; buildFn(body); }
+    });
+
+    wrap.append(hdr, body);
+    // Sofort aufbauen wenn defaultOpen
+    if (defaultOpen) { body._built=true; buildFn(body); }
+    return wrap;
+  }
+
+  _buildMmwaveSensorEditor(body, s, idx) {
+    const row  = (label, input) => {
+      const d=document.createElement("div"); d.style.cssText="display:flex;align-items:center;gap:5px;margin-bottom:4px";
+      const lb=document.createElement("span"); lb.style.cssText="font-size:8px;color:#445566;min-width:60px;white-space:nowrap"; lb.textContent=label;
+      d.append(lb, input); return d;
+    };
+    const inp = (type,val,min,max,step,onChange,width) => {
+      const i=document.createElement("input"); i.type=type; i.value=val??("");
+      if(min!=null) i.min=min; if(max!=null) i.max=max; if(step!=null) i.step=step;
+      i.style.cssText=`${width?`width:${width}px`:"flex:1"};padding:2px 4px;border-radius:3px;border:1px solid #1c2535;background:#07090d;color:#c8d8ec;font-size:8px;font-family:inherit`;
+      i.addEventListener("input", ()=>onChange(i.value)); return i;
+    };
+    const tog = (label, checked, onChange) => {
+      const lbl=document.createElement("label"); lbl.style.cssText="display:flex;align-items:center;gap:5px;font-size:8px;color:#445566;cursor:pointer;margin-bottom:3px";
+      const cb=document.createElement("input"); cb.type="checkbox"; cb.checked=checked;
+      cb.addEventListener("change",()=>onChange(cb.checked));
+      lbl.append(cb, label); return lbl;
+    };
+
+    // ══ ⚙️ SENSOR – immer offen ══════════════════════════════════════════════
+    body.appendChild(this._mmwAccordion("⚙️","SENSOR","#00e5ff",true, b => {
+      // Name
+      b.appendChild(row("Name:", inp("text", s.name, null,null,null, v=>{ s.name=v; this._draw(); })));
+
+      // Entity-Prefix + Auto-Discovery
+      const pfxWrap = document.createElement("div"); pfxWrap.style.cssText="margin-bottom:4px";
+      const pfxLbl = document.createElement("div"); pfxLbl.style.cssText="font-size:7.5px;color:#445566;margin-bottom:2px";
+      pfxLbl.textContent = "Entity-Prefix (z.B. sensor.mmwave_sensor_96ffa0)";
+      const pfxInp = inp("text", s.entity_prefix||"", null,null,null, v=>{ s.entity_prefix=v; });
+      pfxInp.style.width="100%"; pfxInp.placeholder="sensor.mmwave_…";
+      pfxWrap.append(pfxLbl, pfxInp);
+      b.appendChild(pfxWrap);
+
+      // Auto-Discovery Button
+      const discoBtn = document.createElement("button");
+      discoBtn.className="btn btn-outline"; discoBtn.style.cssText="width:100%;font-size:8px;padding:3px;margin-bottom:5px";
+      discoBtn.textContent="🔍 Entity-Prefix automatisch erkennen";
+      discoBtn.addEventListener("click",()=>{
+        const states=this._hass?.states||{};
+        const candidates=Object.keys(states).filter(k=>k.match(/target_\d_x/i));
+        const prefixSet=new Set();
+        candidates.forEach(k=>{
+          const parts=k.split("_"); let cut=parts.length-3;
+          while(cut>1&&!/\d/.test(parts[cut-1])) cut--;
+          const prefix=parts.slice(0,cut).join("_");
+          if(prefix) prefixSet.add(prefix);
+        });
+        const prefixes=[...prefixSet].filter(p=>candidates.filter(c=>c.startsWith(p)).length>=2);
+        if(prefixes.length===0){this._showToast("Keine passenden Entities gefunden");return;}
+        if(prefixes.length===1){s.entity_prefix=prefixes[0];pfxInp.value=prefixes[0];this._showToast("✓ Prefix gesetzt: "+prefixes[0]);return;}
+        // Mehrere Kandidaten: Toast mit Auswahl
+        this._showToast("Gefunden: "+prefixes.slice(0,3).join(", "));
+      });
+      b.appendChild(discoBtn);
+
+      // Entity-Status live (in eigenem div-Container, nicht direkt in b)
+      const statusDiv = document.createElement("div");
+      b.appendChild(statusDiv);
+      this._updateMmwaveEntityStatus(statusDiv, s);
+
+      // Position + Rotation
+      const posRow=document.createElement("div"); posRow.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:4px";
+      const posLbl=document.createElement("span"); posLbl.style.cssText="font-size:8px;color:#445566;min-width:24px"; posLbl.textContent="Pos:";
+      const xi=inp("number",s.mx??0,-50,50,0.1,v=>{s.mx=parseFloat(v)||0;this._draw();},46);
+      const yi=inp("number",s.my??0,-50,50,0.1,v=>{s.my=parseFloat(v)||0;this._draw();},46);
+      const xl=document.createElement("span"); xl.style.cssText="font-size:7.5px;color:#445566"; xl.textContent="X";
+      const yl=document.createElement("span"); yl.style.cssText="font-size:7.5px;color:#445566"; yl.textContent="Y m";
+      posRow.append(posLbl,xl,xi,yl,yi);
+      b.appendChild(posRow);
+
+      const rotRow=document.createElement("div"); rotRow.style.cssText="display:flex;align-items:center;gap:5px;margin-bottom:4px";
+      const rotLbl=document.createElement("span"); rotLbl.style.cssText="font-size:8px;color:#445566;min-width:60px"; rotLbl.textContent="Rotation:";
+      const rotVal=document.createElement("span"); rotVal.style.cssText="font-size:8px;color:#00e5ff;min-width:30px"; rotVal.textContent=(s.rotation||0)+"°";
+      const rotSlider=document.createElement("input"); rotSlider.type="range"; rotSlider.min=-180; rotSlider.max=180; rotSlider.step=1;
+      rotSlider.value=s.rotation||0; rotSlider.style.cssText="flex:1;accent-color:#00e5ff";
+      rotSlider.addEventListener("input",()=>{ s.rotation=parseInt(rotSlider.value); rotVal.textContent=s.rotation+"°"; this._draw(); });
+      rotRow.append(rotLbl, rotSlider, rotVal);
+      b.appendChild(rotRow);
+
+      // FOV + Style
+      const fovRow=document.createElement("div"); fovRow.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:4px";
+      const fovLbl=document.createElement("span"); fovLbl.style.cssText="font-size:8px;color:#445566;min-width:60px"; fovLbl.textContent="FOV/Range:";
+      const fovI=inp("number",s.fov_angle||60,10,180,5,v=>{s.fov_angle=parseFloat(v)||60;this._draw();},44);
+      const ranI=inp("number",s.fov_range||5,0.5,20,0.5,v=>{s.fov_range=parseFloat(v)||5;this._draw();},44);
+      const fovU=document.createElement("span"); fovU.style.cssText="font-size:7.5px;color:#445566"; fovU.textContent="° /";
+      const ranU=document.createElement("span"); ranU.style.cssText="font-size:7.5px;color:#445566"; ranU.textContent="m";
+      fovRow.append(fovLbl, fovI, fovU, ranI, ranU);
+      b.appendChild(fovRow);
+
+      // Farbe + FOV anzeigen + Achsen
+      const styleRow=document.createElement("div"); styleRow.style.cssText="display:flex;align-items:center;gap:6px;margin-bottom:4px";
+      const colLbl=document.createElement("span"); colLbl.style.cssText="font-size:8px;color:#445566"; colLbl.textContent="Farbe:";
+      const colI=document.createElement("input"); colI.type="color"; colI.value=s.color||"#00e5ff";
+      colI.style.cssText="width:28px;height:20px;border:none;background:none;cursor:pointer;padding:0";
+      colI.addEventListener("input",()=>{s.color=colI.value;this._draw();});
+      styleRow.append(colLbl, colI);
+      styleRow.appendChild(tog("FOV", s.show_fov!==false, v=>{s.show_fov=v;this._draw();}));
+      b.appendChild(styleRow);
+
+      b.appendChild(tog("X-Achse umkehren", !!s.invert_x, v=>{s.invert_x=v;this._draw();}));
+      b.appendChild(tog("Y-Achse umkehren", !!s.invert_y, v=>{s.invert_y=v;this._draw();}));
+
+      // ── Sensor-Fusion (nur relevant wenn ≥2 Sensoren konfiguriert) ──────
+      const numSensors=(this._pendingMmwave||this._data?.mmwave_sensors||[]).length;
+      if(numSensors>=2){
+        const fusRow=document.createElement("div");
+        fusRow.style.cssText="display:flex;align-items:center;gap:6px;margin-top:5px;padding:4px 0;border-top:1px solid #1c2535";
+        const fusLbl=document.createElement("span");
+        fusLbl.style.cssText="font-size:8px;color:#94a3b8;flex:1";
+        fusLbl.textContent="🔀 Sensor-Fusion (2+ Sensoren)";
+        const fusCb=document.createElement("input");
+        fusCb.type="checkbox";
+        fusCb.checked=!!this._opts?.mmw_fusion;
+        fusCb.style.cssText="accent-color:#a78bfa;width:14px;height:14px;cursor:pointer";
+        fusCb.title="Wenn eine Person von 2 Sensoren erfasst wird: gewichteter Durchschnitt statt Doppeldarstellung";
+        fusCb.addEventListener("change",()=>{
+          if(!this._opts)this._opts={};
+          this._opts.mmw_fusion=fusCb.checked;
+          this._saveOptions();
+          this._showToast(fusCb.checked?"🔀 Sensor-Fusion aktiv":"Sensor-Fusion deaktiviert");
+        });
+        fusRow.append(fusLbl,fusCb);
+        b.appendChild(fusRow);
+      }
+
+      // ── Dämpfungs-Schieberegler ──────────────────────────────────────────
+      const dampRow=document.createElement("div");
+      dampRow.style.cssText="display:flex;align-items:center;gap:4px;margin-top:5px;padding:4px 0;border-top:1px solid #1c2535";
+      const dampLbl=document.createElement("span");
+      dampLbl.style.cssText="font-size:8px;color:#94a3b8;min-width:60px";
+      dampLbl.textContent="\uD83C\uDF9A Dämpfung";
+      const dampSlider=document.createElement("input");
+      dampSlider.type="range"; dampSlider.min=1; dampSlider.max=10; dampSlider.step=1;
+      dampSlider.value=s.damping??5;
+      dampSlider.style.cssText="flex:1;accent-color:#00e5ff;height:14px";
+      const dampVal=document.createElement("span");
+      dampVal.style.cssText="font-size:8px;color:#00e5ff;min-width:28px;text-align:right;font-weight:700";
+      const dampDesc=document.createElement("span");
+      dampDesc.style.cssText="font-size:7px;color:#445566;min-width:50px;text-align:right";
+      const updateDamp=()=>{
+        const v=parseInt(dampSlider.value);
+        dampVal.textContent=v+"/10";
+        dampDesc.textContent=v<=2?"reaktiv":v<=4?"leicht":v<=6?"mittel":v<=8?"weich":"sehr weich";
+        s.damping=v;
+        if(this._mmwaveKalman){
+          Object.keys(this._mmwaveKalman).forEach(k=>{if(k.startsWith(s.id))delete this._mmwaveKalman[k];});
+        }
+        this._draw();
+      };
+      updateDamp();
+      dampSlider.addEventListener("input",updateDamp);
+      dampRow.append(dampLbl,dampSlider,dampVal,dampDesc);
+      b.appendChild(dampRow);
+
+      // ── Positions-Hysterese (Dead-Zone) ─────────────────────────────────
+      const dzRow=document.createElement("div");
+      dzRow.style.cssText="display:flex;align-items:center;gap:4px;margin-top:4px";
+      const dzLbl=document.createElement("span");
+      dzLbl.style.cssText="font-size:8px;color:#94a3b8;min-width:60px";
+      dzLbl.textContent="\uD83D\uDCCD Dead-Zone";
+      const dzSlider=document.createElement("input");
+      dzSlider.type="range"; dzSlider.min=0; dzSlider.max=400; dzSlider.step=20;
+      dzSlider.value=s.dead_zone??80;
+      dzSlider.style.cssText="flex:1;accent-color:#f59e0b;height:14px";
+      const dzVal=document.createElement("span");
+      dzVal.style.cssText="font-size:8px;color:#f59e0b;min-width:36px;text-align:right;font-weight:700";
+      const updateDZ=()=>{
+        const v=parseInt(dzSlider.value);
+        dzVal.textContent=v+"mm";
+        s.dead_zone=v;
+        if(this._mmwaveKalman){
+          Object.keys(this._mmwaveKalman).forEach(k=>{if(k.startsWith(s.id))delete this._mmwaveKalman[k];});
+        }
+        this._draw();
+      };
+      updateDZ();
+      dzSlider.addEventListener("input",updateDZ);
+      dzRow.append(dzLbl,dzSlider,dzVal);
+      b.appendChild(dzRow);
+
+      // ── Haltungsschwellen ─────────────────────────────────────────────────
+      const ptLbl=document.createElement("div");
+      ptLbl.style.cssText="font-size:8px;color:#94a3b8;margin-top:5px;padding-top:4px;border-top:1px solid #1c2535";
+      ptLbl.textContent="\uD83E\uDDD8 Haltungsschwellen (mm Höhe)";
+      b.appendChild(ptLbl);
+      [["Stehen ab","stand_min",1500,300,2200],["Sitzen ab","sit_min",900,200,1500],["Liegen ab","fall_height",600,100,1000],["Hysterese","±hysteresis",60,0,200]].forEach(([lbl,key,def,mn,mx2])=>{
+        const row=document.createElement("div"); row.style.cssText="display:flex;align-items:center;gap:3px;margin-top:2px";
+        const l2=document.createElement("span"); l2.style.cssText="font-size:7.5px;color:#445566;min-width:65px"; l2.textContent=lbl;
+        const realKey=key.replace("±","");
+        const curVal=(s.posture_thresholds?.[realKey])??def;
+        const i2=inp("number",curVal,mn,mx2,10,v=>{if(!s.posture_thresholds)s.posture_thresholds={};s.posture_thresholds[realKey]=parseInt(v)||def;},52);
+        const u2=document.createElement("span"); u2.style.cssText="font-size:7.5px;color:#445566"; u2.textContent=key.startsWith("±")?"\u00b1mm":"mm";
+        row.append(l2,i2,u2); b.appendChild(row);
+      });
+
+      // Target-Namen
+      const numT=s.targets||3;
+      const tnHdr=document.createElement("div"); tnHdr.style.cssText="font-size:7.5px;color:#445566;margin-top:4px;margin-bottom:3px"; tnHdr.textContent="Target-Namen:";
+      b.appendChild(tnHdr);
+      for(let t=0;t<numT;t++){
+        const tr2=document.createElement("div"); tr2.style.cssText="display:flex;align-items:center;gap:4px;margin-bottom:3px";
+        const tl=document.createElement("span"); tl.style.cssText="font-size:7.5px;color:#445566;min-width:50px"; tl.textContent=`Target ${t+1}:`;
+        const tn=inp("text",(s.target_names||[])[t]||"",null,null,null,v=>{if(!s.target_names)s.target_names=[];s.target_names[t]=v;},null);
+        const tv=this._getMmwaveTarget(s,t+1);
+        const posBadge=document.createElement("span"); posBadge.style.cssText="font-size:7px;color:#445566;white-space:nowrap";
+        posBadge.textContent=tv?.present?`📍${tv.floor_mx?.toFixed(1)},${tv.floor_my?.toFixed(1)}m`:"—";
+        tr2.append(tl,tn,posBadge); b.appendChild(tr2);
+      }
+    }));
+
+    // ══ 🔩 MONTAGE – standardmäßig offen ════════════════════════════════════
+    body.appendChild(this._mmwAccordion("🔩","MONTAGE","#a78bfa",true, b => {
+      // Montage-Typ Buttons
+      const typeRow=document.createElement("div"); typeRow.style.cssText="display:flex;gap:4px;margin-bottom:5px";
+      const tLbl=document.createElement("span"); tLbl.style.cssText="font-size:8px;color:#445566;min-width:60px;align-self:center"; tLbl.textContent="Typ:";
+      [["wall","🧱 Wand"],["ceiling","⬆ Decke"],["floor","⬇ Boden"]].forEach(([val,label])=>{
+        const btn=document.createElement("button"); btn.className="btn btn-outline";
+        btn.style.cssText=`flex:1;font-size:8px;padding:3px;${(s.mount_type||"wall")===val?"background:#a78bfa22;border-color:#a78bfa;color:#a78bfa":""}`;
+        btn.textContent=label;
+        btn.addEventListener("click",()=>{s.mount_type=val;this._rebuildSidebar();});
+        typeRow.appendChild(btn);
+      });
+      b.append(tLbl, typeRow);
+
+      // Höhe + Neigung
+      const paramRow=document.createElement("div"); paramRow.style.cssText="display:flex;align-items:center;gap:5px;margin-bottom:4px";
+      const hLbl=document.createElement("span"); hLbl.style.cssText="font-size:8px;color:#445566;min-width:60px";
+      hLbl.textContent=(s.mount_type||"wall")==="ceiling"?"Deckenhöhe:":"Wandhöhe:";
+      const hI=inp("number",s.mount_height_m||1.5,0.5,5,0.1,v=>{s.mount_height_m=parseFloat(v)||1.5;},50);
+      const hU=document.createElement("span"); hU.style.cssText="font-size:7.5px;color:#445566"; hU.textContent="m";
+      paramRow.append(hLbl,hI,hU);
+      if((s.mount_type||"wall")==="wall"){
+        const tiLbl=document.createElement("span"); tiLbl.style.cssText="font-size:8px;color:#445566;margin-left:6px"; tiLbl.textContent="Neigung:";
+        const tiI=inp("number",s.mount_tilt_deg||0,-60,60,1,v=>{s.mount_tilt_deg=parseFloat(v)||0;},44);
+        const tiU=document.createElement("span"); tiU.style.cssText="font-size:7.5px;color:#445566"; tiU.textContent="°";
+        paramRow.append(tiLbl,tiI,tiU);
+      }
+      b.appendChild(paramRow);
+
+      // Referenzpunkt-Kalibrierung (2-Punkt)
+      const calHdr=document.createElement("div"); calHdr.style.cssText="font-size:7.5px;color:#445566;margin-top:3px;margin-bottom:3px;display:flex;align-items:center;gap:5px";
+      calHdr.innerHTML=`<span>📐 2-Punkt Kalibrierung</span>`;
+      const calReset=document.createElement("button"); calReset.className="btn btn-outline";
+      calReset.style.cssText="font-size:7px;padding:1px 5px;margin-left:auto";
+      calReset.textContent="↺ Reset";
+      calReset.addEventListener("click",()=>{ s.calibration={}; this._rebuildSidebar(); });
+      calHdr.appendChild(calReset); b.appendChild(calHdr);
+
+      const cal=s.calibration||{};
+      const hasCalib=cal.scale_x||cal.scale_y||cal.offset_x||cal.offset_y;
+      if(hasCalib){
+        const calInfo=document.createElement("div"); calInfo.style.cssText="font-size:7px;color:#22c55e;margin-bottom:3px";
+        calInfo.textContent=`✓ Kalibriert: scale=(${(cal.scale_x||1).toFixed(2)},${(cal.scale_y||1).toFixed(2)}) offset=(${(cal.offset_x||0).toFixed(2)},${(cal.offset_y||0).toFixed(2)})m`;
+        b.appendChild(calInfo);
+      }
+      const calPhase=this._mmwaveCalibPoints?.sensorId===s.id ? (this._mmwaveCalibPoints.points.length>=1?2:1) : 0;
+      const calStart=document.createElement("button"); calStart.className="btn btn-outline";
+      calStart.style.cssText="width:100%;font-size:8px;padding:3px;margin-bottom:3px";
+      if(calPhase===0){
+        calStart.textContent="▶ Kalibrierung starten (2 Punkte)";
+        calStart.addEventListener("click",()=>{
+          this._mmwaveCalibPoints={sensorId:s.id,points:[]}; this._rebuildSidebar();
+          this._showToast("Klicke auf Punkt 1 der echten Position auf der Karte");
+        });
+      } else if(calPhase===1){
+        calStart.textContent="📍 Warte auf Punkt 1… (auf Karte klicken)";
+        calStart.style.color="#f59e0b"; calStart.style.borderColor="#f59e0b";
+        const cancel=document.createElement("button"); cancel.className="btn btn-outline";
+        cancel.style.cssText="width:100%;font-size:8px;padding:2px;color:#ef4444;border-color:#ef4444;margin-top:2px";
+        cancel.textContent="✕ Abbrechen";
+        cancel.addEventListener("click",()=>{this._mmwaveCalibPoints=null;this._rebuildSidebar();});
+        b.append(calStart,cancel);
+        return;
+      } else {
+        const p1=this._mmwaveCalibPoints.points[0];
+        calStart.textContent=`✓ P1=(${p1.fx.toFixed(2)},${p1.fy.toFixed(2)})m – Warte auf Punkt 2…`;
+        calStart.style.color="#00e5ff"; calStart.style.borderColor="#00e5ff";
+        const cancel=document.createElement("button"); cancel.className="btn btn-outline";
+        cancel.style.cssText="width:100%;font-size:8px;padding:2px;color:#ef4444;border-color:#ef4444;margin-top:2px";
+        cancel.textContent="✕ Abbrechen";
+        cancel.addEventListener("click",()=>{this._mmwaveCalibPoints=null;this._rebuildSidebar();});
+        b.append(calStart,cancel);
+        return;
+      }
+      b.appendChild(calStart);
+
+      // Sensor platzieren Button – nutzt _mmwavePlacing (korrekt!)
+      const isPlacingNow = this._mmwavePlacing === idx;
+      const placeBtn=document.createElement("button"); placeBtn.className="btn btn-outline";
+      placeBtn.style.cssText=`width:100%;font-size:8px;padding:3px;margin-top:2px;${isPlacingNow?"color:#00e5ff;border-color:#00e5ff44":""}`;
+      placeBtn.textContent = isPlacingNow ? "📍 Klicke auf Karte…" : (s.mx!=null ? "📍 Neu platzieren" : "📍 Auf Karte platzieren");
+      placeBtn.addEventListener("click",()=>{
+        this._mmwavePlacing = isPlacingNow ? null : idx;
+        this._showToast(isPlacingNow ? "Platzierung abgebrochen" : "Klicke auf die Sensor-Position auf der Karte");
+        this._rebuildSidebar();
+      });
+      const isCalib=this._mmwaveCalib?.sensorId===s.id;
+      if(isCalib){ placeBtn.textContent="📍 Klicke auf die Position…"; placeBtn.style.color="#00e5ff"; placeBtn.style.borderColor="#00e5ff"; }
+      b.appendChild(placeBtn);
+    }));
+
+    // ══ 🧠 ERKENNUNG & KALIBRIERUNG – zugeklappt ════════════════════════════
+    body.appendChild(this._mmwAccordion("🧠","ERKENNUNG & KALIBRIERUNG","#f59e0b",false, b => {
+
+      // ─ KI-Klassifikation ─────────────────────────────────────────────────
+      if(this._opts?.mmwaveClassify) {
+        const clsHdr=document.createElement("div"); clsHdr.style.cssText="font-size:8px;font-weight:700;color:#f59e0b;margin-bottom:4px"; clsHdr.textContent="🤖 KI-Klassifikation";
+        b.appendChild(clsHdr);
+        const numT=s.targets||3;
+        const grid=document.createElement("div"); grid.style.cssText="display:flex;flex-direction:column;gap:3px";
+        for(let ti=1;ti<=numT;ti++){
+          const key=s.id+"_"+ti;
+          const prof=(this._mmwaveProfiles||{})[key];
+          const target=this._getMmwaveTarget(s,ti);
+          const cls=this._mmwaveClassify(s,{id:ti,...(target||{x_mm:0,y_mm:0,speed:0,angle:0})});
+          const cInfo=this._mmwaveClasses()[cls.cls];
+          const tName=(s.target_names||[])[ti-1]||`Target ${ti}`;
+          const tRow=document.createElement("div"); tRow.style.cssText="display:flex;align-items:center;gap:4px;padding:3px 5px;border-radius:4px;background:var(--surf3)";
+          const iconEl=document.createElement("span"); iconEl.style.cssText="font-size:13px";
+          iconEl.textContent=target?.present?(cInfo?.icon||"❓"):"⬜";
+          const info=document.createElement("div"); info.style.cssText="flex:1;min-width:0";
+          const nameLbl=document.createElement("div"); nameLbl.style.cssText="font-size:8px;font-weight:700;color:var(--text)"; nameLbl.textContent=tName;
+          const clsLbl=document.createElement("div"); clsLbl.style.cssText=`font-size:7px;color:${cInfo?.color||"#94a3b8"}`;
+          clsLbl.textContent=cls.cls==="unknown"?"Noch unbekannt":`${cInfo?.label} · ${Math.round(cls.confidence*100)}%`;
+          info.append(nameLbl,clsLbl);
+          const trainBtn=document.createElement("button");
+          const isTraining=this._mmwaveTrain?.sensorId===s.id&&this._mmwaveTrain?.targetId===ti;
+          trainBtn.style.cssText="padding:2px 6px;border-radius:3px;font-size:7.5px;cursor:pointer;font-family:inherit;white-space:nowrap;border:1px solid var(--border);background:var(--surf2);color:var(--muted)";
+          trainBtn.textContent=isTraining?`${Math.min(100,Math.round((Date.now()-this._mmwaveTrain.startTs)/300))}% ⏹`:"🎯 Einlernen";
+          trainBtn.addEventListener("click",(e)=>{
+            if(isTraining){this._mmwaveTrain=null;this._rebuildSidebar();return;}
+            e.stopPropagation();
+            const popup=document.createElement("div");
+            popup.style.cssText="position:absolute;z-index:999;background:var(--surf3);border:1px solid var(--border);border-radius:6px;padding:4px;display:flex;flex-direction:column;gap:2px;min-width:100px";
+            Object.entries(this._mmwaveClasses()).filter(([k])=>k!=="unknown").forEach(([clsKey,info2])=>{
+              const opt=document.createElement("button");
+              opt.style.cssText="padding:4px 8px;border:none;background:none;cursor:pointer;font-size:8px;color:var(--text);text-align:left;border-radius:3px;font-family:inherit";
+              opt.innerHTML=`${info2.icon} ${info2.label}`;
+              opt.addEventListener("mouseenter",()=>opt.style.background="var(--surf2)");
+              opt.addEventListener("mouseleave",()=>opt.style.background="none");
+              opt.addEventListener("click",()=>{document.body.removeChild(popup);this._mmwaveStartTraining(s.id,ti,clsKey);this._rebuildSidebar();});
+              popup.appendChild(opt);
+            });
+            const r=trainBtn.getBoundingClientRect();
+            popup.style.top=(r.bottom+window.scrollY+2)+"px"; popup.style.left=(r.left+window.scrollX)+"px";
+            document.body.appendChild(popup);
+            const close=()=>{if(document.body.contains(popup))document.body.removeChild(popup);document.removeEventListener("click",close);};
+            this._setTimeout(()=>document.addEventListener("click",close),50);
+          });
+          if(prof?.frames?.length||prof?.trained_cls){
+            const resetBtn=document.createElement("button");
+            resetBtn.style.cssText="padding:2px 5px;border-radius:3px;font-size:7.5px;border:1px solid #ef444433;background:#ef444408;color:#ef4444;cursor:pointer;font-family:inherit";
+            resetBtn.textContent="✕"; resetBtn.title="Profil zurücksetzen";
+            resetBtn.addEventListener("click",()=>this._mmwaveResetProfile(s.id,ti));
+            tRow.append(iconEl,info,trainBtn,resetBtn);
+          } else { tRow.append(iconEl,info,trainBtn); }
+          grid.appendChild(tRow);
+        }
+        b.appendChild(grid);
+        const div2=document.createElement("div"); div2.style.cssText="height:1px;background:#1c2535;margin:8px 0"; b.appendChild(div2);
+      }
+
+      // ─ Postur-Wizard ─────────────────────────────────────────────────────
+      this._buildMmwaveCalibPanel(b, s);
+
+    }));
+
+    // ══ 🛡 STURZ & HALTUNG – zugeklappt ════════════════════════════════════
+    body.appendChild(this._mmwAccordion("🛡","STURZ & HALTUNG","#ef4444",false, b => {
+      this._buildMmwavePosturePanel(b, s);
+    }));
+
+    // Speichern-Button
+    const saveBtn=document.createElement("button"); saveBtn.className="btn";
+    saveBtn.style.cssText="width:100%;margin-top:8px;font-size:9px;padding:5px";
+    saveBtn.textContent="💾 Sensor speichern";
+    saveBtn.addEventListener("click",async()=>{
+      const sensors=this._pendingMmwave||this._data?.mmwave_sensors||[];
+      const i=sensors.findIndex(x=>x.id===s.id); if(i>=0) sensors[i]=s;
+      try{
+        await this._hass.callApi("POST",`ble_positioning/${this._entryId}/mmwave_sensors`,{sensors});
+        await this._loadData(); this._rebuildSidebar();
+        this._showToast("✅ Sensor gespeichert");
+      }catch(e){this._showToast("Fehler: "+e.message);}
+    });
+    body.appendChild(saveBtn);
+  }
+  _updateMmwaveEntityStatus(container, s) {
+    container.innerHTML = "";
+    container.style.cssText += ";padding:4px 6px;border-radius:4px;background:#111820";
+    if (!s.entity_prefix && !s.entity_overrides) {
+      const w = document.createElement("div");
+      w.style.cssText = "color:#f59e0b;font-size:7.5px";
+      w.textContent = "⚠ Kein Entity-Prefix gesetzt";
+      container.appendChild(w); return;
+    }
+    if (!this._hass) return;
+    const px = s.entity_prefix || "";
+    // Alle relevanten Entity-Slots mit Beschreibung
+    const slots = [
+      { key:"presence",            label:"Präsenz",         suffix:"_presence" },
+      { key:"target_count",        label:"Ziel-Anzahl",     suffix:"_moving_target_count" },
+      { key:"target_1_x",         label:"Ziel 1 X",        suffix:"_target_1_x" },
+      { key:"target_1_y",         label:"Ziel 1 Y",        suffix:"_target_1_y" },
+      { key:"target_2_x",         label:"Ziel 2 X",        suffix:"_target_2_x" },
+      { key:"target_2_y",         label:"Ziel 2 Y",        suffix:"_target_2_y" },
+      { key:"target_3_x",         label:"Ziel 3 X",        suffix:"_target_3_x" },
+      { key:"target_3_y",         label:"Ziel 3 Y",        suffix:"_target_3_y" },
+    ];
+    const overrides = s.entity_overrides || {};
+    let found=0, total=slots.length;
+    // Header
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "display:flex;justify-content:space-between;align-items:center;margin-bottom:4px";
+    const hdrLbl = document.createElement("span");
+    hdrLbl.style.cssText = "font-size:7.5px;font-weight:700;color:#445566";
+    hdrLbl.textContent = "ENTITÄTEN-STATUS";
+    const toggleBtn = document.createElement("button");
+    toggleBtn.style.cssText = "font-size:7px;padding:1px 5px;border-radius:3px;border:1px solid #1c2535;background:#07090d;color:#445566;cursor:pointer;font-family:inherit";
+    const showDetail = s._showEntityDetail !== false;
+    toggleBtn.textContent = showDetail ? "▲ einklappen" : "▼ details";
+    toggleBtn.addEventListener("click", () => {
+      s._showEntityDetail = !showDetail;
+      this._rebuildSidebar();
+    });
+    hdr.append(hdrLbl, toggleBtn);
+    container.appendChild(hdr);
+
+    slots.forEach(slot => {
+      // Effektive Entity: Override hat Vorrang, sonst Prefix+Suffix
+      const override = overrides[slot.key];
+      const autoEnt = px ? px + slot.suffix : null;
+      const effectiveEnt = override || autoEnt;
+      const state = effectiveEnt ? this._hass.states[effectiveEnt] : null;
+      const ok = !!state;
+      if (ok) found++;
+      if (!showDetail) return; // Nur Summary ohne Details
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:4px;margin-bottom:3px";
+      const icon = document.createElement("span");
+      icon.style.cssText = `font-size:8px;flex-shrink:0;color:${ok?"#22c55e":"#ef4444"}`;
+      icon.textContent = ok ? "✓" : "✗";
+      const lbl = document.createElement("span");
+      lbl.style.cssText = "font-size:7.5px;color:#445566;width:60px;flex-shrink:0";
+      lbl.textContent = slot.label+":";
+      const entInp = document.createElement("input");
+      entInp.type = "text";
+      entInp.value = override || (autoEnt||"");
+      entInp.placeholder = autoEnt || "entity_id...";
+      entInp.style.cssText = `flex:1;padding:1px 4px;border-radius:3px;border:1px solid ${ok?"#22c55e44":"#ef444444"};background:#07090d;color:${ok?"#22c55e":"#ef4444"};font-size:7px;font-family:inherit`;
+      entInp.addEventListener("change", () => {
+        if (!s.entity_overrides) s.entity_overrides = {};
+        const v = entInp.value.trim();
+        if (v && v !== autoEnt) s.entity_overrides[slot.key] = v;
+        else delete s.entity_overrides[slot.key];
+        this._rebuildSidebar();
+      });
+      const valBadge = document.createElement("span");
+      valBadge.style.cssText = "font-size:7px;color:#94a3b8;white-space:nowrap;max-width:50px;overflow:hidden;text-overflow:ellipsis";
+      valBadge.textContent = ok ? (state.state.length>8 ? state.state.substring(0,7)+"…" : state.state) : "–";
+      row.append(icon, lbl, entInp, valBadge);
+      container.appendChild(row);
+    });
+
+    // Summary bar
+    const sumBar = document.createElement("div");
+    sumBar.style.cssText = `margin-top:3px;padding:3px 6px;border-radius:3px;font-size:7.5px;font-weight:700;text-align:center;background:${found===total?"#22c55e18":found>0?"#f59e0b18":"#ef444418"};color:${found===total?"#22c55e":found>0?"#f59e0b":"#ef4444"}`;
+    sumBar.textContent = found===total ? `✓ Alle ${total} Entitäten gefunden` : `⚠ ${found}/${total} Entitäten gefunden – ${total-found} fehlen`;
+    container.appendChild(sumBar);
+  }
+
+  _getMmwaveTarget(sensor, targetNum) {
+    if (!sensor.entity_prefix && !sensor.entity_overrides) return null;
+    if (!this._hass) return null;
+    const px = sensor.entity_prefix || "";
+    const ov = sensor.entity_overrides || {};
+    const ent = (key, suffix) => {
+      if (ov[key]) return ov[key];
+      if (!px) return null;
+      const direct = px + suffix;
+      if (this._hass.states[direct]) return direct;
+      const noParts = px.match(/^(.+?)([0-9a-f]{4,})$/i);
+      if (noParts) {
+        const alt = noParts[1] + "no_" + noParts[2] + suffix;
+        if (this._hass.states[alt]) return alt;
+      }
+      return direct;
+    };
+    const xState  = this._hass.states[ent(`target_${targetNum}_x`, `_target_${targetNum}_x`)];
+    const yState  = this._hass.states[ent(`target_${targetNum}_y`, `_target_${targetNum}_y`)];
+    const spState = this._hass.states[ent(`target_${targetNum}_speed`, `_target_${targetNum}_speed`)];
+    const angState= this._hass.states[ent(`target_${targetNum}_angle`, `_target_${targetNum}_angle`)];
+    const dirState= this._hass.states[ent(`target_${targetNum}_direction`, `_target_${targetNum}_direction`)];
+    if (!xState || !yState) return null;
+    const x_raw = parseFloat(xState.state);
+    const y_raw = parseFloat(yState.state);
+    if (isNaN(x_raw) || isNaN(y_raw)) return null;
+    const present = (Math.abs(x_raw) > 1 || y_raw > 10);
+    const speed_raw = parseFloat(spState?.state) || 0;
+
+    // ── Kalman-Filter + Dead-Zone auf Rohkoordinaten ─────────────────────
+    // Ziel: Sensorrauschen (~100-200mm) unterdrücken wenn Person stillsteht,
+    //       aber echte Bewegung sofort weitergeben.
+    //
+    // Kalman vereinfacht (1D, konstante Position):
+    //   P_pred = P + Q          (Prozessrauschen)
+    //   K      = P_pred / (P_pred + R)   (Kalman-Gain)
+    //   x_est  = x_est + K * (z - x_est) (Update)
+    //   P      = (1-K) * P_pred
+    //
+    // R (Messrauschen): groß wenn still (Sensor unzuverlässig), klein wenn bewegt
+    // Q (Prozessrauschen): groß wenn bewegt (erlaubt schnelle Änderung), klein wenn still
+    if (!this._mmwaveKalman) this._mmwaveKalman = {};
+    const kKey = `${sensor.id}_${targetNum}`;
+
+    if (!present) {
+      // Target verschwunden → State zurücksetzen
+      delete this._mmwaveKalman[kKey];
+    } else {
+      const isMoving = Math.abs(speed_raw) > 0.05 || (dirState?.state||"").toLowerCase() === "moving";
+      const isStill  = Math.abs(speed_raw) < 0.03 && !isMoving;
+
+      // Rauschparameter: aus Kalibrierungs-Profil + Dämpfungs-Schieberegler
+      const kalProf = sensor.kalman_profiles?.[targetNum-1];
+      // Dämpfung: 1=reaktiv (R_still=5000), 10=sehr weich (R_still=2000000)
+      const dampLevel = Math.max(1, Math.min(10, sensor.damping ?? 5));
+      const R_still_base = 5000 * Math.pow(dampLevel, 2.2);
+      const R_still_cal = kalProf?.R_still || R_still_base;
+      const R = isStill  ? R_still_cal : isMoving ? 3000  : Math.round(R_still_cal * 0.15);
+      const Q = isMoving ? 8000        : isStill  ? 5     : 200;
+
+      let ks = this._mmwaveKalman[kKey];
+      if (!ks) {
+        // Erstinitialisierung mit Rohwert
+        ks = { x: x_raw, y: y_raw, Px: R, Py: R };
+        this._mmwaveKalman[kKey] = ks;
+      }
+
+      // Kalman-Update X
+      const Px_pred = ks.Px + Q;
+      const Kx = Px_pred / (Px_pred + R);
+      ks.x  = ks.x + Kx * (x_raw - ks.x);
+      ks.Px = (1 - Kx) * Px_pred;
+
+      // Kalman-Update Y
+      const Py_pred = ks.Py + Q;
+      const Ky = Py_pred / (Py_pred + R);
+      ks.y  = ks.y + Ky * (y_raw - ks.y);
+      ks.Py = (1 - Ky) * Py_pred;
+
+      // Dead-Zone: Wenn still und Änderung < threshold → einfrieren
+      // Konfigurierbar via sensor.dead_zone (Schieberegler, default 80mm)
+      const deadZone = isStill ? (sensor.dead_zone ?? 80) : 0;
+      if (Math.abs(x_raw - ks.x) < deadZone) ks.x = ks.x;
+      if (Math.abs(y_raw - ks.y) < deadZone) ks.y = ks.y;
+    }
+
+    // Gefilterte oder Rohwerte verwenden
+    const ks = this._mmwaveKalman?.[kKey];
+    const x_mm = ks ? Math.round(ks.x) : x_raw;
+    const y_mm = ks ? Math.round(ks.y) : y_raw;
+
+    // Achsen invertieren
+    const ix = sensor.invert_x ? -x_mm : x_mm;
+    const iy = sensor.invert_y ? -y_mm : y_mm;
+    // Kalibrierung
+    const cal = sensor.calibration || {};
+    const cx = (ix / 1000) * (cal.scale_x || 1) + (cal.offset_x || 0);
+    const cy = (iy / 1000) * (cal.scale_y || 1) + (cal.offset_y || 0);
+    // Koordinatentransformation
+    const rot = (sensor.rotation || 0) * Math.PI / 180;
+    const floor_mx = (sensor.mx||0) + cx * Math.cos(rot) - cy * Math.sin(rot);
+    const floor_my = (sensor.my||0) + cx * Math.sin(rot) + cy * Math.cos(rot);
+
+    return {
+      id: targetNum,
+      x_mm, y_mm, x_raw, y_raw,  // raw für Debug-Panel
+      floor_mx, floor_my,
+      speed: speed_raw,
+      angle: parseFloat(angState?.state)||0,
+      direction: dirState?.state||"",
+      present,
+      moving: Math.abs(speed_raw) > 0.05,
+      // Kalman-Diagnose für Debug-Panel
+      kalman_gain_x: ks ? Math.round(this._mmwaveKalman[kKey]?.Px||0) : null,
+    };
+  }
+
+  // Gibt Rohwerte (mm) ohne Rotation/Skalierung zurück – für Kalibrierung
+  _getMmwaveTargetRaw(sensor, targetNum) {
+    if (!this._hass) return null;
+    const px = sensor.entity_prefix || "";
+    const ov = sensor.entity_overrides || {};
+    const ent = (key, suffix) => ov[key] || (px ? px + suffix : null);
+    const xState = this._hass.states[ent(`target_${targetNum}_x`, `_target_${targetNum}_x`)];
+    const yState = this._hass.states[ent(`target_${targetNum}_y`, `_target_${targetNum}_y`)];
+    if (!xState || !yState) return null;
+    const x_mm = parseFloat(xState.state);
+    const y_mm = parseFloat(yState.state);
+    if (isNaN(x_mm) || isNaN(y_mm)) return null;
+    return { x_mm, y_mm };
+  }
+
+  _getMmwaveLiveTargetCount(sensor) {
+    if (!sensor.entity_prefix && !sensor.entity_overrides) return 0;
+    if (!this._hass) return 0;
+    const px = sensor.entity_prefix || "";
+    const ov = sensor.entity_overrides || {};
+    const st = this._hass.states[ov["target_count"] || (px+"_presence_target_count")] ||
+               this._hass.states[ov["target_count"] || (px+"_moving_target_count")];
+    if (st) return parseInt(st.state)||0;
+    // Fallback: count present targets
+    let count=0;
+    for(let t=1;t<=3;t++) {
+      const tg=this._getMmwaveTarget(sensor,t);
+      if(tg?.present) count++;
+    }
+    return count;
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // DESIGN EDITOR SIDEBAR
+  // ══════════════════════════════════════════════════════════════════════════
   _sidebarDesign() {
     const wrap = document.createElement("div");
     wrap.style.cssText = "display:flex;flex-direction:column;gap:0;height:100%;overflow:hidden";
@@ -7464,7 +8155,271 @@ class BLEPositioningCard extends HTMLElement {
   // ══════════════════════════════════════════════════════════════════════════
   // MMWAVE DRAWING – Canvas overlay
   // ══════════════════════════════════════════════════════════════════════════
+  _drawMmwaveOverlay() {
+    const ctx     = this._ctx;
+    // Fallback: _pendingMmwave kann leer sein ([] ist truthy!) → explizit prüfen
+    const sensors = (this._pendingMmwave?.length > 0 ? this._pendingMmwave : this._data?.mmwave_sensors) || [];
+    if (!sensors.length) return;
+    const t = Date.now() / 1000;
 
+    sensors.forEach(sensor => {
+      if (sensor.hidden) return;  // ausgeblendet
+      if (sensor.mx == null || sensor.my == null) return;
+      if (this._mmwaveCalib?.sensorId === sensor.id) this._mmwaveCalibTick(sensor);
+      const sc = this._f2c(sensor.mx, sensor.my);
+      const col = sensor.color || "#ff6b35";
+
+      // ── 1. FOV Kegel ───────────────────────────────────────────────────────
+      if (sensor.show_fov !== false) {
+        const fovAngle = (sensor.fov_angle || 120) * Math.PI / 180;
+        const rot      = (sensor.rotation || 0) * Math.PI / 180;
+        const rangeM   = sensor.fov_range || 6;
+        const d        = this._data;
+        if (d) {
+          const { scale: _mmScale } = this._floorScale();
+          const zoom = this._zoom || 1;
+          const rangePx = rangeM * _mmScale * zoom;
+
+          // Base direction: sensor faces "down" (0°=up, 90°=right in floor coords)
+          const baseAngle = rot - Math.PI/2; // rotate so 0° = facing up
+          const aStart = baseAngle - fovAngle/2;
+          const aEnd   = baseAngle + fovAngle/2;
+
+          // Heatmap-style gradient fill
+          const grad = ctx.createRadialGradient(sc.x,sc.y,0,sc.x,sc.y,rangePx);
+          grad.addColorStop(0,   col + "30");
+          grad.addColorStop(0.6, col + "18");
+          grad.addColorStop(1,   col + "00");
+          ctx.beginPath();
+          ctx.moveTo(sc.x,sc.y);
+          ctx.arc(sc.x,sc.y,rangePx,aStart,aEnd);
+          ctx.closePath();
+          ctx.fillStyle = grad;
+          ctx.fill();
+          // Outline
+          ctx.beginPath();
+          ctx.moveTo(sc.x,sc.y);
+          ctx.arc(sc.x,sc.y,rangePx,aStart,aEnd);
+          ctx.closePath();
+          ctx.strokeStyle = col + "60";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([4,4]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // ── 2. Sensor Icon ──────────────────────────────────────────────────────
+      // Pulsing ring
+      const pulse = 0.6 + 0.4 * Math.sin(t * 2.5);
+      const grd = ctx.createRadialGradient(sc.x,sc.y,0,sc.x,sc.y,16);
+      grd.addColorStop(0, col+"80"); grd.addColorStop(1, col+"00");
+      ctx.fillStyle=grd; ctx.beginPath(); ctx.arc(sc.x,sc.y,16*pulse,0,Math.PI*2); ctx.fill();
+      // Core
+      ctx.fillStyle=col; ctx.beginPath(); ctx.arc(sc.x,sc.y,5,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle="white"; ctx.lineWidth=1.5; ctx.stroke();
+      // Direction arrow
+      const rot2 = (sensor.rotation||0)*Math.PI/180;
+      const arLen = 12;
+      ctx.strokeStyle=col; ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.moveTo(sc.x,sc.y);
+      ctx.lineTo(sc.x+Math.cos(rot2-Math.PI/2)*arLen, sc.y+Math.sin(rot2-Math.PI/2)*arLen);
+      ctx.stroke();
+      // Name label
+      ctx.fillStyle="rgba(0,0,0,0.6)";
+      ctx.fillRect(sc.x-22, sc.y-22, 44, 11);
+      ctx.fillStyle=col; ctx.font="bold 8px monospace";
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(sensor.name||"mmWave", sc.x, sc.y-16.5);
+
+      // ── 3. Place-mode: Crosshair unter der Maus ─────────────────────────
+      const _sIdx = (this._pendingMmwave||[]).indexOf(sensor);
+      if (this._mmwavePlacing === _sIdx) {
+        const mp = this._mouseFloor;
+        if (mp) {
+          const mc = this._f2c(mp.mx, mp.my);
+          ctx.save();
+          ctx.strokeStyle="#f59e0b"; ctx.lineWidth=1.5; ctx.setLineDash([4,3]);
+          ctx.beginPath();
+          ctx.moveTo(mc.x-12,mc.y); ctx.lineTo(mc.x+12,mc.y);
+          ctx.moveTo(mc.x,mc.y-12); ctx.lineTo(mc.x,mc.y+12);
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(mc.x,mc.y,6,0,Math.PI*2); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font="bold 8px 'JetBrains Mono',monospace";
+          ctx.fillStyle="#f59e0b"; ctx.textAlign="center"; ctx.textBaseline="top";
+          ctx.fillText(mp.mx.toFixed(1)+"m / "+mp.my.toFixed(1)+"m", mc.x, mc.y+9);
+          ctx.textAlign="left"; ctx.restore();
+        }
+        if (sensor.mx != null) {
+          const sp = this._f2c(sensor.mx, sensor.my);
+          ctx.save(); ctx.strokeStyle="#ef444466"; ctx.lineWidth=1; ctx.setLineDash([2,2]);
+          ctx.beginPath(); ctx.arc(sp.x,sp.y,10,0,Math.PI*2); ctx.stroke();
+          ctx.setLineDash([]); ctx.restore();
+        }
+      }
+
+      // ── 4. Targets ────────────────────────────────────────────────────────
+      for (let ti=1; ti<=3; ti++) {
+        const target = this._getMmwaveTarget(sensor, ti);
+        if (!target || !target.present) continue;
+        const tc = this._f2c(target.floor_mx, target.floor_my);
+        const tName = (sensor.target_names||[])[ti-1] || ("P"+ti);
+        const tCol  = ["#ff6b35","#00e5ff","#22c55e"][ti-1] || "#fff";
+        // Feed frame to classifier + posture + fall detector
+        this._mmwaveLearnFrame(sensor, target);
+        if (this._mmwaveTrain) this._mmwaveTrainingTick(sensor, target);
+        const clsResult = this._mmwaveClassify(sensor, target);
+        const clsInfo   = this._mmwaveClasses()[clsResult.cls];
+        const posture   = this._mmwaveDetectPosture(sensor, target);
+        target._posture = posture; // Figur-Zeichner kann darauf zugreifen
+        this._mmwaveFallTick(sensor, target, posture);
+        const fallState = (this._mmwaveFallState||{})[sensor.id+"_"+target.id];
+        const isFallAlarm = fallState?.phase === "alarm";
+
+        // ── Presence heatmap blob ──────────────────────────────────────────
+        const heatRad = 28;
+        const hGrd = ctx.createRadialGradient(tc.x,tc.y,0,tc.x,tc.y,heatRad);
+        hGrd.addColorStop(0, tCol+"55");
+        hGrd.addColorStop(0.4, tCol+"25");
+        hGrd.addColorStop(1, tCol+"00");
+        ctx.beginPath(); ctx.arc(tc.x,tc.y,heatRad,0,Math.PI*2);
+        ctx.fillStyle=hGrd; ctx.fill();
+
+        // ── Movement vector arrow ──────────────────────────────────────────
+        if (target.moving && Math.abs(target.speed) > 0.05) {
+          const { scale: _mmScale2 } = this._floorScale();
+          const zoom2 = this._zoom||1;
+          const speedScale = Math.min(Math.abs(target.speed)*0.8, 2.5);
+          const vLen = speedScale * _mmScale2 * zoom2 * 0.18;
+          const vAngle = (target.angle||0)*Math.PI/180 + (sensor.rotation||0)*Math.PI/180 - Math.PI/2;
+          const vx = tc.x + Math.cos(vAngle)*vLen;
+          const vy = tc.y + Math.sin(vAngle)*vLen;
+          // Arrow line
+          ctx.strokeStyle=tCol; ctx.lineWidth=2;
+          ctx.beginPath(); ctx.moveTo(tc.x,tc.y); ctx.lineTo(vx,vy); ctx.stroke();
+          // Arrowhead
+          const aSize=5, aBack=vAngle+Math.PI;
+          ctx.fillStyle=tCol; ctx.beginPath();
+          ctx.moveTo(vx,vy);
+          ctx.lineTo(vx+Math.cos(aBack+0.4)*aSize, vy+Math.sin(aBack+0.4)*aSize);
+          ctx.lineTo(vx+Math.cos(aBack-0.4)*aSize, vy+Math.sin(aBack-0.4)*aSize);
+          ctx.closePath(); ctx.fill();
+        }
+
+        // ── Person figure (class-aware) ─────────────────────────────────────
+        this._drawMmwaveEntityFigure(ctx, tc, tCol, target, clsResult, clsInfo, sensor);
+
+        // ── Name + class label ───────────────────────────────────────────────
+        const zoom2 = this._zoom || 1;
+        const sc2 = Math.max(1.0, Math.min(2.0, zoom2 * 1.1));
+        const displayName = (this._opts?.mmwaveClassify && clsResult.cls!=="unknown")
+          ? (clsInfo?.icon||"") + " " + tName
+          : tName;
+        // figR: adaptive to class and scale
+        const figRBase = clsResult.cls==="pet"||clsResult.cls==="baby" ? 7 :
+                         clsResult.cls==="child" ? 7 : 9;
+        const figR = (figRBase + (target.moving?1:0)) * sc2;
+        const bodyBottom = figR + (clsResult.cls==="adult"||clsResult.cls==="child" ? (14+11)*sc2 : 0);
+
+        // Name pill (oben)
+        const nameFontSz = Math.round(9 * sc2);
+        ctx.font = `bold ${nameFontSz}px 'JetBrains Mono',monospace`;
+        const nw = Math.max(36, ctx.measureText(displayName).width + 12);
+        const nh = nameFontSz + 5;
+        const ny = tc.y - figR - nh - 4;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.beginPath(); ctx.roundRect(tc.x-nw/2, ny, nw, nh, 4); ctx.fill();
+        ctx.strokeStyle = (clsInfo?.color||tCol) + "88";
+        ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = clsInfo?.color||tCol;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(displayName, tc.x, ny + nh/2);
+
+        // ── Raum-Zuordnung unter der Figur ───────────────────────────────
+        const targetRoom = this._getRoomForPoint(target.floor_mx, target.floor_my);
+        const roomName = targetRoom?.name || "";
+
+        // ── Speed + Zone badge ────────────────────────────────────────────
+        const zoneName = this._getMmwaveZoneForTarget(sensor, target);
+        const speedStr = Math.abs(target.speed) > 0.05 ? `${target.speed.toFixed(1)}m/s` : "●";
+        const postureStr = (this._opts?.mmwavePosture && posture !== "unknown")
+          ? this._postureIcon(posture)+" " : "";
+        const alarmStr = isFallAlarm ? "🆘 " : "";
+        const badge = alarmStr + postureStr + (roomName ? roomName : (zoneName||"")) +
+                      (speedStr !== "●" ? " · "+speedStr : "");
+        const badgeFontSz = Math.round(8 * sc2);
+        ctx.font = isFallAlarm ? `bold ${badgeFontSz}px monospace` : `${badgeFontSz}px monospace`;
+        const bw2 = Math.max(40, ctx.measureText(badge).width + 10);
+        const bh2 = badgeFontSz + 5;
+        const by2 = tc.y + bodyBottom + 5;
+        ctx.fillStyle = isFallAlarm ? "rgba(239,68,68,0.9)" : "rgba(0,0,0,0.7)";
+        ctx.beginPath(); ctx.roundRect(tc.x-bw2/2, by2, bw2, bh2, 4); ctx.fill();
+        if (roomName) {
+          ctx.strokeStyle = (tCol) + "66"; ctx.lineWidth=1; ctx.stroke();
+        }
+        ctx.fillStyle = isFallAlarm ? "#fff" : (roomName ? tCol : "#94a3b8");
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText(badge, tc.x, by2 + bh2/2);
+      }
+
+      // ── 5. Zone overlays ──────────────────────────────────────────────────
+      this._drawMmwaveZones(sensor, col);
+    });
+
+    // Request next frame for animation
+    if (this._opts?.showMmwave) requestAnimationFrame(() => this._draw());
+    // Live-Sidebar aktualisieren (throttled via draw-cycle)
+    if (this._mode === "view") this._updateMmwavePersonsSidebar();
+  }
+
+  _drawMmwaveZones(sensor, col) {
+    if (!sensor.entity_prefix || !this._hass || !sensor.mx) return;
+    const ctx = this._ctx;
+    const px = sensor.entity_prefix;
+    const d  = this._data;
+    if (!d) return;
+    const W = this._canvas.width, fw = d.floor_w||10;
+    const zoom = this._zoom||1;
+    const unitPx = (W/fw)*zoom;
+    const rot = (sensor.rotation||0)*Math.PI/180;
+
+    // Draw HA zones if any zone presence entities found
+    for(let z=1; z<=3; z++) {
+      const presEnt = this._hass.states[px+`_zone_${z}_presence`];
+      const cntEnt  = this._hass.states[px+`_zone_${z}_all_target_count`];
+      if (!presEnt) continue;
+      const active = presEnt.state==="on"||presEnt.state==="True"||presEnt.state==="true";
+      const cnt    = parseInt(cntEnt?.state)||0;
+      // Zone positions are stored in sensor config if set; otherwise skip visual
+      const zoneKey = `zone_${z}`;
+      const zConf = sensor[zoneKey];
+      if (!zConf) continue; // only draw if zone coordinates configured
+      // Convert zone corners from sensor-mm to floor canvas
+      const corners = [[zConf.x1,zConf.y1],[zConf.x2,zConf.y1],[zConf.x2,zConf.y2],[zConf.x1,zConf.y2]].map(([xmm,ymm])=>{
+        const fx = (sensor.mx||0) + (xmm/1000)*Math.cos(rot) - (ymm/1000)*Math.sin(rot);
+        const fy = (sensor.my||0) + (xmm/1000)*Math.sin(rot) + (ymm/1000)*Math.cos(rot);
+        return this._f2c(fx,fy);
+      });
+      ctx.beginPath();
+      ctx.moveTo(corners[0].x,corners[0].y);
+      corners.slice(1).forEach(c=>ctx.lineTo(c.x,c.y));
+      ctx.closePath();
+      const zCol = ["#ff6b35","#00e5ff","#22c55e"][z-1];
+      ctx.strokeStyle=zCol+(active?"cc":"44");
+      ctx.lineWidth=1.5; ctx.setLineDash([4,3]); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=zCol+(active?"18":"08"); ctx.fill();
+      if (cnt > 0) {
+        const cx=(corners[0].x+corners[2].x)/2, cy=(corners[0].y+corners[2].y)/2;
+        ctx.fillStyle=zCol; ctx.font="bold 9px monospace"; ctx.textAlign="center";
+        ctx.textBaseline="middle"; ctx.fillText(`Z${z}:${cnt}`, cx, cy);
+      }
+    }
+  }
+
+  // Anwesenheitserkennung: nur phone + wearable zählen, nicht stationary
+  // Gibt zurück: "home" | "away" | "unknown"
   _getPresenceState() {
     const devices = this._data?.devices || [];
     if (!devices.length) return "unknown";
@@ -7494,8 +8449,907 @@ class BLEPositioningCard extends HTMLElement {
     return null;
   }
 
+  _getMmwaveZoneForTarget(sensor, target) {
+    const fx = target?.floor_mx, fy = target?.floor_my;
+    if (fx == null || fy == null) return null;
+    // Zonen sind in Räumen gespeichert (room.zones) mit relativen rx1/ry1/rx2/ry2
+    const rooms = this._pendingRooms || this._data?.rooms || [];
+    for (const room of rooms) {
+      if (!room.zones?.length) continue;
+      const rW = room.x2 - room.x1, rH = room.y2 - room.y1;
+      if (rW <= 0 || rH <= 0) continue;
+      for (const z of room.zones) {
+        const zx1 = room.x1 + (z.rx1||0)*rW, zy1 = room.y1 + (z.ry1||0)*rH;
+        const zx2 = room.x1 + (z.rx2||1)*rW, zy2 = room.y1 + (z.ry2||1)*rH;
+        if (fx >= Math.min(zx1,zx2) && fx <= Math.max(zx1,zx2) &&
+            fy >= Math.min(zy1,zy2) && fy <= Math.max(zy1,zy2)) {
+          return z.name || "Zone";
+        }
+      }
+    }
+    return null;
+  }
 
 
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // MMWAVE KLASSIFIKATION – Personen / Kinder / Haustiere / Babys
+  // Kombiniert: Einlern-Ritual + Automatisches Hintergrundlernen + Manuell
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Klassenmetadaten ────────────────────────────────────────────────────
+  _mmwaveClasses() {
+    return {
+      adult:  { label:"Erwachsener", icon:"🧑",  color:"#00e5ff", priority:3 },
+      child:  { label:"Kind",        icon:"🧒",  color:"#f59e0b", priority:2 },
+      pet:    { label:"Haustier",    icon:"🐾",  color:"#10b981", priority:1 },
+      baby:   { label:"Baby",        icon:"🍼",  color:"#f472b6", priority:0 },
+      unknown:{ label:"Unbekannt",   icon:"❓",  color:"#94a3b8", priority:-1 },
+    };
+  }
+
+  // ── Feature-Extraktion aus einem Target-Frame ────────────────────────────
+  // Gibt einen Feature-Vektor zurück der für den Klassifikator verwendet wird
+  _mmwaveExtractFeatures(sensor, target) {
+    const mount = sensor.mount_type || "wall"; // wall | ceiling | floor
+    const x_mm = target.x_mm;
+    const y_mm = target.y_mm; // bei Wand = Entfernung; bei Decke = "Höhe"
+    const speed = Math.abs(target.speed || 0);
+    const angle = Math.abs(target.angle || 0);
+
+    // Höhen-Proxy je nach Montage
+    // Wand: y_mm = Abstand vom Sensor → niedrig = nahe am Boden = klein
+    //       x_mm = seitlich, keine Höheninfo
+    //       aber: bei 1.5m Wandhöhe: person_height ≈ sensor_h - y_mm*sin(elev)
+    //       Vereinfacht: y_mm als Proxy – kurze y = flach am Boden (Tier/Baby)
+    // Decke: y_mm = Distanz vom Sensor nach unten → größer = weiter weg vom Boden
+    //        klein = direkt unter Sensor = hoch
+    // Boden: entfernt (nur Wand/Decke)
+    // Bei Wand-Montage: Neigungswinkel berücksichtigen
+    // tilt_deg > 0 = Sensor nach unten geneigt → y_mm stärker zur Höhe beitragen
+    const tiltRad = ((sensor.mount_tilt_deg || 0) * Math.PI / 180);
+    const wallSinFactor = 0.4 + Math.sin(Math.max(0, tiltRad)) * 0.6; // 0.4…1.0
+    const height_proxy = (mount === "ceiling")
+      ? Math.max(0, (sensor.mount_height_m || 2.4) * 1000 - y_mm) // echte Höhe schätzen
+      : Math.max(0, (sensor.mount_height_m || 1.5) * 1000 - y_mm * wallSinFactor); // Wand mit Neigung
+
+    return {
+      speed,           // m/s Betrag
+      height_proxy,    // mm geschätzte Person-Höhe
+      y_mm,            // Rohabstand
+      x_mm: Math.abs(x_mm),
+      angle,
+      dist: Math.hypot(x_mm, y_mm), // Gesamtabstand
+      ts: Date.now()
+    };
+  }
+
+  // ── Feature-Statistiken aus Verlauf ─────────────────────────────────────
+  _mmwaveComputeStats(frames) {
+    if (!frames || frames.length < 3) return null;
+    const speeds = frames.map(f=>f.speed);
+    const heights = frames.map(f=>f.height_proxy).filter(h=>h>0);
+    const n = speeds.length;
+    const avgSpeed = speeds.reduce((a,b)=>a+b,0)/n;
+    const maxSpeed = Math.max(...speeds);
+    // Varianz der Geschwindigkeit (Chaosindikator)
+    const varSpeed = speeds.reduce((a,b)=>a+(b-avgSpeed)**2,0)/n;
+    const stdSpeed = Math.sqrt(varSpeed);
+    const avgHeight = heights.length ? heights.reduce((a,b)=>a+b,0)/heights.length : 0;
+    // Richtungswechsel (schnelle Änderungen = Tier/Kind)
+    let dirChanges = 0;
+    for(let i=1;i<frames.length;i++){
+      const da = Math.abs((frames[i].angle||0)-(frames[i-1].angle||0));
+      if(da > 20) dirChanges++;
+    }
+    const changerate = dirChanges / n;
+    return { avgSpeed, maxSpeed, stdSpeed, avgHeight, changerate, n };
+  }
+
+  // ── Klassifikator ────────────────────────────────────────────────────────
+  // Gibt { cls, confidence, scores } zurück
+  _mmwaveClassify(sensor, target) {
+    if (!this._opts?.mmwaveClassify) return { cls:"unknown", confidence:0, scores:{} };
+    const key = sensor.id + "_" + target.id;
+    const profile = (this._mmwaveProfiles||{})[key];
+
+    // ── A) Eingelerntes Profil hat Vorrang ───────────────────────────────
+    if (profile?.trained_cls && profile.trained_confidence >= 0.7) {
+      return {
+        cls: profile.trained_cls,
+        confidence: profile.trained_confidence,
+        scores: {},
+        source: "trained"
+      };
+    }
+
+    // ── B) Statistik-basierte Klassifikation ─────────────────────────────
+    const stats = this._mmwaveComputeStats(profile?.frames);
+    if (!stats || stats.n < 5) {
+      // Nur aktueller Frame verfügbar → schwache Schätzung
+      return this._mmwaveClassifySingleFrame(sensor, target);
+    }
+
+    const mount = sensor.mount_type || "wall";
+    // Feature-Gewichte je nach Montage
+    const heightWeight = (mount === "ceiling") ? 0.40 : (mount === "wall") ? 0.25 : 0.05;
+    const speedWeight  = 0.30;
+    const chaosWeight  = 0.30;
+
+    // Scores: je höher desto wahrscheinlicher diese Klasse
+    // Basis-Schwellwerte (empirisch, werden durch Einlernen verfeinert)
+    const th = sensor.class_thresholds || {};
+    const T = {
+      adult_height:  th.adult_height  || 1400, // mm
+      child_height:  th.child_height  || 900,
+      baby_height:   th.baby_height   || 400,
+      pet_height:    th.pet_height    || 350,
+      adult_speed:   th.adult_speed   || 0.8,
+      child_speed:   th.child_speed   || 1.2,
+      pet_chaos:     th.pet_chaos     || 0.35,
+      child_chaos:   th.child_chaos   || 0.25,
+    };
+
+    const h = stats.avgHeight;
+    const spd = stats.avgSpeed;
+    const chaos = stats.changerate + stats.stdSpeed * 0.5;
+
+    // Score-Funktion: Gaußähnliche Kurve um Sollwert
+    const score = (val, center, sigma) =>
+      Math.exp(-0.5 * ((val-center)/sigma)**2);
+
+    const scores = {
+      adult: (
+        heightWeight * score(h, T.adult_height,  300) +
+        speedWeight  * score(spd, T.adult_speed, 0.5) +
+        chaosWeight  * score(chaos, 0.05, 0.15)
+      ),
+      child: (
+        heightWeight * score(h, T.child_height,  200) +
+        speedWeight  * score(spd, T.child_speed, 0.6) +
+        chaosWeight  * score(chaos, T.child_chaos, 0.15)
+      ),
+      pet: (
+        heightWeight * score(h, T.pet_height, 200) +
+        speedWeight  * score(spd, 0.4, 0.35) +
+        chaosWeight  * score(chaos, T.pet_chaos, 0.2)
+      ),
+      baby: (
+        heightWeight * score(h, T.baby_height, 150) +
+        speedWeight  * score(spd, 0.1, 0.15) +
+        chaosWeight  * score(chaos, 0.05, 0.1)
+      ),
+    };
+
+    // Normieren
+    const total = Object.values(scores).reduce((a,b)=>a+b,0)||1;
+    Object.keys(scores).forEach(k => scores[k] = scores[k]/total);
+    const cls = Object.entries(scores).sort((a,b)=>b[1]-a[1])[0];
+
+    // Nur wenn Confidence > 45% ausgeben, sonst unknown
+    if (cls[1] < 0.45) return { cls:"unknown", confidence: cls[1], scores, source:"stats" };
+    return { cls: cls[0], confidence: cls[1], scores, source:"stats" };
+  }
+
+  // ── Einzel-Frame Klassifikation (Fallback, niedrige Confidence) ──────────
+  _mmwaveClassifySingleFrame(sensor, target) {
+    const mount = sensor.mount_type || "wall";
+    const spd = Math.abs(target.speed||0);
+    const y = target.y_mm || 0;
+    const th = sensor.class_thresholds || {};
+
+    // Sehr einfache Heuristik als Fallback
+    if (mount !== "ceiling") {
+      // Keine Höheninfo → nur Speed-basiert
+      if (spd < 0.08) return { cls:"unknown", confidence:0.3, scores:{}, source:"frame" };
+      if (spd > 1.5) return  { cls:"adult",   confidence:0.4, scores:{}, source:"frame" };
+      return { cls:"unknown", confidence:0.2, scores:{}, source:"frame" };
+    }
+    // Deckenmontage: y_mm = Distanz → Höhe berechenbar
+    const ht = Math.max(0, (sensor.mount_height_m||2.4)*1000 - y);
+    if (ht < (th.pet_height||380))   return { cls:"pet",   confidence:0.5, scores:{}, source:"frame" };
+    if (ht < (th.baby_height||500))  return { cls:"baby",  confidence:0.5, scores:{}, source:"frame" };
+    if (ht < (th.child_height||950)) return { cls:"child", confidence:0.5, scores:{}, source:"frame" };
+    return { cls:"adult", confidence:0.55, scores:{}, source:"frame" };
+  }
+
+  // ── Hintergrundlernen: neuen Frame zum Profil hinzufügen ─────────────────
+  _mmwaveLearnFrame(sensor, target) {
+    if (!this._opts?.mmwaveClassify) return;
+    if (!this._mmwaveProfiles) this._mmwaveProfiles = {};
+    const key = sensor.id + "_" + target.id;
+    if (!this._mmwaveProfiles[key]) {
+      this._mmwaveProfiles[key] = { frames:[], trained_cls:null, trained_confidence:0 };
+    }
+    const prof = this._mmwaveProfiles[key];
+    const feat = this._mmwaveExtractFeatures(sensor, target);
+    prof.frames.push(feat);
+    // Rollierendes Fenster: max 600 Frames (~10 Min bei 1fps)
+    if (prof.frames.length > 600) prof.frames.shift();
+    // Auto-Konfidenz aktualisieren wenn genug Frames (≥30)
+    if (prof.frames.length >= 30 && prof.frames.length % 15 === 0) {
+      const result = this._mmwaveClassify(sensor, target);
+      if (result.source === "stats" && result.confidence > 0.55
+          && result.cls !== "unknown" && !prof.trained_cls) {
+        // Auto-Promoted: erster stabiler Wert nach 30+ Frames
+        prof.auto_cls = result.cls;
+        prof.auto_confidence = result.confidence;
+      }
+    }
+  }
+
+  // ── Einlern-Ritual State Machine ─────────────────────────────────────────
+  _mmwaveStartTraining(sensorId, targetId, targetClass) {
+    this._mmwaveTrain = {
+      sensorId, targetId, targetClass,
+      startTs: Date.now(),
+      durationMs: 30000,
+      frames: [],
+      phase: "collecting"  // collecting → analyzing → done
+    };
+    this._showToast(`🎯 Einlernen gestartet: Bitte ${this._mmwaveClasses()[targetClass]?.label} 30 Sek bewegen`);
+    this._draw();
+  }
+
+  _mmwaveTrainingTick(sensor, target) {
+    const tr = this._mmwaveTrain;
+    if (!tr || tr.phase !== "collecting") return;
+    if (tr.sensorId !== sensor.id || tr.targetId !== target.id) return;
+    const feat = this._mmwaveExtractFeatures(sensor, target);
+    tr.frames.push(feat);
+    const elapsed = Date.now() - tr.startTs;
+    if (elapsed >= tr.durationMs) {
+      tr.phase = "analyzing";
+      this._mmwaveFinishTraining(sensor);
+    }
+  }
+
+  _mmwaveFinishTraining(sensor) {
+    const tr = this._mmwaveTrain;
+    if (!tr) return;
+    const key = sensor.id + "_" + tr.targetId;
+    if (!this._mmwaveProfiles) this._mmwaveProfiles = {};
+    if (!this._mmwaveProfiles[key]) this._mmwaveProfiles[key] = { frames:[] };
+    const prof = this._mmwaveProfiles[key];
+    // Eingelinerte Frames als Basis
+    prof.frames = [...tr.frames, ...prof.frames].slice(0,600);
+    const stats = this._mmwaveComputeStats(tr.frames);
+    // Speichere gemittelte Merkmal-Schwellwerte dieser Klasse ins Sensor-Profil
+    const cls = tr.targetClass;
+    if (stats) {
+      if (!sensor.class_thresholds) sensor.class_thresholds = {};
+      const T = sensor.class_thresholds;
+      const alpha = 0.6; // Lernrate
+      const prev = T[cls+"_height"] || stats.avgHeight;
+      T[cls+"_height"] = Math.round(prev*(1-alpha) + stats.avgHeight*alpha);
+      T[cls+"_speed"]  = parseFloat(((T[cls+"_speed"]||stats.avgSpeed)*(1-alpha) + stats.avgSpeed*alpha).toFixed(2));
+    }
+    prof.trained_cls = cls;
+    prof.trained_confidence = Math.min(0.92, 0.65 + (tr.frames.length/600)*0.27);
+    tr.phase = "done";
+    const cInfo = this._mmwaveClasses()[cls];
+    this._showToast(`✅ ${cInfo?.icon} ${cInfo?.label} eingelernt (${Math.round(prof.trained_confidence*100)}% Konfidenz)`);
+    this._mmwaveTrain = null;
+    this._rebuildSidebar();
+  }
+
+  // ── Profil zurücksetzen ──────────────────────────────────────────────────
+  _mmwaveResetProfile(sensorId, targetId) {
+    const key = sensorId + "_" + targetId;
+    if (this._mmwaveProfiles) delete this._mmwaveProfiles[key];
+    this._showToast("🗑 Profil zurückgesetzt");
+    this._rebuildSidebar();
+  }
+
+
+  // ── Klassifikations-UI: Einlern-Panel im mmWave Sensor Editor ────────────
+  _buildMmwaveClassifyPanel(body, sensor) {
+    // Wurde in _buildMmwaveSensorEditor integriert – diese Methode ist leer
+  }
+  _drawMmwaveEntityFigure(ctx, tc, tCol, target, clsResult, clsInfo, sensor={}) {
+    const col = (this._opts?.mmwaveClassify && clsResult?.cls !== "unknown")
+      ? (clsInfo?.color || tCol) : tCol;
+    const cls = clsResult?.cls || "unknown";
+    const moving = target.moving;
+    // Zoom-adaptive size: größer bei hohem Zoom
+    const zoom = this._zoom || 1;
+    const scale = Math.max(1.0, Math.min(2.0, zoom * 1.1));
+    ctx.save();
+
+    switch(cls) {
+      case "adult": {
+        const posture = target?._posture || "standing";
+        // Sturz: rotes Blink-Symbol
+        if (posture === "fallen") {
+          ctx.save();
+          ctx.strokeStyle = `rgba(239,68,68,${0.7+Math.sin(Date.now()/200)*0.3})`;
+          ctx.lineWidth = 3 * scale;
+          const r = 12 * scale;
+          ctx.beginPath(); ctx.moveTo(tc.x-r,tc.y-r); ctx.lineTo(tc.x+r,tc.y+r); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(tc.x+r,tc.y-r); ctx.lineTo(tc.x-r,tc.y+r); ctx.stroke();
+          ctx.font = `bold ${10*scale}px monospace`;
+          ctx.fillStyle = "#ef4444"; ctx.textAlign="center"; ctx.textBaseline="bottom";
+          ctx.fillText("⚠ STURZ", tc.x, tc.y - r - 3);
+          ctx.textAlign="left"; ctx.restore();
+          break;
+        }
+        if (posture === "lying") {
+          // Liegend: horizontaler Strich mit Kopf am Ende
+          const r = 7 * scale;
+          const bodyLen = 22 * scale;
+          ctx.save();
+          const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.5);
+          aura.addColorStop(0, col+"44"); aura.addColorStop(1, col+"00");
+          ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.5,0,Math.PI*2); ctx.fill();
+          // Bett/Körper (horizontales Rechteck)
+          ctx.fillStyle=col+"aa";
+          ctx.beginPath(); ctx.roundRect(tc.x - bodyLen/2, tc.y - 4*scale, bodyLen, 8*scale, 3*scale); ctx.fill();
+          ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+          // Kopf (links)
+          ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tc.x - bodyLen/2 - r, tc.y, r, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle="rgba(255,255,255,0.8)"; ctx.lineWidth=1.5*scale; ctx.stroke();
+          // Zzz Symbol
+          ctx.font=`bold ${9*scale}px monospace`; ctx.fillStyle=col+"cc";
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          ctx.fillText("💤", tc.x + bodyLen/2 + 6*scale, tc.y - 8*scale);
+          ctx.restore();
+          break;
+        }
+        if (posture === "sitting") {
+          // Sitzend: gebeugter Torso, Oberkörper nach vorne
+          const r = 8 * scale;
+          const torsoH = 10 * scale, torsoW = 8 * scale;
+          ctx.save();
+          const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.5);
+          aura.addColorStop(0, col+"44"); aura.addColorStop(1, col+"00");
+          ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.5,0,Math.PI*2); ctx.fill();
+          // Stuhl-Sitz (flache Linie)
+          ctx.strokeStyle=col+"88"; ctx.lineWidth=3*scale;
+          ctx.beginPath(); ctx.moveTo(tc.x-8*scale, tc.y+r+torsoH); ctx.lineTo(tc.x+8*scale, tc.y+r+torsoH); ctx.stroke();
+          // Beine (L-förmig)
+          ctx.strokeStyle=col; ctx.lineWidth=2.5*scale;
+          ctx.beginPath();
+          ctx.moveTo(tc.x-4*scale, tc.y+r+torsoH); ctx.lineTo(tc.x-4*scale, tc.y+r+torsoH+8*scale);
+          ctx.moveTo(tc.x+4*scale, tc.y+r+torsoH); ctx.lineTo(tc.x+4*scale, tc.y+r+torsoH+8*scale);
+          ctx.stroke();
+          // Torso (leicht nach vorne geneigt)
+          ctx.fillStyle=col+"bb";
+          ctx.beginPath(); ctx.roundRect(tc.x-torsoW/2, tc.y+r, torsoW, torsoH, 3*scale); ctx.fill();
+          ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+          // Arme auf Knien
+          ctx.strokeStyle=col; ctx.lineWidth=2*scale; ctx.beginPath();
+          ctx.moveTo(tc.x-torsoW/2,tc.y+r+4*scale); ctx.lineTo(tc.x-torsoW/2-5*scale,tc.y+r+torsoH*0.8);
+          ctx.moveTo(tc.x+torsoW/2,tc.y+r+4*scale); ctx.lineTo(tc.x+torsoW/2+5*scale,tc.y+r+torsoH*0.8);
+          ctx.stroke();
+          // Kopf
+          ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tc.x,tc.y,r,0,Math.PI*2); ctx.fill();
+          ctx.strokeStyle="rgba(255,255,255,0.8)"; ctx.lineWidth=2*scale; ctx.stroke();
+          ctx.fillStyle="rgba(0,0,0,0.7)";
+          ctx.beginPath(); ctx.arc(tc.x-r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(tc.x+r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+          ctx.restore();
+          break;
+        }
+        // Standard: stehend
+        const r = (moving ? 9 : 8) * scale;
+        const blen = 14 * scale, bw = 9 * scale, leg = 11 * scale;
+        // Glow aura
+        const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.8);
+        aura.addColorStop(0, col+"44"); aura.addColorStop(1, col+"00");
+        ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.8,0,Math.PI*2); ctx.fill();
+        // Shadow
+        ctx.fillStyle="rgba(0,0,0,0.5)";
+        ctx.beginPath(); ctx.ellipse(tc.x,tc.y+r+blen+2,bw*0.6,3*scale,0,0,Math.PI*2); ctx.fill();
+        // Body (torso rectangle)
+        ctx.fillStyle=col+"bb";
+        ctx.beginPath(); ctx.roundRect(tc.x-bw/2, tc.y+r, bw, blen, 3*scale); ctx.fill();
+        ctx.strokeStyle=col; ctx.lineWidth=1.5*scale; ctx.stroke();
+        // Arms
+        ctx.strokeStyle=col; ctx.lineWidth=2*scale;
+        ctx.beginPath();
+        if(moving) {
+          ctx.moveTo(tc.x-bw/2,tc.y+r+2*scale); ctx.lineTo(tc.x-bw/2-7*scale,tc.y+r+blen*0.3);
+          ctx.moveTo(tc.x+bw/2,tc.y+r+2*scale); ctx.lineTo(tc.x+bw/2+7*scale,tc.y+r+blen*0.7);
+        } else {
+          ctx.moveTo(tc.x-bw/2,tc.y+r+3*scale); ctx.lineTo(tc.x-bw/2-6*scale,tc.y+r+blen*0.5);
+          ctx.moveTo(tc.x+bw/2,tc.y+r+3*scale); ctx.lineTo(tc.x+bw/2+6*scale,tc.y+r+blen*0.5);
+        }
+        ctx.stroke();
+        // Legs
+        ctx.beginPath();
+        ctx.moveTo(tc.x-3*scale,tc.y+r+blen); ctx.lineTo(tc.x-4*scale,tc.y+r+blen+leg);
+        ctx.moveTo(tc.x+3*scale,tc.y+r+blen); ctx.lineTo(tc.x+4*scale,tc.y+r+blen+leg);
+        ctx.stroke();
+        // Head
+        ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tc.x,tc.y,r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="rgba(255,255,255,0.8)"; ctx.lineWidth=2*scale; ctx.stroke();
+        // Face dots (eyes)
+        ctx.fillStyle="rgba(0,0,0,0.7)";
+        ctx.beginPath(); ctx.arc(tc.x-r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(tc.x+r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+        break;
+      }
+      case "child": {
+        const r = 7 * scale;
+        const blen = 10 * scale, bw = 7 * scale, leg = 8 * scale;
+        // Glow
+        const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.5);
+        aura.addColorStop(0, col+"44"); aura.addColorStop(1, col+"00");
+        ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.5,0,Math.PI*2); ctx.fill();
+        // Shadow
+        ctx.fillStyle="rgba(0,0,0,0.4)";
+        ctx.beginPath(); ctx.ellipse(tc.x,tc.y+r+blen+1,bw*0.5,2.5*scale,0,0,Math.PI*2); ctx.fill();
+        // Body
+        ctx.fillStyle=col+"bb";
+        ctx.beginPath(); ctx.roundRect(tc.x-bw/2, tc.y+r, bw, blen, 3*scale); ctx.fill();
+        ctx.strokeStyle=col; ctx.lineWidth=1.5*scale; ctx.stroke();
+        // Arms up if moving
+        ctx.strokeStyle=col; ctx.lineWidth=2*scale; ctx.beginPath();
+        if(moving) {
+          ctx.moveTo(tc.x-bw/2,tc.y+r); ctx.lineTo(tc.x-bw/2-6*scale,tc.y+r-4*scale);
+          ctx.moveTo(tc.x+bw/2,tc.y+r); ctx.lineTo(tc.x+bw/2+6*scale,tc.y+r-4*scale);
+        } else {
+          ctx.moveTo(tc.x-bw/2,tc.y+r+3*scale); ctx.lineTo(tc.x-bw/2-5*scale,tc.y+r+blen*0.5);
+          ctx.moveTo(tc.x+bw/2,tc.y+r+3*scale); ctx.lineTo(tc.x+bw/2+5*scale,tc.y+r+blen*0.5);
+        }
+        ctx.stroke();
+        // Legs
+        ctx.beginPath();
+        ctx.moveTo(tc.x-2*scale,tc.y+r+blen); ctx.lineTo(tc.x-3*scale,tc.y+r+blen+leg);
+        ctx.moveTo(tc.x+2*scale,tc.y+r+blen); ctx.lineTo(tc.x+3*scale,tc.y+r+blen+leg);
+        ctx.stroke();
+        // Head (rounder, bigger)
+        ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tc.x,tc.y,r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="rgba(255,255,255,0.8)"; ctx.lineWidth=2*scale; ctx.stroke();
+        ctx.fillStyle="rgba(0,0,0,0.6)";
+        ctx.beginPath(); ctx.arc(tc.x-r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+        ctx.beginPath(); ctx.arc(tc.x+r*0.3,tc.y-r*0.1,1.5*scale,0,Math.PI*2); ctx.fill();
+        // ✨
+        ctx.font=`${10*scale}px serif`; ctx.fillStyle=col+"cc";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("✨",tc.x+r+3*scale,tc.y-r*0.8);
+        break;
+      }
+      case "pet": {
+        const r = 7 * scale;
+        // Unterscheide Katze (spitze Ohren, gekrümmter Schwanz) vs Hund (runde Ohren, wedelnder Schwanz)
+        const isCat = (sensor?.target_names||[])[target?.id-1]?.toLowerCase().includes("katze") ||
+                      (sensor?.target_names||[])[target?.id-1]?.toLowerCase().includes("cat");
+        const wagAngle = moving ? Math.sin(Date.now()/200)*0.6 : 0.2;
+
+        ctx.save();
+        const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.5);
+        aura.addColorStop(0, col+"33"); aura.addColorStop(1, col+"00");
+        ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.5,0,Math.PI*2); ctx.fill();
+
+        // Körper (Ellipse)
+        ctx.fillStyle=col;
+        ctx.beginPath(); ctx.ellipse(tc.x,tc.y+2*scale,r+2,r*0.8,0,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="rgba(255,255,255,0.6)"; ctx.lineWidth=1; ctx.stroke();
+
+        // Kopf
+        const hx = tc.x + (r+2)*scale, hy = tc.y - 1*scale;
+        ctx.fillStyle=col; ctx.beginPath(); ctx.arc(hx, hy, (r-1)*scale, 0, Math.PI*2); ctx.fill();
+        ctx.strokeStyle="rgba(255,255,255,0.6)"; ctx.lineWidth=1; ctx.stroke();
+
+        if (isCat) {
+          // Katze: spitze Dreieck-Ohren
+          ctx.fillStyle=col;
+          ctx.beginPath();
+          ctx.moveTo(hx-3*scale, hy-(r-1)*scale);
+          ctx.lineTo(hx-6*scale, hy-(r+5)*scale);
+          ctx.lineTo(hx-0.5*scale, hy-(r-1)*scale);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(hx+1*scale, hy-(r-1)*scale);
+          ctx.lineTo(hx+5*scale, hy-(r+5)*scale);
+          ctx.lineTo(hx+5.5*scale, hy-(r-1)*scale);
+          ctx.fill();
+          // Schnurrhaar
+          ctx.strokeStyle=col+"99"; ctx.lineWidth=0.8;
+          [[-1,1],[-1,2],[1,1],[1,2]].forEach(([sx,sy])=>{
+            ctx.beginPath(); ctx.moveTo(hx,hy+sy*scale); ctx.lineTo(hx+sx*7*scale, hy+sy*1.5*scale); ctx.stroke();
+          });
+          // Gebogener Schwanz nach oben
+          ctx.strokeStyle=col; ctx.lineWidth=2.5*scale;
+          ctx.beginPath();
+          ctx.moveTo(tc.x-r*scale, tc.y+2*scale);
+          ctx.bezierCurveTo(tc.x-(r+8)*scale, tc.y-4*scale, tc.x-(r+6)*scale, tc.y-12*scale, tc.x-(r+2)*scale, tc.y-14*scale);
+          ctx.stroke();
+          // Emoji hint
+          ctx.font=`${9*scale}px serif`; ctx.fillStyle=col+"cc";
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          ctx.fillText("🐱", tc.x, tc.y+r*scale+8*scale);
+        } else {
+          // Hund: runde hängende Ohren
+          ctx.fillStyle=col+"cc";
+          ctx.beginPath(); ctx.ellipse(hx-5*scale, hy+2*scale, 3*scale, 5*scale, -0.3, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.ellipse(hx+5*scale, hy+2*scale, 3*scale, 5*scale, 0.3, 0, Math.PI*2); ctx.fill();
+          // Wedelnder Schwanz
+          ctx.strokeStyle=col; ctx.lineWidth=2.5*scale;
+          ctx.beginPath();
+          ctx.moveTo(tc.x-r*scale, tc.y+2*scale);
+          ctx.quadraticCurveTo(tc.x-(r+5)*scale, tc.y-5+wagAngle*10*scale, tc.x-(r+4)*scale, tc.y-9+wagAngle*7*scale);
+          ctx.stroke();
+          // Pfoten
+          ctx.fillStyle=col+"88";
+          [[-3,6],[0,7],[3,6]].forEach(([dx,dy])=>{
+            ctx.beginPath(); ctx.arc(tc.x+dx*scale, tc.y+dy*scale, 2, 0, Math.PI*2); ctx.fill();
+          });
+          ctx.font=`${9*scale}px serif`; ctx.fillStyle=col+"cc";
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          ctx.fillText("🐶", tc.x, tc.y+r*scale+8*scale);
+        }
+        ctx.restore();
+        break;
+      }
+      case "baby": {
+        const r = 4;
+        // Chubby body (large ellipse)
+        ctx.fillStyle=col;
+        ctx.beginPath(); ctx.ellipse(tc.x,tc.y+3,r,r+2,0,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="white"; ctx.lineWidth=1.2; ctx.stroke();
+        // Large round head
+        ctx.fillStyle=col; ctx.beginPath(); ctx.arc(tc.x,tc.y-2,r,0,Math.PI*2); ctx.fill();
+        ctx.strokeStyle="white"; ctx.lineWidth=1; ctx.stroke();
+        // Little arms/legs
+        ctx.strokeStyle=col; ctx.lineWidth=2;
+        ctx.beginPath();
+        ctx.moveTo(tc.x-r,tc.y+2); ctx.lineTo(tc.x-r-3,tc.y+4);
+        ctx.moveTo(tc.x+r,tc.y+2); ctx.lineTo(tc.x+r+3,tc.y+4);
+        ctx.moveTo(tc.x-2,tc.y+r+2); ctx.lineTo(tc.x-2,tc.y+r+6);
+        ctx.moveTo(tc.x+2,tc.y+r+2); ctx.lineTo(tc.x+2,tc.y+r+6);
+        ctx.stroke();
+        // Baby bottle emoji hint
+        ctx.font="8px serif"; ctx.fillStyle=col+"aa";
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("🍼",tc.x+9,tc.y-5);
+        break;
+      }
+      default: { // unknown
+        const r = (moving ? 12 : 11) * scale;
+        // Glow
+        const aura = ctx.createRadialGradient(tc.x,tc.y,r,tc.x,tc.y,r*2.2);
+        aura.addColorStop(0, col+"33"); aura.addColorStop(1, col+"00");
+        ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(tc.x,tc.y,r*2.2,0,Math.PI*2); ctx.fill();
+        // Pulsing dashed ring
+        ctx.strokeStyle=col; ctx.lineWidth=2.5*scale; ctx.setLineDash([5*scale,4*scale]);
+        ctx.beginPath(); ctx.arc(tc.x,tc.y,r,0,Math.PI*2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle=col+"33"; ctx.beginPath(); ctx.arc(tc.x,tc.y,r,0,Math.PI*2); ctx.fill();
+        // ? symbol large
+        ctx.fillStyle=col; ctx.font=`bold ${12*scale}px monospace`;
+        ctx.textAlign="center"; ctx.textBaseline="middle";
+        ctx.fillText("?",tc.x,tc.y);
+        break;
+      }
+    }
+
+    // Confidence ring (only when classify active and confident)
+    if(this._opts?.mmwaveClassify && clsResult?.cls!=="unknown" && clsResult?.confidence>0.5) {
+      const conf = clsResult.confidence;
+      const rRing = (cls==="pet"||cls==="baby") ? 10 : 14;
+      ctx.strokeStyle = col + Math.floor(conf*160).toString(16).padStart(2,"0");
+      ctx.lineWidth = 1;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(tc.x, tc.y, rRing, -Math.PI/2, -Math.PI/2 + conf*Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // HALTUNGS-ERKENNUNG + STURZERKENNUNG
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Haltungs-Erkennung ────────────────────────────────────────────────────
+  // Gibt "standing" | "sitting" | "lying" | "unknown" zurück
+  _mmwaveDetectPosture(sensor, target) {
+    // ═══════════════════════════════════════════════════════════════════════
+    // Haltungserkennung – LD2450 (Wandmontage)
+    //
+    // Das LD2450 liefert NUR 2D-Koordinaten (x=horizontal, y=Tiefe).
+    // Es gibt KEINE Höheninformation aus dem Sensor selbst.
+    //
+    // Einzige zuverlässige Signale:
+    //   1. speed > 0: Person bewegt sich → aufrecht
+    //   2. direction: "Moving" vs "Stationary"
+    //   3. Deckenmontage: y_mm = Abstand nach unten → direkte Höhe
+    //   4. Wandmontage + Neigungswinkel: y entlang geneigter Achse → Höhe
+    //   5. Externe HA-Entität (z.B. Körpergröße-Sensor) → override
+    // ═══════════════════════════════════════════════════════════════════════
+    const mount  = sensor.mount_type || "wall";
+    const y_mm   = target.y_mm || 0;
+    const x_mm   = target.x_mm || 0;
+    const speed  = Math.abs(target.speed || 0);
+    const dir    = (target.direction || "").toLowerCase();
+    const mountH = (sensor.mount_height_m || (mount === "ceiling" ? 2.4 : 1.5)) * 1000;
+    const th     = sensor.posture_thresholds || {};
+
+    // ── Externes Override: HA-Entity liefert Haltung direkt ─────────────
+    if (sensor.posture_entity && this._hass?.states?.[sensor.posture_entity]) {
+      const ext = this._hass.states[sensor.posture_entity].state.toLowerCase();
+      if (ext.includes("stand")) return "standing";
+      if (ext.includes("sit"))   return "sitting";
+      if (ext.includes("lie") || ext.includes("lay")) return "lying";
+    }
+
+    // ── Kalibrierungs-Profil nutzen wenn vorhanden ────────────────────────
+    const profiles = sensor.posture_profiles;
+    if (profiles && Object.keys(profiles).length > 0) {
+      const allP = Object.values(profiles).filter(p => p.sensor_id === sensor.id);
+      const curDist = Math.sqrt((x_mm||0)**2 + (y_mm||0)**2);
+      const prof = allP.reduce((best, p) => {
+        if (!p.dist_mm) return best;
+        const diff = Math.abs(curDist - p.dist_mm) / p.dist_mm;
+        return (!best || diff < best._diff) ? {...p, _diff:diff} : best;
+      }, null);
+
+      if (prof && prof._diff < 0.5) {
+        // Y-Schwellwert-basiert (zuverlässigster Ansatz aus Kalibrierung)
+        if (prof.threshold_y_stand_sit && prof.threshold_y_sit_lie) {
+          if (y_mm < prof.threshold_y_stand_sit) return "standing";
+          if (y_mm < prof.threshold_y_sit_lie)   return "sitting";
+          return "lying";
+        } else if (prof.threshold_y_stand_sit) {
+          return y_mm < prof.threshold_y_stand_sit ? "standing" : "sitting";
+        }
+        // Euklidische Distanz zu gemessenen Schwerpunkten
+        if (prof.standing_x != null && prof.sitting_x != null) {
+          const dSt = Math.hypot(x_mm-prof.standing_x, y_mm-prof.standing_y);
+          const dSi = Math.hypot(x_mm-prof.sitting_x,  y_mm-prof.sitting_y);
+          const dLy = prof.lying_x != null ? Math.hypot(x_mm-prof.lying_x, y_mm-prof.lying_y) : Infinity;
+          const m = Math.min(dSt, dSi, dLy);
+          return m===dSt ? "standing" : m===dSi ? "sitting" : "lying";
+        }
+      }
+    }
+
+    // ── Speed / Direction: sicherstes Signal ────────────────────────────
+    // Bewegend → definitiv aufrecht (niemand kriecht mit 0.4 m/s)
+    if (speed > 0.4)                     return "standing";
+    if (dir === "moving" && speed > 0.1) return "standing";
+
+    // ── Deckenmontage: y_mm = Abstand nach unten → direkte Höheninfo ────
+    if (mount === "ceiling") {
+      const T = {
+        stand_min:   th.stand_min   ?? 1500,
+        sit_min:     th.sit_min     ?? 900,
+        fall_height: th.fall_height ?? 600,  // Sturz: unter diesem Wert = am Boden
+        hysteresis:  th.hysteresis  ?? 60,
+      };
+      const personHeight_mm = Math.max(0, mountH - y_mm);
+
+      // ── Liegen zuerst prüfen: niedrige Höhe + niedrige Speed + großer x-Spread ──
+      // Liegend: Person nimmt mehr horizontale Fläche ein → |x_mm| größer
+      const xSpread = Math.abs(x_mm);
+      // Sturz / Boden: unter fall_height → fallen
+      if (personHeight_mm < T.fall_height && speed < 0.3) return "fallen";
+
+      const isLyingCandidate = personHeight_mm < (T.sit_min - T.hysteresis) &&
+                               speed < 0.12;
+      const lyingConfirmed = isLyingCandidate && (xSpread > 250 || personHeight_mm < (T.fall_height + 300));
+
+      // Hysterese: vorherige Haltung aus letztem Frame einbeziehen
+      const prevPosture = target._posture || "standing";
+      const hysteresis = T.hysteresis;
+
+      if (lyingConfirmed) return "lying";
+
+      // Stehend: Höhe ≥ stand_min (+ Hysterese-Puffer wenn vorher nicht stehend)
+      const standThresh = prevPosture === "standing"
+        ? T.stand_min - hysteresis   // War stehend → mehr Toleranz
+        : T.stand_min + hysteresis;  // War sitzend/liegend → braucht klar mehr Höhe
+
+      if (personHeight_mm >= standThresh) return "standing";
+
+      // Sitzend: Höhe ≥ sit_min mit Hysterese
+      const sitThresh = prevPosture === "sitting"
+        ? T.sit_min - hysteresis
+        : T.sit_min + hysteresis;
+
+      if (personHeight_mm >= sitThresh) return "sitting";
+
+      // Fallback: vorherige Haltung beibehalten wenn im Hysterese-Band
+      return prevPosture === "lying" ? "lying" : "sitting";
+    }
+
+    // ── Wandmontage MIT Neigungswinkel (≥ 15°): Höhe berechenbar ────────
+    const tiltDeg  = sensor.mount_tilt_deg || 0;
+    const tiltRad  = Math.abs(tiltDeg) * Math.PI / 180;
+    if (Math.abs(tiltDeg) >= 15) {
+      const T = { stand_min: th.stand_min ?? 1500, sit_min: th.sit_min ?? 900,
+                   fall_height: th.fall_height ?? 600, hysteresis: th.hysteresis ?? 60 };
+      const sinF = Math.sin(tiltRad);
+      const personHeight_mm = Math.max(0, mountH - y_mm * sinF);
+      const prevP = target._posture || "standing";
+      const xSpreadT = Math.abs(x_mm);
+      if (personHeight_mm < T.fall_height && speed < 0.3) return "fallen";
+      if (speed < 0.12 && personHeight_mm < (T.sit_min - T.hysteresis) &&
+          (xSpreadT > 250 || personHeight_mm < (T.fall_height + 300))) return "lying";
+      const standT = prevP==="standing" ? T.stand_min-T.hysteresis : T.stand_min+T.hysteresis;
+      const sitT   = prevP==="sitting"  ? T.sit_min-T.hysteresis   : T.sit_min+T.hysteresis;
+      if (personHeight_mm >= standT) return "standing";
+      if (personHeight_mm >= sitT)   return "sitting";
+      return prevP==="lying" ? "lying" : "sitting";
+    }
+
+    // ── Wandmontage OHNE Neigung: kein Höhensignal ───────────────────────
+    // Der LD2450 misst nur x/y in der Horizontalebene – keine Höhe.
+    // Wir können stehend/sitzend NICHT physikalisch unterscheiden.
+    //
+    // Heuristik basierend auf:
+    //   A) Leichte Mikrobewegung (Atemzug, Körperbalance beim Stehen)
+    //      → speed beim Stehen oft 0.02–0.15, beim Sitzen oft 0
+    //   B) Distanz: sehr nah (< 400mm) an Wand → eher sitzend/liegend
+    //   C) Konfigurierbarer Schwellwert "wall_speed_stand" (default 0.0)
+    //      → Nutzer kann kalibrieren was "Stehen" für seinen Sensor ist
+    //
+    // Standard-Fallback: "standing" wenn Präsenz erkannt
+    // (konservativ – lieber falsch-positiv als immer "sitzend" anzeigen)
+    const wallSpeedThresh = th.wall_speed_stand ?? 0.0; // kalibrierbar
+    const dist_mm = Math.sqrt(x_mm*x_mm + y_mm*y_mm);
+
+    // Sehr nahe an der Wand + still → sitzend oder liegend
+    if (dist_mm < 400 && speed < 0.05) return "lying";
+    if (dist_mm < 600 && speed < 0.03) return "sitting";
+
+    // Speed über Schwellwert → stehend
+    if (speed >= wallSpeedThresh && speed > 0.02) return "standing";
+
+    // Still mit normaler Distanz → Standard ist STEHEND
+    // (logischer Fallback: jemand der erkannt wird steht meistens)
+    return "standing";
+  }
+
+  // ── Sturz-Erkennung State Machine ─────────────────────────────────────────
+  // Zustand pro Sensor+Target: { phase, ts, prevPosture, alarmFired }
+  _mmwaveFallTick(sensor, target, posture) {
+    if (!this._opts?.mmwaveFallDetect) return;
+    if (!this._mmwaveFallState) this._mmwaveFallState = {};
+    const key = sensor.id + "_" + target.id;
+    if (!this._mmwaveFallState[key]) {
+      this._mmwaveFallState[key] = { phase:"normal", ts:0, prevPosture:"unknown", alarmFired:false };
+    }
+    const st    = this._mmwaveFallState[key];
+    const now   = Date.now();
+    const speed = Math.abs(target.speed || 0);
+    const delayMs = (sensor.fall_alarm_delay ?? 30) * 1000;
+
+    // ── Phase 1: Sturz-Signatur erkennen ─────────────────────────────────
+    // Echte Sturz-Signatur braucht:
+    //   (a) Vorher aufrecht (stehend/sitzend)
+    //   (b) Jetzt liegend (nur wenn Sensor Höhe messen kann!)
+    //   (c) Geschwindigkeit VORHER > 0.3 m/s (Bewegung/Aufprall)
+    //       → normales langsames Hinlegen ins Bett wird ignoriert
+    const wasUpright   = (st.prevPosture === "standing" || st.prevPosture === "sitting");
+    const nowLying     = (posture === "lying");
+    // Aufprall-Signal: vorherige Messung hatte Bewegung
+    const hadMovement  = (st.prevSpeed || 0) > 0.3;
+
+    // Sturz-Erkennung NUR wenn Sensor tatsächlich "lying" erkennen kann
+    // (Deckenmontage ODER Wandmontage mit ausreichender Neigung ≥15°)
+    const tiltDeg  = sensor.mount_tilt_deg || 0;
+    const canDetectLying = (sensor.mount_type === "ceiling") || (Math.abs(tiltDeg) >= 15);
+
+    if (st.phase === "normal") {
+      if (canDetectLying && wasUpright && nowLying && hadMovement) {
+        // Potentieller Sturz – Beobachtungsphase starten
+        st.phase     = "suspected";
+        st.ts        = now;
+        st.alarmFired = false;
+      }
+      // KEIN stillSince mehr in Normal-Phase → verhindert Schlaf-Fehlalarm
+    }
+
+    // ── Phase 2: Verdacht – warten ob Person aufsteht ─────────────────────
+    if (st.phase === "suspected") {
+      if (speed > 0.25 || posture === "standing" || posture === "sitting") {
+        // Person hat sich wieder bewegt → kein Sturz
+        st.phase = "normal";
+      } else if (now - st.ts >= delayMs && !st.alarmFired) {
+        // Timeout – Person liegt noch reglos → ALARM
+        st.phase      = "alarm";
+        st.alarmFired = true;
+        this._mmwaveTriggerFallAlarm(sensor, target, now - st.ts);
+      }
+    }
+
+    // ── Phase 3: Alarm – bis Person sich wieder aufrichtet ───────────────
+    if (st.phase === "alarm") {
+      if (speed > 0.4 || posture === "standing") {
+        st.phase = "normal"; st.alarmFired = false;
+        this._showToast(`✅ ${(sensor.target_names||[])[target.id-1]||"Person"} wieder in Bewegung`);
+      }
+    }
+
+    // Vorigen Zustand merken für nächsten Tick
+    st.prevPosture = posture;
+    st.prevSpeed   = speed;
+  }
+
+  // ── Alarm auslösen ────────────────────────────────────────────────────────
+  _mmwaveTriggerFallAlarm(sensor, target, durationMs, isStill=false) {
+    const tName = (sensor.target_names||[])[target.id-1] || `Person ${target.id}`;
+    const sName = sensor.name || "mmWave";
+    const dur   = Math.round(durationMs/1000);
+    const msg   = isStill
+      ? `⚠️ ${tName} liegt seit ${dur}s reglos (${sName})`
+      : `🆘 STURZ: ${tName} ist gestürzt und liegt seit ${dur}s reglos! (${sName})`;
+
+    // 1. Toast
+    this._showToast(msg, 8000);
+
+    // 2. HA-Event feuern
+    if (this._hass) {
+      this._hass.callService("homeassistant", "update_entity", {}).catch(()=>{});
+      // Feuert ble_positioning_fall_detected Event
+      try {
+        this._hass.callApi("POST", "events/ble_positioning_fall_detected", {
+          sensor_id:   sensor.id,
+          sensor_name: sName,
+          target_id:   target.id,
+          target_name: tName,
+          duration_s:  dur,
+          floor_x:     target.floor_mx,
+          floor_y:     target.floor_my,
+          still_only:  isStill,
+          timestamp:   new Date().toISOString()
+        }).catch(()=>{});
+      } catch(e) {}
+    }
+
+    // 3. Alarm-Sound (wenn aktiviert)
+    if (this._opts?.mmwaveFallSound) {
+      this._playFallAlarmSound();
+    }
+
+    // 4. Visueller Alarm-Zustand für Canvas
+    if (!this._mmwaveFallAlarms) this._mmwaveFallAlarms = {};
+    this._mmwaveFallAlarms[sensor.id+"_"+target.id] = {
+      ts: Date.now(), tName, sName, floor_mx: target.floor_mx, floor_my: target.floor_my
+    };
+  }
+
+  // ── Alarm-Sound ──────────────────────────────────────────────────────────
+  _playFallAlarmSound() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      // Drei kurze Pieptöne – nicht zu aufdringlich
+      [0, 0.35, 0.7].forEach(delay => {
+        const osc  = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain); gain.connect(ctx.destination);
+        osc.frequency.value = 880;
+        osc.type = "sine";
+        gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+        gain.gain.linearRampToValueAtTime(0.4, ctx.currentTime + delay + 0.05);
+        gain.gain.linearRampToValueAtTime(0, ctx.currentTime + delay + 0.25);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + 0.3);
+      });
+      // SOS-ähnliches Muster danach
+      const osc2  = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2); gain2.connect(ctx.destination);
+      osc2.frequency.value = 440;
+      osc2.type = "square";
+      gain2.gain.setValueAtTime(0, ctx.currentTime + 1.2);
+      gain2.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 1.25);
+      gain2.gain.linearRampToValueAtTime(0, ctx.currentTime + 1.8);
+      osc2.start(ctx.currentTime + 1.2);
+      osc2.stop(ctx.currentTime + 1.85);
+      // Memory Leak Fix: AudioContext nach Wiedergabe schließen
+      this._setTimeout(() => { try { ctx.close(); } catch(e) {} }, 2500);
+    } catch(e) {}
+  }
+
+  // ── Haltungs-Icon ────────────────────────────────────────────────────────
+  _postureIcon(posture) {
+    return { standing:"🧍", sitting:"🪑", lying:"🛏", unknown:"" }[posture] || "";
+  }
   _postureLabel(posture) {
     return { standing:"Stehend", sitting:"Sitzend", lying:"Liegend", unknown:"" }[posture] || "";
   }
@@ -7547,18 +9401,755 @@ class BLEPositioningCard extends HTMLElement {
   // POSTURE CALIBRATION WIZARD
   // ══════════════════════════════════════════════════════════════════════════
 
+  _buildMmwaveCalibPanel(body, sensor) {
+    const panel = document.createElement("div");
+    panel.style.cssText = "margin-top:6px;padding:8px;border-radius:8px;border:1px solid #00e5ff33;background:#00e5ff06";
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "font-size:8px;font-weight:700;color:#00e5ff;margin-bottom:6px;display:flex;align-items:center;gap:5px";
+    hdr.innerHTML = `<span>🎯 KALIBRIERUNG</span><span style="font-size:7px;color:#445566;font-weight:400"> Rauschen + Haltung kalibrieren</span>`;
+    panel.appendChild(hdr);
+    if (!sensor._calib_wizard) sensor._calib_wizard = { step:0, personIdx:0, measuredDist:null, collecting:false, samples:{standing:[],sitting:[],lying:[]}, countdown:0 };
+    const wiz = sensor._calib_wizard;
+    const content = document.createElement("div");
+    panel.appendChild(content);
+    const render = () => {
+      content.innerHTML = "";
+      if (wiz.step === 0)                  this._wizStep0(content, sensor, wiz, render);
+      else if (wiz.step === 1)             this._wizStep1(content, sensor, wiz, render);
+      else if (wiz.step === 2)             this._wizStep2(content, sensor, wiz, render);
+      else if (wiz.step >= 3 && wiz.step <= 6) this._wizStepPose(content, sensor, wiz, render);
+      else if (wiz.step === 7)             this._wizStepDone(content, sensor, wiz, render);
+    };
+    render();
+    body.appendChild(panel);
+  }
+
+  _wizStep0(el, sensor, wiz, render) {
+    const profiles = sensor.posture_profiles || {};
+    const count = Object.keys(profiles).length;
+    const info = document.createElement("div");
+    info.style.cssText = "font-size:8px;color:#94a3b8;line-height:1.6;margin-bottom:8px";
+    info.innerHTML = `Wizard misst für jede Person:<br>
+      <b style="color:#00e5ff">1.</b> Distanz zum Sensor<br>
+      <b style="color:#00e5ff">2.</b> 5s stehend &nbsp;<b style="color:#00e5ff">3.</b> 5s sitzend &nbsp;<b style="color:#00e5ff">4.</b> 5s liegend (optional)<br>
+      ${count > 0 ? `<span style="color:#22c55e">✓ ${count} Profil(e) vorhanden</span>` : '<span style="color:#f59e0b">⚠ Noch keine Profile</span>'}`;
+    el.appendChild(info);
+    if (count > 0) {
+      const list = document.createElement("div");
+      list.style.cssText = "margin-bottom:8px";
+      Object.entries(profiles).forEach(([name, p]) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:4px;margin-bottom:2px;font-size:7.5px;color:#94a3b8;padding:3px 6px;background:#0d1219;border-radius:4px";
+        const del = document.createElement("button");
+        del.style.cssText = "margin-left:auto;font-size:7px;padding:1px 5px;border-radius:3px;border:1px solid #ef444433;background:#ef444411;color:#ef4444;cursor:pointer;font-family:inherit";
+        del.textContent = "✕";
+        del.onclick = () => { delete profiles[name]; this._saveCalibProfiles(sensor); render(); };
+        row.innerHTML = `<span style="color:#00e5ff">👤 ${name}</span><span>σx=${p.noise_x!=null?Math.round(p.noise_x)+"mm":"?"}</span><span>σy=${p.noise_y!=null?Math.round(p.noise_y)+"mm":"?"}</span><span>${p.standing_x!=null?"🧍":""}${p.sitting_x!=null?"🪑":""}${p.lying_x!=null?"🛌":""}</span>`;
+        row.appendChild(del);
+        list.appendChild(row);
+      });
+      el.appendChild(list);
+    }
+    // Körpergröße-Eingabe
+    const hRow=document.createElement("div");
+    hRow.style.cssText="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding:6px;background:#0a1628;border-radius:6px;border:1px solid #00e5ff22";
+    const hLbl=document.createElement("span"); hLbl.style.cssText="font-size:8px;color:#94a3b8;white-space:nowrap"; hLbl.textContent="📏 Körpergröße:";
+    const hInp=document.createElement("input"); hInp.type="number"; hInp.min=120; hInp.max=220; hInp.step=1;
+    hInp.value=sensor._wizard_height||170;
+    hInp.style.cssText="width:55px;padding:2px 5px;border-radius:4px;border:1px solid #00e5ff44;background:#0d1219;color:#c8d8ec;font-size:9px;text-align:center";
+    const hUnit=document.createElement("span"); hUnit.style.cssText="font-size:8px;color:#445566"; hUnit.textContent="cm";
+    const hHint=document.createElement("span"); hHint.style.cssText="font-size:7px;color:#445566;flex:1;text-align:right"; hHint.textContent="wird für Schwellwerte genutzt";
+    hInp.addEventListener("input",()=>{ sensor._wizard_height=parseInt(hInp.value)||170; });
+    hRow.append(hLbl,hInp,hUnit,hHint); el.appendChild(hRow);
+
+    const btn = document.createElement("button");
+    btn.className = "btn btn-outline";
+    btn.style.cssText = "width:100%;font-size:9px;padding:5px";
+    btn.textContent = "🎯 Neue Kalibrierung starten";
+    btn.onclick = () => { wiz.step=1; wiz.samples={standing:[],sitting:[],lying:[],floor:[]}; wiz.customName=null; render(); };
+    el.appendChild(btn);
+  }
+
+  _wizStep1(el, sensor, wiz, render) {
+    const h = document.createElement("div");
+    h.style.cssText = "font-size:9px;font-weight:700;color:#00e5ff;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #00e5ff22";
+    h.textContent = "👤 Schritt 1: Person wählen";
+    el.appendChild(h);
+    const names = sensor.target_names || ["Person 1","Person 2","Person 3"];
+    names.forEach((name, i) => {
+      const btn = document.createElement("button");
+      btn.className = wiz.personIdx===i ? "btn" : "btn btn-outline";
+      btn.style.cssText = `width:100%;margin-bottom:3px;font-size:9px;${wiz.personIdx===i?"background:#00e5ff22;border-color:#00e5ff":""}`;
+      btn.textContent = (wiz.personIdx===i?"▶ ":"") + name + " (Target "+(i+1)+")";
+      btn.onclick = () => { wiz.personIdx=i; render(); };
+      el.appendChild(btn);
+    });
+    const nameRow = document.createElement("div");
+    nameRow.style.cssText = "display:flex;gap:4px;margin-top:5px";
+    const nameInp = document.createElement("input");
+    nameInp.type="text"; nameInp.placeholder="Eigener Name (optional)";
+    nameInp.value = wiz.customName||"";
+    nameInp.style.cssText = "flex:1;font-size:8px;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit";
+    nameInp.oninput = () => { wiz.customName = nameInp.value.trim()||null; };
+    nameRow.appendChild(nameInp);
+    el.appendChild(nameRow);
+    const nav = document.createElement("div");
+    nav.style.cssText = "display:flex;gap:4px;margin-top:6px";
+    const back = document.createElement("button");
+    back.className="btn btn-outline"; back.style.cssText="flex:1;font-size:8px;padding:4px";
+    back.textContent="← Zurück"; back.onclick=()=>{wiz.step=0;render();};
+    const next = document.createElement("button");
+    next.className="btn"; next.style.cssText="flex:2;font-size:9px;padding:4px";
+    next.textContent="Weiter →"; next.onclick=()=>{wiz.step=2;render();};
+    nav.append(back,next); el.appendChild(nav);
+  }
+
+  _wizStep2(el, sensor, wiz, render) {
+    const h = document.createElement("div");
+    h.style.cssText = "font-size:9px;font-weight:700;color:#00e5ff;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #00e5ff22";
+    h.textContent = "📏 Schritt 2: Distanz messen";
+    el.appendChild(h);
+    const t = this._getMmwaveTarget(sensor, wiz.personIdx+1);
+    const dist = t?.present !== false && (t?.x_mm||t?.y_mm) ? Math.round(Math.sqrt((t.x_mm||0)**2+(t.y_mm||0)**2)) : null;
+    if (dist) { wiz.measuredDist = dist; }
+    const info = document.createElement("div");
+    info.style.cssText = "font-size:8px;color:#94a3b8;margin-bottom:6px;line-height:1.5;padding:5px 8px;background:#0d1219;border-radius:5px";
+    info.innerHTML = dist
+      ? `Distanz: <b style="color:#00e5ff;font-size:12px">${dist}mm</b><br><span style="color:#445566">x=${t.x_mm}mm  y=${t.y_mm}mm  spd=${Math.round((t.speed||0)*1000)}mm/s</span>`
+      : `<span style="color:#ef4444">⚠ Kein Target – steh vor dem Sensor!</span>`;
+    el.appendChild(info);
+    const manRow = document.createElement("div");
+    manRow.style.cssText = "display:flex;align-items:center;gap:5px;font-size:8px;color:#445566;margin-bottom:5px";
+    manRow.appendChild(Object.assign(document.createElement("span"),{textContent:"Manuell (mm):"}));
+    const inp = document.createElement("input");
+    inp.type="number"; inp.min=100; inp.max=8000; inp.step=50;
+    inp.value=wiz.measuredDist||"";
+    inp.style.cssText="width:65px;font-size:8px;padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:inherit";
+    inp.oninput=()=>{wiz.measuredDist=parseInt(inp.value)||null;};
+    manRow.appendChild(inp); el.appendChild(manRow);
+    if (!wiz._distTimer) wiz._distTimer = setInterval(render, 600);
+    const nav = document.createElement("div");
+    nav.style.cssText = "display:flex;gap:4px;margin-top:6px";
+    const back = document.createElement("button");
+    back.className="btn btn-outline"; back.style.cssText="flex:1;font-size:8px;padding:4px";
+    back.textContent="← Zurück"; back.onclick=()=>{clearInterval(wiz._distTimer);wiz._distTimer=null;wiz.step=1;render();};
+    const next = document.createElement("button");
+    next.className="btn"; next.style.cssText="flex:2;font-size:9px;padding:4px";
+    next.textContent="Weiter →";
+    next.onclick=()=>{ if(!wiz.measuredDist){this._showToast("Erst Distanz messen!");return;} clearInterval(wiz._distTimer);wiz._distTimer=null;wiz.step=3;render(); };
+    nav.append(back,next); el.appendChild(nav);
+  }
+
+  _wizStepPose(el, sensor, wiz, render) {
+    const mountH = (sensor.mount_height_m||2.5)*1000;
+    const bodyH  = (sensor._wizard_height||170)*10; // cm→mm
+    const POSES = [
+      {step:3,key:"standing",icon:"🧍",label:"STEHEND", desc:"Steh aufrecht vor dem Sensor – 5 Sek. stillhalten.",color:"#22c55e"},
+      {step:4,key:"sitting", icon:"🪑",label:"SITZEND",  desc:"Sitz (Stuhl/Sofa) – 5 Sek. stillhalten.",            color:"#f59e0b"},
+      {step:5,key:"lying",   icon:"🛌",label:"LIEGEND",  desc:"Leg dich hin – 5 Sek. Kann übersprungen werden.",
+       color:"#a78bfa"},
+      {step:6,key:"floor",   icon:"🧎",label:"BODEN/STURZ", desc:"Leg dich auf den Boden (Sturz-Erkennung). Optional.",
+       color:"#ef4444"},
+    ];
+    const pose = POSES.find(p=>p.step===wiz.step);
+    const h = document.createElement("div");
+    h.style.cssText = `font-size:9px;font-weight:700;color:${pose.color};margin-bottom:5px;padding-bottom:4px;border-bottom:1px solid ${pose.color}33`;
+    h.textContent = `${pose.icon} Schritt ${wiz.step}: ${pose.label}`;
+    el.appendChild(h);
+    const desc = document.createElement("div");
+    desc.style.cssText = "font-size:8px;color:#94a3b8;margin-bottom:6px";
+    desc.textContent = pose.desc;
+    el.appendChild(desc);
+    const t = this._getMmwaveTarget(sensor, wiz.personIdx+1);
+    const live = document.createElement("div");
+    live.style.cssText = `font-size:9px;color:${pose.color};margin-bottom:5px;padding:4px 8px;background:${pose.color}11;border-radius:4px;font-family:'JetBrains Mono',monospace`;
+    live.textContent = t ? `x=${t.x_mm}mm  y=${t.y_mm}mm  spd=${Math.round((t.speed||0)*1000)}mm/s` : "Kein Signal";
+    el.appendChild(live);
+    const collected = (wiz.samples[pose.key]||[]).length;
+    const sampEl = document.createElement("div");
+    sampEl.style.cssText = "font-size:8px;color:#445566;margin-bottom:5px";
+    sampEl.textContent = collected>0 ? `✓ ${collected} Messwerte (${(collected/10).toFixed(1)}s)` : "Noch keine Messwerte";
+    el.appendChild(sampEl);
+    if (wiz.collecting) {
+      const prog = document.createElement("div");
+      prog.style.cssText = "height:5px;border-radius:3px;background:#1c2535;overflow:hidden;margin-bottom:4px";
+      const bar = document.createElement("div");
+      bar.style.cssText = `height:100%;width:${Math.min(100,collected/50*100)}%;background:${pose.color};transition:width 0.1s`;
+      prog.appendChild(bar); el.appendChild(prog);
+      const cd = document.createElement("div");
+      cd.style.cssText = `font-size:12px;font-weight:700;color:${pose.color};text-align:center;margin-bottom:5px`;
+      cd.textContent = `⏱ ${Math.max(0,wiz.countdown).toFixed(1)}s`;
+      el.appendChild(cd);
+    }
+    if (!wiz.collecting) {
+      if (!wiz._liveTimer) wiz._liveTimer = setInterval(()=>{
+        const tv=this._getMmwaveTarget(sensor,wiz.personIdx+1);
+        if(tv) live.textContent=`x=${tv.x_mm}mm  y=${tv.y_mm}mm  spd=${Math.round((tv.speed||0)*1000)}mm/s`;
+      },200);
+      const recBtn = document.createElement("button");
+      recBtn.className="btn";
+      recBtn.style.cssText=`width:100%;font-size:10px;padding:6px;background:${pose.color}22;border-color:${pose.color};color:${pose.color};margin-bottom:4px;font-family:inherit`;
+      recBtn.textContent = collected>0 ? "🔄 Neu aufzeichnen (5s)" : "⏺ Aufzeichnen (5s)";
+      recBtn.onclick = () => {
+        clearInterval(wiz._liveTimer); wiz._liveTimer=null;
+        wiz.samples[pose.key]=[]; wiz.collecting=true; wiz.countdown=5; render();
+        const start=Date.now();
+        const rec=setInterval(()=>{
+          const tv=this._getMmwaveTarget(sensor,wiz.personIdx+1);
+          if(tv) wiz.samples[pose.key].push({x:tv.x_raw??tv.x_mm,y:tv.y_raw??tv.y_mm,speed:tv.speed||0});
+          wiz.countdown=Math.max(0,5-(Date.now()-start)/1000);
+          render();
+        },100);
+        setTimeout(()=>{ clearInterval(rec); wiz.collecting=false; wiz.countdown=0; render(); },5000);
+      };
+      el.appendChild(recBtn);
+    }
+    const nav = document.createElement("div");
+    nav.style.cssText = "display:flex;gap:4px;margin-top:4px";
+    const back=document.createElement("button"); back.className="btn btn-outline";
+    back.style.cssText="flex:1;font-size:8px;padding:4px"; back.textContent="← Zurück";
+    back.disabled=wiz.collecting;
+    back.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step--;render();};
+    const skip=document.createElement("button"); skip.className="btn btn-outline";
+    skip.style.cssText="flex:1;font-size:8px;padding:4px;color:#445566;border-color:#1c2535";
+    skip.textContent="Überspringen"; skip.disabled=wiz.collecting;
+    skip.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=6?7:wiz.step+1;render();};
+    const next=document.createElement("button"); next.className="btn";
+    next.style.cssText=`flex:2;font-size:9px;padding:4px;background:${pose.color}22;border-color:${pose.color};color:${pose.color}`;
+    next.textContent=collected>0?(wiz.step<6?"Weiter →":"✓ Fertig"):"Erst aufzeichnen!";
+    next.disabled=wiz.collecting||collected===0;
+    next.onclick=()=>{clearInterval(wiz._liveTimer);wiz._liveTimer=null;wiz.step=wiz.step>=6?7:wiz.step+1;render();};
+    nav.append(back,skip,next); el.appendChild(nav);
+  }
+
+  _wizStepDone(el, sensor, wiz, render) {
+    clearInterval(wiz._liveTimer); wiz._liveTimer=null;
+    clearInterval(wiz._distTimer); wiz._distTimer=null;
+    const h=document.createElement("div");
+    h.style.cssText="font-size:9px;font-weight:700;color:#22c55e;margin-bottom:6px;padding-bottom:4px;border-bottom:1px solid #22c55e33";
+    h.textContent="✅ Auswertung"; el.appendChild(h);
+    const s=wiz.samples;
+    const stat=arr=>{
+      if(!arr||arr.length<3) return null;
+      const xs=arr.map(a=>a.x),ys=arr.map(a=>a.y);
+      const avg=a=>a.reduce((s,v)=>s+v,0)/a.length;
+      const std=a=>{const m=avg(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length);};
+      return {ax:Math.round(avg(xs)),ay:Math.round(avg(ys)),sx:Math.round(std(xs)),sy:Math.round(std(ys)),n:arr.length};
+    };
+    const st=stat(s.standing), si=stat(s.sitting), ly=stat(s.lying), fl=stat(s.floor);
+    const name=wiz.customName||(sensor.target_names||[])[wiz.personIdx]||"Person "+(wiz.personIdx+1);
+    const noiseR=st?Math.round(((st.sx**2+st.sy**2)/2)*15):200000;
+    const res=document.createElement("div");
+    res.style.cssText="font-size:8px;color:#94a3b8;line-height:1.8;margin-bottom:8px;padding:5px 8px;background:#0d1219;border-radius:5px";
+    const r=(icon,lbl,d)=>d?`${icon} <b style="color:#c8d8ec">${lbl}</b>: (${d.ax},${d.ay})mm σ=(${d.sx},${d.sy})mm n=${d.n}<br>`
+      :`${icon} <span style="color:#445566">${lbl}: nicht gemessen</span><br>`;
+    res.innerHTML=`<b style="color:#00e5ff">👤 ${name}</b> – ${sensor._wizard_height||170}cm – Distanz: ${wiz.measuredDist||"?"}mm<br>`
+      +r("🧍","Stehend",st)+r("🪑","Sitzend",si)+r("🛌","Liegend",ly)+r("🧎","Boden",fl);
+    el.appendChild(res);
+    // Vorschau der berechneten Schwellwerte
+    const mountH2=(sensor.mount_height_m||2.5)*1000;
+    const bodyH2=(sensor._wizard_height||170)*10;
+    const hStP=st?Math.round(mountH2-st.ay):null;
+    const hSiP=si?Math.round(mountH2-si.ay):null;
+    const hLyP=ly?Math.round(mountH2-ly.ay):null;
+    const hFlP=fl?Math.round(mountH2-fl.ay):null;
+    const sm_prev = (hStP&&hSiP)?Math.round((hStP+hSiP)/2+(hStP-hSiP)*0.1):Math.round(bodyH2*0.75);
+    const si_prev = (hSiP&&hLyP)?Math.round((hSiP+hLyP)/2+(hSiP-hLyP)*0.1):Math.round(bodyH2*0.42);
+    const fa_prev = hFlP?Math.round((hFlP+(hLyP||si_prev))/2):Math.round(bodyH2*0.18);
+    const preview=document.createElement("div");
+    preview.style.cssText="font-size:7.5px;padding:5px 8px;border-radius:4px;border:1px solid #22c55e33;background:#22c55e08;margin-bottom:6px;line-height:1.9";
+    preview.innerHTML=`<b style="color:#22c55e">📐 Berechnete Schwellwerte:</b><br>`
+      +`🧍 Stehen ab: <b style="color:#c8d8ec">${sm_prev}mm</b> `
+      +`🪑 Sitzen ab: <b style="color:#c8d8ec">${si_prev}mm</b> `
+      +`⚠ Sturz unter: <b style="color:#ef4444">${fa_prev}mm</b><br>`
+      +`<span style="color:#445566">Diese Werte werden beim Speichern automatisch gesetzt.</span>`;
+    el.appendChild(preview);
+    if(st){
+      const ni=document.createElement("div");
+      ni.style.cssText="font-size:7.5px;color:#00e5ff;margin-bottom:6px;padding:3px 7px;background:#00e5ff0a;border-radius:4px";
+      ni.textContent=`📊 Kalman R_still=${noiseR} (σ=${st.sx}/${st.sy}mm) – ${noiseR<50000?"geringes":noiseR<200000?"mittleres":"hohes"} Rauschen`;
+      el.appendChild(ni);
+    }
+    const save=document.createElement("button");
+    save.className="btn"; save.style.cssText="width:100%;font-size:10px;padding:6px;background:#22c55e22;border-color:#22c55e;color:#22c55e;margin-bottom:4px;font-family:inherit";
+    save.textContent=`💾 Profil "${name}" speichern`;
+    save.onclick=()=>{
+      if(!sensor.posture_profiles) sensor.posture_profiles={};
+      const mountH=(sensor.mount_height_m||2.5)*1000;
+      const bodyH=(sensor._wizard_height||170)*10;
+
+      // ── Automatische Schwellwert-Berechnung aus Messdaten ──────────────
+      // Nutze gemessene y-Werte (Sensorabstand nach unten bei Deckenmontage)
+      // personHeight = mountH - y_mm
+      const hStand = st ? Math.round(mountH - st.ay) : null;
+      const hSit   = si ? Math.round(mountH - si.ay) : null;
+      const hLie   = ly ? Math.round(mountH - ly.ay) : null;
+      const hFloor = fl ? Math.round(mountH - fl.ay) : null;
+
+      // Schwellwerte: Mitte zwischen den Höhen, mit Hysterese-Puffer
+      let stand_min, sit_min, fall_height, hysteresis=60;
+      if(hStand && hSit) {
+        // Gemessene Werte: Mitte + 10% Sicherheitsabstand zur Steh-Seite
+        stand_min = Math.round((hStand + hSit) / 2 + (hStand - hSit) * 0.1);
+      } else {
+        // Fallback: proportional zur Körpergröße
+        // Stehend ≈ 93% der Körpergröße, Sitzend ≈ 54%
+        stand_min = Math.round(bodyH * 0.75); // Mitte Stehen(93%) / Sitzen(54%) = 74%
+      }
+      if(hSit && hLie) {
+        sit_min = Math.round((hSit + hLie) / 2 + (hSit - hLie) * 0.1);
+      } else {
+        sit_min = Math.round(bodyH * 0.42); // Mitte Sitzen(54%) / Liegen(30%) = 42%
+      }
+      if(hFloor) {
+        fall_height = Math.round((hFloor + (hLie||sit_min)) / 2);
+      } else if(hLie) {
+        fall_height = Math.round(hLie * 0.6); // 60% der Liegehöhe
+      } else {
+        fall_height = Math.round(bodyH * 0.18); // ~30cm bei 170cm
+      }
+
+      // Hysterese: kleiner als halbe Lücke zwischen Stehen und Sitzen
+      if(hStand && hSit) hysteresis = Math.min(80, Math.round((hStand-hSit)*0.15));
+
+      // Schwellwerte in sensor speichern
+      sensor.posture_thresholds = {stand_min, sit_min, fall_height, hysteresis};
+
+      sensor.posture_profiles[name]={
+        name, dist_mm:wiz.measuredDist,
+        body_height_cm: sensor._wizard_height||170,
+        noise_x:st?.sx, noise_y:st?.sy, kalman_R_still:noiseR,
+        standing_x:st?.ax, standing_y:st?.ay, standing_height:hStand,
+        sitting_x:si?.ax,  sitting_y:si?.ay,  sitting_height:hSit,
+        lying_x:ly?.ax,    lying_y:ly?.ay,    lying_height:hLie,
+        floor_x:fl?.ax,    floor_y:fl?.ay,    floor_height:hFloor,
+        threshold_y_stand_sit:(st&&si)?Math.round((st.ay+si.ay)/2):null,
+        threshold_y_sit_lie:(si&&ly)?Math.round((si.ay+ly.ay)/2):null,
+        computed_stand_min:stand_min, computed_sit_min:sit_min,
+        computed_fall_height:fall_height, computed_hysteresis:hysteresis,
+        calibrated_at:new Date().toISOString(),
+        sensor_id:sensor.id, target_idx:wiz.personIdx,
+      };
+      if(!sensor.kalman_profiles) sensor.kalman_profiles={};
+      sensor.kalman_profiles[wiz.personIdx]={R_still:noiseR};
+      this._saveCalibProfiles(sensor);
+      this._showToast(`✅ Profil "${name}" gespeichert – Schwellwerte aktualisiert`);
+      wiz.step=0; wiz.customName=null; render();
+    };
+    el.appendChild(save);
+    const reset=document.createElement("button");
+    reset.className="btn btn-outline"; reset.style.cssText="width:100%;font-size:8px;padding:3px;font-family:inherit";
+    reset.textContent="← Neu starten";
+    reset.onclick=()=>{wiz.step=0;wiz.samples={standing:[],sitting:[],lying:[],floor:[]};wiz.customName=null;render();};
+    el.appendChild(reset);
+  }
+
+  _saveCalibProfiles(sensor) {
+    const sensors=this._pendingMmwave||this._data?.mmwave_sensors||[];
+    const idx=sensors.findIndex(s=>s.id===sensor.id);
+    if(idx<0) return;
+    sensors[idx]=sensor;
+    this._hass?.callApi("POST",`ble_positioning/${this._entryId}/mmwave_sensors`,{sensors})
+      .catch(e=>this._showToast("Speichern fehlgeschlagen: "+e.message));
+  }
+
+
+  _buildMmwavePosturePanel(body, sensor) {
+    if (!this._opts?.mmwaveFallDetect && !this._opts?.mmwavePosture) return;
+
+    const panel = document.createElement("div");
+    panel.style.cssText = "margin-top:6px;padding:6px 8px;border-radius:6px;border:1px solid #ef444433;background:#ef444408";
+
+    // Header
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "font-size:8px;font-weight:700;color:#ef4444;margin-bottom:5px";
+    hdr.textContent = "🛡 STURZ & HALTUNG";
+    panel.appendChild(hdr);
+
+    // Fall alarm delay
+    const delayRow = document.createElement("div");
+    delayRow.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:5px";
+    const delayLbl = document.createElement("span");
+    delayLbl.style.cssText = "font-size:8px;color:var(--muted);white-space:nowrap";
+    delayLbl.textContent = "Alarm nach:";
+    const delayInp = document.createElement("input");
+    delayInp.type = "number"; delayInp.min = 5; delayInp.max = 300; delayInp.step = 5;
+    delayInp.value = sensor.fall_alarm_delay ?? 30;
+    delayInp.style.cssText = "width:50px;padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px;text-align:center";
+    delayInp.addEventListener("input", () => { sensor.fall_alarm_delay = parseInt(delayInp.value)||30; });
+    const delayUnit = document.createElement("span");
+    delayUnit.style.cssText = "font-size:8px;color:var(--muted)";
+    delayUnit.textContent = "Sek Reglosigkeit";
+    delayRow.append(delayLbl, delayInp, delayUnit);
+    panel.appendChild(delayRow);
+
+    // Sound toggle
+    const soundRow = document.createElement("label");
+    soundRow.style.cssText = "display:flex;align-items:center;gap:5px;font-size:8px;color:var(--muted);cursor:pointer;margin-bottom:5px";
+    const soundCb = document.createElement("input"); soundCb.type="checkbox";
+    soundCb.checked = this._opts?.mmwaveFallSound !== false;
+    soundCb.addEventListener("change", () => { this._opts.mmwaveFallSound = soundCb.checked; });
+    soundRow.append(soundCb, "🔔 Alarm-Sound bei Sturz");
+    panel.appendChild(soundRow);
+
+    // Test alarm button
+    const testBtn = document.createElement("button");
+    testBtn.style.cssText = "width:100%;padding:4px;border-radius:4px;border:1px solid #ef444433;background:#ef444411;color:#ef4444;font-size:8px;cursor:pointer;font-family:inherit;margin-bottom:5px";
+    testBtn.textContent = "🔔 Alarm testen";
+    testBtn.addEventListener("click", () => {
+      if (this._opts?.mmwaveFallSound) this._playFallAlarmSound();
+      this._showToast("🧪 Test: Sturz-Alarm würde jetzt feuern", 3000);
+    });
+    panel.appendChild(testBtn);
+
+    // Posture thresholds (only when ceiling/wall)
+    const mount = sensor.mount_type || "wall";
+    if (mount !== "floor") {
+      const thHdr = document.createElement("div");
+      thHdr.style.cssText = "font-size:7.5px;color:var(--muted);margin-bottom:3px;margin-top:3px";
+      thHdr.textContent = "Haltungs-Schwellwerte (Personenhöhe in mm):";
+      panel.appendChild(thHdr);
+
+      const T = sensor.posture_thresholds = sensor.posture_thresholds || {};
+      // Live-Debug: zeige aktuelle Rohwerte + geschätzte Höhe
+      const liveTarget = this._getMmwaveTarget(sensor, 1);
+      if (liveTarget?.present) {
+        const tiltDeg = sensor.mount_tilt_deg || 0;
+        const tiltRad = Math.max(Math.abs(tiltDeg) * Math.PI / 180, 0.01);
+        const mountH  = (sensor.mount_height_m || 1.5) * 1000;
+        const estH    = Math.max(0, mountH - (liveTarget.y_mm||0) * Math.sin(tiltRad));
+        const dbgDiv  = document.createElement("div");
+        dbgDiv.style.cssText = "font-size:7px;color:#445566;background:#07090d;padding:3px 5px;border-radius:3px;margin-bottom:4px;line-height:1.7;font-family:monospace";
+        dbgDiv.innerHTML = `y_mm: <b style="color:#c8d8ec">${Math.round(liveTarget.y_mm||0)}</b> &nbsp; speed: <b style="color:#c8d8ec">${(Math.abs(liveTarget.speed||0)).toFixed(2)} m/s</b><br>` +
+          `geschätzte Höhe: <b style="color:#00e5ff">${Math.round(estH)} mm</b> &nbsp; Neigung: <b style="color:#c8d8ec">${tiltDeg}°</b>`;
+        panel.appendChild(dbgDiv);
+      }
+      [
+        ["Stehend ab:",  "stand_min", T.stand_min??1500, 800, 2200],
+        ["Sitzend ab:",  "sit_min",   T.sit_min??900,    200, 1500],
+      ].forEach(([lbl, key, val, min, max]) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:5px;margin-bottom:3px";
+        const l = document.createElement("span");
+        l.style.cssText = "font-size:7.5px;color:#445566;width:75px;white-space:nowrap";
+        l.textContent = lbl;
+        const inp = document.createElement("input");
+        inp.type="number"; inp.min=min; inp.max=max; inp.step=50; inp.value=val;
+        inp.style.cssText = "flex:1;padding:2px 4px;border-radius:3px;border:1px solid #1c2535;background:#07090d;color:#c8d8ec;font-size:8px;text-align:center";
+        inp.addEventListener("input", () => { T[key] = parseInt(inp.value)||val; });
+        row.append(l, inp);
+        panel.appendChild(row);
+      });
+      const thHint = document.createElement("div");
+      thHint.style.cssText = "font-size:7px;color:#445566;line-height:1.5;margin-top:2px";
+      thHint.textContent = "Tipp: Neigung einstellen für bessere Höhenschätzung. Liegend = unter Sitzend-Schwelle + Stillstand.";
+      panel.appendChild(thHint);
+    }
+
+    // Live posture status per target
+    const statusHdr = document.createElement("div");
+    statusHdr.style.cssText = "font-size:7.5px;color:var(--muted);margin-top:5px;margin-bottom:3px";
+    statusHdr.textContent = "Live-Status:";
+    panel.appendChild(statusHdr);
+
+    const numT = sensor.targets || 3;
+    for (let ti=1; ti<=numT; ti++) {
+      const target = this._getMmwaveTarget(sensor, ti);
+      if (!target?.present) continue;
+      const posture  = this._mmwaveDetectPosture(sensor, target);
+      const fallKey  = sensor.id+"_"+ti;
+      const fallSt   = (this._mmwaveFallState||{})[fallKey];
+      const isAlarm  = fallSt?.phase === "alarm";
+      const isSusp   = fallSt?.phase === "suspected";
+      const tName    = (sensor.target_names||[])[ti-1]||`Target ${ti}`;
+
+      const row = document.createElement("div");
+      row.style.cssText = `display:flex;align-items:center;gap:5px;padding:3px 5px;border-radius:4px;` +
+        `background:${isAlarm?"#ef444422":isSusp?"#f59e0b11":"var(--surf3)"};` +
+        `border:1px solid ${isAlarm?"#ef444455":isSusp?"#f59e0b44":"transparent"};margin-bottom:2px`;
+
+      const icon = document.createElement("span"); icon.style.cssText="font-size:13px";
+      icon.textContent = isAlarm ? "🆘" : isSusp ? "⚠️" : this._postureIcon(posture);
+      const info = document.createElement("div"); info.style.cssText="flex:1;min-width:0";
+      const nl = document.createElement("div");
+      nl.style.cssText="font-size:8px;font-weight:700;color:var(--text)"; nl.textContent=tName;
+      const sl = document.createElement("div");
+      sl.style.cssText=`font-size:7px;color:${isAlarm?"#ef4444":isSusp?"#f59e0b":this._postureColor(posture)}`;
+      sl.textContent = isAlarm ? "🆘 STURZ ERKANNT" :
+                       isSusp  ? `⚠️ Reglos seit ${Math.round((Date.now()-(fallSt.ts||0))/1000)}s` :
+                       this._postureLabel(posture);
+      info.append(nl, sl);
+
+      // Reset alarm button
+      if (isAlarm || isSusp) {
+        const resetBtn = document.createElement("button");
+        resetBtn.style.cssText="padding:2px 6px;border-radius:3px;font-size:7.5px;border:1px solid #22c55e44;background:#22c55e11;color:#22c55e;cursor:pointer;font-family:inherit";
+        resetBtn.textContent = "✓ OK";
+        resetBtn.addEventListener("click", () => {
+          if (this._mmwaveFallState?.[fallKey]) {
+            this._mmwaveFallState[fallKey].phase = "normal";
+            this._mmwaveFallState[fallKey].alarmFired = false;
+            this._mmwaveFallState[fallKey].stillSince = null;
+          }
+          if (this._mmwaveFallAlarms?.[fallKey]) delete this._mmwaveFallAlarms[fallKey];
+          this._rebuildSidebar();
+        });
+        row.append(icon, info, resetBtn);
+      } else {
+        row.append(icon, info);
+      }
+      panel.appendChild(row);
+    }
+
+    body.appendChild(panel);
+  }
 
 
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // BLOCK 1: MULTI-SENSOR FUSION + KALIBRIERUNG + PROFIL-EXPORT
+  // ══════════════════════════════════════════════════════════════════════════
+
+  // ── Multi-Sensor Fusion ───────────────────────────────────────────────────
+  // Wenn zwei+ Sensoren denselben Bereich abdecken, trianguliere die Positionen
+  // Gibt Map { fusedKey → { floor_mx, floor_my, confidence, sensorIds } } zurück
+  _mmwaveFuseTargets() {
+    if (!this._opts?.mmwaveFusion) return {};
+    const sensors = this._pendingMmwave || [];
+    if (sensors.length < 2) return {};
+    const clusters = {};
+    const MERGE_DIST = 1.5; // Meter: Targets innerhalb dieser Distanz fusionieren
+
+    // Sammle alle aktiven Targets
+    const allTargets = [];
+    sensors.forEach(s => {
+      for (let ti=1; ti<=3; ti++) {
+        const t = this._getMmwaveTarget(s, ti);
+        if (!t?.present) continue;
+        allTargets.push({ sensor: s, target: t, ti });
+      }
+    });
+
+    // Greedy-Clustering: nächste Paare zusammenfassen
+    const merged = new Array(allTargets.length).fill(-1);
+    let groupId = 0;
+    for (let i=0; i<allTargets.length; i++) {
+      if (merged[i] >= 0) continue;
+      merged[i] = groupId;
+      const a = allTargets[i];
+      for (let k=i+1; k<allTargets.length; k++) {
+        if (merged[k] >= 0) continue;
+        const b = allTargets[k];
+        if (b.sensor.id === a.sensor.id) continue; // selber Sensor – nicht fusionieren
+        const dx = a.target.floor_mx - b.target.floor_mx;
+        const dy = a.target.floor_my - b.target.floor_my;
+        const dist = Math.hypot(dx, dy);
+        if (dist < MERGE_DIST) { merged[k] = groupId; }
+      }
+      groupId++;
+    }
+
+    // Berechne gewichtetes Mittel pro Gruppe
+    for (let g=0; g<groupId; g++) {
+      const group = allTargets.filter((_, i) => merged[i]===g);
+      if (group.length < 2) continue; // nur Gruppen mit 2+ Sensoren
+      // Gewichtung: Confidence der Klassifikation wenn vorhanden
+      let sumX=0, sumY=0, sumW=0;
+      const sIds = [];
+      group.forEach(({ sensor, target }) => {
+        const cls = this._mmwaveClassify(sensor, target);
+        const w = 0.5 + cls.confidence * 0.5;
+        sumX += target.floor_mx * w;
+        sumY += target.floor_my * w;
+        sumW += w;
+        sIds.push(sensor.id);
+      });
+      const key = "fused_" + g;
+      clusters[key] = {
+        floor_mx:   sumX / sumW,
+        floor_my:   sumY / sumW,
+        confidence: Math.min(0.99, group.length * 0.3 + 0.4),
+        sensorIds:  sIds,
+        count:      group.length,
+        // Klassifikation aus dem sichersten Einzel-Sensor
+        cls: group.map(({sensor,target}) => this._mmwaveClassify(sensor,target))
+               .sort((a,b)=>b.confidence-a.confidence)[0]
+      };
+    }
+    if (!this._mmwaveFused) this._mmwaveFused = {};
+    this._mmwaveFused = clusters;
+    return clusters;
+  }
+
+  // Fusions-Overlay auf Canvas zeichnen
+  _drawMmwaveFusionOverlay(fusedTargets) {
+    if (!this._opts?.mmwaveFusion || !Object.keys(fusedTargets).length) return;
+    const ctx = this._ctx;
+    Object.values(fusedTargets).forEach(ft => {
+      const fc = this._f2c(ft.floor_mx, ft.floor_my);
+      const clsInfo = this._mmwaveClasses()[ft.cls?.cls || "unknown"];
+      // Fusions-Ring: weißer äußerer Ring = trianguliert
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      ctx.lineWidth   = 2;
+      ctx.setLineDash([5,3]);
+      ctx.beginPath(); ctx.arc(fc.x, fc.y, 18, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]);
+      // Badge
+      ctx.fillStyle = "rgba(255,255,255,0.15)";
+      ctx.beginPath(); ctx.arc(fc.x, fc.y, 16, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle = "white"; ctx.font = "bold 7px monospace";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(`⊕${ft.count}`, fc.x, fc.y);
+      // Konfidenz-Label
+      ctx.fillStyle = "rgba(0,0,0,0.6)";
+      ctx.fillRect(fc.x-22, fc.y+18, 44, 11);
+      ctx.fillStyle = "#22c55e"; ctx.font = "7px monospace";
+      ctx.fillText(`fusioniert · ${Math.round(ft.confidence*100)}%`, fc.x, fc.y+23.5);
+    });
+  }
+
+  // ── Kalibrierungs-Assistent ───────────────────────────────────────────────
+  _mmwaveStartCalibration(sensor) {
+    this._mmwaveCalib = {
+      sensorId: sensor.id,
+      phase: "center",   // center → left → right → done
+      measurements: [],
+      startTs: Date.now()
+    };
+    this._showToast("📐 Kalibrierung: Stell dich in die MITTE des Raums und warte 5 Sek");
+    this._rebuildSidebar();
+  }
+
+  _mmwaveCalibTick(sensor) {
+    const cal = this._mmwaveCalib;
+    if (!cal || cal.sensorId !== sensor.id) return;
+    const now = Date.now();
+    const elapsed = now - cal.startTs;
+
+    // Sammle Messungen über 5 Sekunden
+    if (elapsed < 5000) {
+      for (let ti=1; ti<=3; ti++) {
+        const t = this._getMmwaveTarget(sensor, ti);
+        if (t?.present) {
+          cal.measurements.push({ x: t.x_mm, y: t.y_mm, phase: cal.phase, ts: now });
+        }
+      }
+    } else {
+      this._mmwaveCalibNextPhase(sensor);
+    }
+  }
+
+  _mmwaveCalibNextPhase(sensor) {
+    const cal = this._mmwaveCalib;
+    if (!cal) return;
+    const phases = ["center","left","right"];
+    const messages = {
+      left:  "📐 Kalibrierung: Geh jetzt an die LINKE Wand des Raums (5 Sek)",
+      right: "📐 Kalibrierung: Geh jetzt an die RECHTE Wand des Raums (5 Sek)",
+      done:  "✅ Kalibrierung abgeschlossen!"
+    };
+    const idx = phases.indexOf(cal.phase);
+    if (idx < phases.length-1) {
+      cal.phase = phases[idx+1];
+      cal.startTs = Date.now();
+      this._showToast(messages[cal.phase]);
+    } else {
+      // Kalibrierung abschließen – Offset + Rotation berechnen
+      this._mmwaveFinishCalibration(sensor);
+    }
+    this._rebuildSidebar();
+  }
+
+  _mmwaveFinishCalibration(sensor) {
+    const cal = this._mmwaveCalib;
+    if (!cal || cal.measurements.length < 10) {
+      this._showToast("⚠️ Zu wenige Messungen – Kalibrierung fehlgeschlagen");
+      this._mmwaveCalib = null;
+      return;
+    }
+    // Mittelwerte der Messungen pro Phase
+    const byPhase = {};
+    cal.measurements.forEach(m => {
+      if (!byPhase[m.phase]) byPhase[m.phase] = [];
+      byPhase[m.phase].push({ x: m.x, y: m.y });
+    });
+    const avg = pts => ({
+      x: pts.reduce((s,p)=>s+p.x,0)/pts.length,
+      y: pts.reduce((s,p)=>s+p.y,0)/pts.length
+    });
+    const center = byPhase.center ? avg(byPhase.center) : null;
+    if (center) {
+      // Rotations-Korrektur: center sollte bei x≈0 sein
+      const angleOffset = Math.atan2(center.x, center.y) * 180 / Math.PI;
+      sensor.rotation = Math.round((sensor.rotation||0) - angleOffset);
+      // Montagehöhen-Schätzung aus y-Distanz (Deckenmontage)
+      if (sensor.mount_type === "ceiling") {
+        sensor.mount_height_m = Math.round(center.y / 100) / 10;
+      }
+    }
+    this._mmwaveCalib = null;
+    this._showToast(`✅ Kalibrierung fertig! Rotation korrigiert auf ${sensor.rotation}°`);
+    this._rebuildSidebar();
+  }
+
+  // ── Profil Export / Import ────────────────────────────────────────────────
+  _mmwaveExportProfiles() {
+    const data = {
+      version: "1.0",
+      exported: new Date().toISOString(),
+      profiles: this._mmwaveProfiles || {},
+      sensor_thresholds: (this._pendingMmwave||[]).map(s => ({
+        id: s.id, name: s.name,
+        class_thresholds:   s.class_thresholds,
+        posture_thresholds: s.posture_thresholds,
+        mount_type:         s.mount_type,
+        mount_height_m:     s.mount_height_m,
+        mount_tilt_deg:     s.mount_tilt_deg
+      }))
+    };
+    // Frames weglassen – nur trainierte Profile
+    const slim = structuredClone(data);
+    Object.values(slim.profiles).forEach(p => { p.frames = []; });
+    const blob = new Blob([JSON.stringify(slim, null, 2)], { type:"application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href = url; a.download = "mmwave_profiles.json"; a.click();
+    URL.revokeObjectURL(url);
+    this._showToast("📥 Profile exportiert");
+  }
+
+  _mmwaveImportProfiles(file) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        if (!data.profiles) throw new Error("Ungültiges Format");
+        if (!this._mmwaveProfiles) this._mmwaveProfiles = {};
+        Object.assign(this._mmwaveProfiles, data.profiles);
+        // Sensor-Schwellwerte wiederherstellen
+        (data.sensor_thresholds||[]).forEach(th => {
+          const s = (this._pendingMmwave||[]).find(s=>s.id===th.id);
+          if (s) {
+            if (th.class_thresholds)   s.class_thresholds   = th.class_thresholds;
+            if (th.posture_thresholds) s.posture_thresholds  = th.posture_thresholds;
+            if (th.mount_type)         s.mount_type          = th.mount_type;
+            if (th.mount_height_m)     s.mount_height_m      = th.mount_height_m;
+            if (th.mount_tilt_deg != null) s.mount_tilt_deg  = th.mount_tilt_deg;
+          }
+        });
+        this._showToast(`✅ ${Object.keys(data.profiles).length} Profile importiert`);
+        this._rebuildSidebar();
+      } catch(e) { this._showToast("❌ Import-Fehler: " + e.message); }
+    };
+    reader.readAsText(file);
+  }
 
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // BLOCK 2: ANALYTICS – Aktivitäts-Report, Schlaf, Energie-Korrelation
+  // ══════════════════════════════════════════════════════════════════════════
 
-
-
-
-
-
-
+  // ── Aktivitäts-Tracking initialisieren ───────────────────────────────────
   _analyticsInit() {
     if (!this._activityLog) {
       this._activityLog = {};       // { "roomName_personKey": [{ ts, duration, posture }] }
@@ -7582,7 +10173,7 @@ class BLEPositioningCard extends HTMLElement {
     const sensors = this._pendingMmwave || [];
     sensors.forEach(sensor => {
       for (let ti=1; ti<=3; ti++) {
-        const target = this._getMmwaveTarget?.(sensor, ti);
+        const target = this._getMmwaveTarget(sensor, ti);
         if (!target?.present) continue;
         const tName   = (sensor.target_names||[])[ti-1] || `S${sensor.id.slice(-3)}_T${ti}`;
         const posture = this._mmwaveDetectPosture(sensor, target);
@@ -7707,7 +10298,7 @@ class BLEPositioningCard extends HTMLElement {
         for (let ti=1; ti<=3; ti++) {
           const tName = (sensor.target_names||[])[ti-1] || `S${sensor.id.slice(-3)}_T${ti}`;
           if (tName !== person) continue;
-          const target = this._getMmwaveTarget?.(sensor, ti);
+          const target = this._getMmwaveTarget(sensor, ti);
           if (!target?.present) return;
           const tc = this._f2c(target.floor_mx, target.floor_my);
           const dur = Math.round((Date.now() - sl.startTs) / 60000);
@@ -7740,7 +10331,7 @@ class BLEPositioningCard extends HTMLElement {
     // Alle aktiven Targets einfrieren
     (this._pendingMmwave||[]).forEach(sensor => {
       for (let ti=1; ti<=3; ti++) {
-        const t = this._getMmwaveTarget?.(sensor, ti);
+        const t = this._getMmwaveTarget(sensor, ti);
         if (!t?.present) continue;
         snap.targets.push({
           name:  (sensor.target_names||[])[ti-1]||`T${ti}`,
@@ -8089,7 +10680,7 @@ draw();
     const positions = [];
     sensors.forEach(s => {
       for (let ti=1;ti<=3;ti++) {
-        const t = this._getMmwaveTarget?.(s,ti);
+        const t = this._getMmwaveTarget(s,ti);
         if (t?.present) positions.push({ name:(s.target_names||[])[ti-1], mx:t.floor_mx, my:t.floor_my });
       }
     });
@@ -8097,6 +10688,43 @@ draw();
   }
 
   // ── Personen-Wiedererkennung über Tageszeit-Muster ─────────────────────
+  _mmwavePersonIdentify(sensor, target) {
+    if (!this._opts?.mmwavePersonID) return null;
+    this._analyticsInit();
+    const now = new Date();
+    const hour = now.getHours();
+    const dow  = now.getDay(); // 0=So
+    const pos  = this._getMmwaveTarget(sensor, target.id);
+    if (!pos) return null;
+    const room = this._getRoomForPoint(pos.floor_mx, pos.floor_my);
+    if (!room) return null;
+
+    // Suche in Verlauf: Welche Person ist typischerweise zu dieser Zeit in diesem Raum?
+    const days = Object.entries(this._activityDay);
+    const roomScores = {}; // { personName: score }
+    days.forEach(([dateStr, day]) => {
+      const dayDow = new Date(dateStr).getDay();
+      if (Math.abs(dayDow - dow) > 1 && dayDow !== dow) return; // ähnliche Wochentage
+      const persons = day.rooms?.[room.name];
+      if (!persons) return;
+      Object.entries(persons).forEach(([person, secs]) => {
+        if (secs < 30) return;
+        if (!roomScores[person]) roomScores[person] = 0;
+        roomScores[person] += secs;
+      });
+    });
+
+    const best = Object.entries(roomScores).sort((a,b)=>b[1]-a[1])[0];
+    if (!best || best[1] < 60) return null;
+    const totalSecs = Object.values(roomScores).reduce((a,b)=>a+b,1);
+    const confidence = Math.min(0.85, best[1]/totalSecs);
+    return { name: best[0], confidence, room: room.name };
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BLOCK 5: ANALYTICS-TAB + VERGLEICHS-UI + SIDEBAR-ERWEITERUNGEN
+  // ══════════════════════════════════════════════════════════════════════════
 
   _sidebarAnalytics() {
     const wrap = document.createElement("div");
@@ -8406,7 +11034,7 @@ draw();
     if (tConf.type === "mmwave_target") {
       const sensor = (this._ptzCameras, this._pendingMmwave||[]).find(s=>s.id===tConf.sensor_id);
       if (!sensor) return null;
-      const t = this._getMmwaveTarget?.(sensor, tConf.target_id);
+      const t = this._getMmwaveTarget(sensor, tConf.target_id);
       if (!t?.present) return null;
       return { floor_mx: t.floor_mx, floor_my: t.floor_my, name: tConf.name||"mmWave Ziel" };
     }
@@ -8922,7 +11550,7 @@ draw();
         bri = (light.brightness ?? 255) / 255;
       }
       const lumFactor2D = this._lumensToGlowFactor(light.lumen, bri);
-      const _lScale = this._zoomScale();
+      const { scale: _lScale } = this._floorScale();
       const glowPx = lumFactor2D * _lScale;
       const alpha  = Math.min(0.55, 0.10 + lumFactor2D * 0.22);
       const pos    = this._f2c(light.mx, light.my);
@@ -9673,25 +12301,12 @@ draw();
     }
     // Swipe-Geste: Sidebar per Links/Rechts-Wischen auf/zu
     if (!this._swipeHandler) {
-      let startX = 0, startY = 0, startedOnToggle = false;
+      let startX = 0, startY = 0;
       const onTouchStart = (e) => {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
-        // Merke ob der Touch auf dem Toggle-Button oder sehr nahe am Rand startete
-        const btn = this.shadowRoot?.getElementById("sidebar-toggle");
-        const btnRect = btn?.getBoundingClientRect();
-        const cardRect = this.getBoundingClientRect();
-        const cardW = cardRect?.width || window.innerWidth;
-        // Swipe gilt nur wenn:
-        // a) Touch startet direkt auf dem Toggle-Button (±30px)
-        // b) Touch startet im linken Randbereich (erste 30px) zum Aufklappen
-        const onBtn = btnRect && Math.abs(startX - (btnRect.left + btnRect.width/2)) < 30
-                                && Math.abs(startY - (btnRect.top  + btnRect.height/2)) < 30;
-        const nearLeftEdge  = startX < (cardRect?.left || 0) + 30;
-        startedOnToggle = onBtn || nearLeftEdge;
       };
       const onTouchEnd = (e) => {
-        if (!startedOnToggle) return; // Swipe nur vom Rand/Toggle – nie vom Canvas-Inneren
         const dx = e.changedTouches[0].clientX - startX;
         const dy = e.changedTouches[0].clientY - startY;
         if (Math.abs(dx) < 40 || Math.abs(dy) > Math.abs(dx)) return; // kein klarer Swipe
@@ -9834,9 +12449,6 @@ draw();
       try { activeModuleForMode.onDraw(this._ctx, this); } catch(e) {
         console.error('[BLE] Modul onDraw Fehler:', e);
       }
-      // Türen/Fenster über Modul-Canvas zeichnen (immer sichtbar)
-      this._drawDoors();
-      this._drawWindows();
       return; // Kein Grundriss zeichnen
     }
     {
@@ -9851,22 +12463,7 @@ draw();
     const _rot2d = this._mapRotation || 0;
     const _is3D  = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
     if (_rot2d !== 0 && !_is3D) {
-      // ── Generischer Modul Draw-Hook ─────────────────────────────────────────
-    {
-      const _activeMod = Object.values(BLEModuleRegistry._modules).find(
-        m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
-      );
-      if (_activeMod && typeof _activeMod.draw === "function") {
-        ctx.save();
-        _activeMod.draw.call(_activeMod, ctx, this);
-        ctx.restore();
-        // Türen/Fenster über Modul-Canvas zeichnen
-        this._drawDoors();
-        this._drawWindows();
-        return;
-      }
-    }
-    ctx.save();
+      ctx.save();
       ctx.translate(W/2, H/2);
       ctx.rotate(_rot2d);
       ctx.translate(-W/2, -H/2);
@@ -9890,9 +12487,6 @@ draw();
       // Note: _drawEnergyOverlay3D is called from inside _draw3DScene (project is only defined there)
       this._drawDaytimeSunIcon(ctx, c.width, c.height);
       this._drawNightOverlay(ctx, c.width, c.height);
-      // Türen/Fenster über 3D-Szene zeichnen (immer sichtbar)
-      this._drawDoors();
-      this._drawWindows();
       return;
     }
 
@@ -9941,10 +12535,11 @@ draw();
     } else {
       ctx.fillStyle = "#07090d";
       ctx.fillRect(0, 0, W, H);
-      // Grundriss-Bereich leicht heller – zoom-/pan-fest über _floorRectC()
-      const _bgR = this._floorRectC();
+      // Grundriss-Bereich leicht heller
+      const {scale:_bg_sc,ox:_bg_ox,oy:_bg_oy}=this._floorScale();
+      const _fw3=this._data?.floor_w||10,_fh3=this._data?.floor_h||10;
       ctx.fillStyle = "#0d1219";
-      ctx.fillRect(_bgR.x, _bgR.y, _bgR.w, _bgR.h);
+      ctx.fillRect(_bg_ox, _bg_oy, _fw3*_bg_sc, _fh3*_bg_sc);
     }
 
     const mode = this._mode;
@@ -9952,12 +12547,12 @@ draw();
     const scanners = mode === "scanners" ? this._pendingScanners : (this._data.scanners || []);
 
     // unitPx2d für Textur-Skalierung: Pixel pro Meter im 2D-Canvas (gleichmäßig)
-    this._unitPx2d = this._zoomScale();
+    const { scale: _scale2d } = this._floorScale();
+    this._unitPx2d = _scale2d;
 
     this._checkNightMode();
     // Im Räume-Modus: Reißbrett als Hintergrund ZUERST
     if (mode === "rooms") this._drawGrid();
-    this._drawWeatherLayer(rooms);
     this._drawRooms(rooms);
     if (mode !== "rooms") this._drawGrid();
     this._drawScanners(scanners);
@@ -9984,17 +12579,17 @@ draw();
     this._drawWindows();
     // mmWave sensor overlay (targets + FOV + heatmap)
     // Im mmwave-Editor-Tab: immer anzeigen; sonst nur wenn Option aktiv
-    if (this._opts?.showMmwave || mode === "mmwave") this._drawMmwaveOverlay?.();
+    if (this._opts?.showMmwave || mode === "mmwave") this._drawMmwaveOverlay();
     // Fall alarm overlay (always on top when active)
     if (this._opts?.mmwaveFallDetect) this._drawFallAlarmOverlay();
     // Analytics tick (background data collection)
-    this._analyticsTick?.();
+    this._analyticsTick();
     // Sleep overlay
     if (this._opts?.showSleep) this._drawSleepOverlay();
     // Multi-sensor fusion overlay
     if (this._opts?.mmwaveFusion && this._opts?.showMmwave) {
-      const fused = this._mmwaveFuseTargets?.();
-      this._drawMmwaveFusionOverlay?.(fused);
+      const fused = this._mmwaveFuseTargets();
+      this._drawMmwaveFusionOverlay(fused);
     }
     // Compare mode overlay
     if (this._opts?.showCompare) this._drawCompareMode();
@@ -10013,7 +12608,7 @@ draw();
     // Room temperatures
     if (this._opts?.showRoomTemp) this._drawRoomTemperatures();
     // Room occupancy counter (persons per room)
-    if (this._opts?.showMmwave !== false) this._drawRoomOccupancy?.();
+    if (this._opts?.showMmwave !== false) this._drawRoomOccupancy();
     // Heatmap overlay
     if (this._opts?.showHeatmap) { this._updateHeatmap(); this._drawHeatmapOverlay(); }
     // Heating plan
@@ -10508,9 +13103,6 @@ draw();
 
   _drawDaytimeSunIcon(ctx, W, H) {
     if (!this._opts?.showDayTime) return;
-    // Die Wetter-Kulisse bringt ihr eigenes Gestirn samt Temperatur mit –
-    // sonst stünden zwei Sonnen am Himmel.
-    if (this._opts?.show_weather && this._weatherState()) return;
     const dt   = this._getDaytimeConfig();
     if (!dt.isDay) return;
     // Sun position across top of canvas
@@ -10861,7 +13453,7 @@ draw();
     for (const sensor of (this._pendingMmwave || this._data?.mmwave_sensors || [])) {
       const numT = sensor.targets || 3;
       for (let ti = 1; ti <= numT; ti++) {
-        const t = this._getMmwaveTarget?.(sensor, ti);
+        const t = this._getMmwaveTarget(sensor, ti);
         if (!t?.present) continue;
         // Distanz vom Sensor zum Target (für Fusion-Gewichtung)
         const dx = (t.floor_mx??0) - (sensor.mx??0);
@@ -11495,24 +14087,6 @@ draw();
             ctx.beginPath();
             ctx.moveTo(-len/2, ly); ctx.lineTo(len/2, ly);
             ctx.stroke();
-          }
-          // ── Fährt gerade? Wandernde Pfeile + pulsierende Kante ──────
-          const _mot = this._opts?.cover_motion !== false
-            ? this._coverMotion(w.cover_entity) : null;
-          if (_mot) {
-            const _acc = _mot.dir > 0 ? "#f59e0b" : "#38bdf8";
-            // Pfeile laufen quer über die Lamellen in Fahrtrichtung
-            this._drawMotionChevrons(ctx, 0, -shutterDepth, 0, 0, _mot.dir, _acc);
-            // Unterkante pulsiert mit
-            const _p = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
-            ctx.save();
-            ctx.strokeStyle = _acc;
-            ctx.globalAlpha = _p;
-            ctx.lineWidth = 1.8;
-            ctx.beginPath();
-            ctx.moveTo(-len/2, -shutterDepth); ctx.lineTo(len/2, -shutterDepth);
-            ctx.stroke();
-            ctx.restore();
           }
           // Position label
           ctx.restore();
@@ -12154,7 +14728,7 @@ _drawDoors() {
         { energy_lines: this._pendingEnergyLines, batteries: this._pendingBatteries });
       await this._loadData();
       this._showToast("✓ Energie gespeichert");
-    } catch(e) { this._showToast("✗ " + this._errText(e)); }
+    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
     this._rebuildSidebar();
   }
 
@@ -12303,7 +14877,7 @@ _drawDoors() {
         const lbl = document.createElement("input");
         lbl.value = deco.label || typeInfo.label;
         lbl.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:var(--text);border-radius:3px;font-size:8px;padding:2px 4px";
-        lbl.addEventListener("input", () => { this._pendingDecos[idx].label = lbl.value; this._draw(); this._saveDecoNow(); });
+        lbl.addEventListener("input", () => { this._pendingDecos[idx].label = lbl.value; this._draw(); });
         const del = document.createElement("button");
         del.textContent = "✕"; del.style.cssText = "font-size:9px;background:none;border:none;color:#ef4444;cursor:pointer;padding:0 2px";
         del.addEventListener("click", () => { this._pendingDecos.splice(idx,1); this._rebuildSidebar(); });
@@ -12319,7 +14893,7 @@ _drawDoors() {
         sizeInp.style.cssText="flex:1;accent-color:#10b981";
         const sizeVal = document.createElement("span"); sizeVal.style.cssText="font-size:7px;color:#10b981;min-width:22px";
         sizeVal.textContent = (deco.size||1.0).toFixed(1)+"×";
-        sizeInp.addEventListener("input",()=>{ this._pendingDecos[idx].size=parseFloat(sizeInp.value); sizeVal.textContent=parseFloat(sizeInp.value).toFixed(1)+"×"; this._draw(); this._saveDecoNow(); });
+        sizeInp.addEventListener("input",()=>{ this._pendingDecos[idx].size=parseFloat(sizeInp.value); sizeVal.textContent=parseFloat(sizeInp.value).toFixed(1)+"×"; this._draw(); });
         sizeRow.append(sizeLbl, sizeInp, sizeVal);
 
         // ── Indoor-Element Entitäten ─────────────────────────────────────────
@@ -12358,7 +14932,7 @@ _drawDoors() {
             efInp.value = deco[ef.key] || "";
             efInp.placeholder = ef.ph;
             efInp.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:#38bdf8;border-radius:3px;font-size:7px;padding:2px 4px;min-width:0;font-family:inherit";
-            efInp.addEventListener("input", () => { this._pendingDecos[idx][ef.key] = efInp.value.trim(); this._draw(); this._saveDecoNow(); });
+            efInp.addEventListener("input", () => { this._pendingDecos[idx][ef.key] = efInp.value.trim(); this._draw(); });
             // Live-Status Badge
             const badge = document.createElement("span");
             badge.style.cssText = "font-size:6px;white-space:nowrap";
@@ -12404,7 +14978,7 @@ _drawDoors() {
             pfInp.style.cssText = "flex:1;background:var(--surf3);border:1px solid var(--border);color:#67e8f9;border-radius:3px;font-size:7px;padding:2px 4px;min-width:0";
             pfInp.addEventListener("input", () => {
               this._pendingDecos[idx][pf.key] = pfInp.value.trim();
-              this._draw(); this._saveDecoNow();
+              this._draw();
             });
             pfRow.append(pfLbl, pfInp);
             row.appendChild(pfRow);
@@ -12422,7 +14996,7 @@ _drawDoors() {
           colorInp.style.cssText = "width:32px;height:18px;border:1px solid var(--border);border-radius:3px;background:none;cursor:pointer";
           colorInp.addEventListener("input", () => {
             this._pendingDecos[idx].pool_color = colorInp.value;
-            this._draw(); this._saveDecoNow();
+            this._draw();
           });
           colorRow.append(colorLbl, colorInp);
           row.appendChild(colorRow);
@@ -12450,7 +15024,7 @@ _drawDoors() {
         { decos: this._pendingDecos });
       if (this._data) this._data.decos = structuredClone(this._pendingDecos);
       this._showToast("✓ Deko gespeichert");
-    } catch(e) { this._showToast("✗ " + this._errText(e)); }
+    } catch(e) { this._showToast("✗ " + (e?.body?.message || e?.message || e)); }
     this._rebuildSidebar();
   }
 
@@ -12497,16 +15071,6 @@ _drawDoors() {
         ctx._entityVal = null;
         ctx._entityWatt= null;
         ctx._entitySet = null;
-        // Lautstärke-Kranz für spielende Medien (hinter dem Symbol)
-        if (this._opts?.show_volume_ring !== false && deco.entity &&
-            (deco.type === "speaker" || deco.type === "tv")) {
-          const _ms = hassStates[deco.entity];
-          if (_ms && _ms.state === "playing") {
-            this._drawSpectrumRing(ctx, 0, 0, size * 0.62,
-              _ms.attributes?.volume_level, !!_ms.attributes?.is_volume_muted,
-              { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
-          }
-        }
         if (deco.entity && this._hass) {
           const st = hassStates[deco.entity];
           if (st) {
@@ -12592,8 +15156,7 @@ _drawDoors() {
           // Zusatzinfo je Typ
           if (deco.type==="tv"||deco.type==="speaker") {
             if (st.attributes?.media_title) rows.push({ text: (st.attributes.media_title||"").substring(0,12), color:"#94a3b8" });
-            if (st.attributes?.is_volume_muted) rows.push({ text:"\u{1F507} stumm", color:"#64748b" });
-            else if (st.attributes?.volume_level!=null) rows.push({ text:"\u{1F50A} "+(st.attributes.volume_level*100|0)+"%", color:"#38bdf8" });
+            if (st.attributes?.volume_level!=null) rows.push({ text:"🔊 "+(st.attributes.volume_level*100|0)+"%", color:"#445566" });
           }
           if (deco.type==="thermostat") {
             if (st.attributes?.temperature!=null) rows.push({ text:"🎯 "+st.attributes.temperature+"°", color:"#f59e0b" });
@@ -12646,7 +15209,6 @@ _drawDoors() {
       const picUrl = st.attributes?.entity_picture;
       const title  = st.attributes?.media_title  || "";
       const artist = st.attributes?.media_artist || "";
-      const duration = st.attributes?.media_duration || 0;
       if (!picUrl && !title) return;
 
       const size = deco.size || 1.0;
@@ -12662,25 +15224,11 @@ _drawDoors() {
       const floatZ = wallH + 0.3 + Math.sin(t) * 0.15;
       const bPos   = project(deco.mx + size * 0.4, deco.my - size * 0.3, floatZ);
 
-      const volume = st.attributes?.volume_level;
-      const muted  = !!st.attributes?.is_volume_muted;
-      const hasVol = volume != null || muted;
-      const vinyl    = this._opts?.media_vinyl !== false;
-      const vinylR   = 24;
-      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
-      const bw  = vinyl ? vinylBox + 16 : 72;
-      // In 3D wird kein Zeitbalken gezeichnet – daher keine Höhe dafür
-      const barH = 0;
-      // Steuerleiste und Lautstärke klappen gemeinsam auf
-      const ctlOpen = this._musicCtlOpen === deco.entity;
-      const ctlH    = ctlOpen ? 26 : 0;
-      const volH    = (hasVol && ctlOpen) ? 12 : 0;
-      const bh  = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
-      // Versatz aus dem Verschieben; in 3D rechnet der Kontext in CSS-Pixeln,
-      // dort gilt der gespeicherte Wert unverändert.
-      const off = this._musicOffset(deco.entity);
-      const bx = bPos.x - bw / 2 + off.dx;
-      const by = bPos.y - bh + off.dy;
+      const bw  = 72;
+      const barH = duration > 0 ? 14 : 0;
+      const bh  = (picUrl ? 82 : 38) + barH;
+      const bx = bPos.x - bw / 2;
+      const by = bPos.y - bh;
 
       ctx.save();
 
@@ -12730,7 +15278,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img && !vinyl) {
+        } else if (cached.img) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -12741,28 +15289,16 @@ _drawDoors() {
           coverY = by + 5 + cs + 4;
         }
       }
-      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
-      if (vinyl) {
-        const vcx = bx + bw / 2;
-        const vcy = by + 8 + vinylBox / 2;
-        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
-        if (this._opts?.show_volume_ring !== false) {
-          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
-        }
-        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
-        coverY = by + 8 + vinylBox + 2;
-      }
 
       // ── Titel + Artist ────────────────────────────────────────
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const txtW3 = bw - 8;
-      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW3);
+      ctx.fillText(title.length > 10 ? title.slice(0,10) + "\u2026" : title, bx + bw/2, coverY + 9);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW3);
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -12771,819 +15307,11 @@ _drawDoors() {
       ctx.font      = "10px serif";
       ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
 
-      // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol && ctlOpen) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
-                            volume, muted, "#38bdf8");
-      }
-
-      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
-      if (ctlOpen) {
-        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st, true);
-      }
-
-      // Trefferfläche merken. Zonen werden einheitlich in physischen
-      // Canvas-Pixeln gehalten, weil _canvasXY in dieser Einheit misst.
-      {
-        const zd = window.devicePixelRatio || 1;
-        (this._musicClickZones ||= []).push({
-          entity: deco.entity, kind: "bubble",
-          x: bx * zd, y: by * zd, w: bw * zd, h: bh * zd,
-        });
-      }
-
-      // ── Lautstärke-Kranz am Gerät ─────────────────────────────
-      if (this._opts?.show_volume_ring !== false) {
-        this._drawSpectrumRing(ctx, spTop.x, spTop.y, 7 * size, volume, muted,
-                               { bars: 48, segH: 2.2, gap: 1.3, reach: 1.0, inset: 3 });
-      }
-
       ctx.restore();
     });
-    // Zonen dieses Frames übernehmen – geschieht in 2D am Ende von
-    // _drawMusicBubbles, in 3D wurde es bisher gar nicht gemacht.
-    this._musicClickZonesFrame = [...(this._musicClickZones||[])];
-    this._musicClickZones = [];
   }
 
   // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
-
-  // ══════════════════════════════════════════════════════════════════════
-  // Portiert aus dem HA Floorplan Editor (Hovi).
-  // Hovi rendert in SVG mit <animate>; hier alles neu für Canvas 2D,
-  // zeitgesteuert über Date.now() statt deklarativer SMIL-Animation.
-  // ══════════════════════════════════════════════════════════════════════
-
-  /* Deterministischer Pseudo-Zufall – gleicher Index liefert immer denselben
-     Wert. Ersatz für Hovis pseudoRandom(); ohne das würden Tropfen und Sterne
-     bei jedem Frame neu gewürfelt und flackern. */
-  _fpRand(i, seed) {
-    const x = Math.sin(i * 127.1 + seed * 311.7) * 43758.5453;
-    return x - Math.floor(x);
-  }
-
-  /* HA-Wetterzustand auf internen Effekt-Schlüssel abbilden (wie Hovi) */
-  _weatherFx(cond) {
-    return {
-      sunny: "sun", "clear-night": "night", partlycloudy: "clouds",
-      cloudy: "clouds", fog: "fog", rainy: "rain", pouring: "pour",
-      "snowy-rainy": "sleet", snowy: "snow", hail: "hail",
-      lightning: "storm", "lightning-rainy": "storm",
-      windy: "wind", "windy-variant": "wind", exceptional: "clouds"
-    }[cond] || "clouds";
-  }
-
-  _weatherState() {
-    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
-    if (!eid) return null;
-    const st = this._hass?.states?.[eid];
-    if (!st) return null;
-    return {
-      condition: st.state,
-      temp: st.attributes?.temperature ?? null,
-      unit: st.attributes?.temperature_unit || "°C",
-    };
-  }
-
-  /* Mondphase als kontinuierlicher Wert 0..1
-     0 = Neumond, 0.25 = zunehmender Halbmond, 0.5 = Vollmond,
-     0.75 = abnehmender Halbmond.
-     Gerechnet wird astronomisch; existiert sensor.moon_phase und
-     widerspricht er der Rechnung, gewinnt der Sensor (grob, 8 Stufen). */
-  _moonPhase() {
-    const SYN = 29.530588853;                       // synodischer Monat
-    const REF = Date.UTC(2000, 0, 6, 18, 14, 0);    // bekannter Neumond
-    let p = (((Date.now() - REF) / 86400000) / SYN) % 1;
-    if (p < 0) p += 1;
-
-    const raw = this._hass?.states?.["sensor.moon_phase"]?.state;
-    if (!raw) return p;
-    const mid = {
-      new_moon: 0.0, waxing_crescent: 0.125, first_quarter: 0.25,
-      waxing_gibbous: 0.375, full_moon: 0.5, waning_gibbous: 0.625,
-      last_quarter: 0.75, waning_crescent: 0.875,
-    }[String(raw).toLowerCase().replace(/[\s-]/g, "_")];
-    if (mid == null) return p;
-    // Abweichung über eine halbe Stufe: dem Sensor folgen
-    let d = Math.abs(p - mid);
-    if (d > 0.5) d = 1 - d;
-    return d > 0.0625 ? mid : p;
-  }
-
-  /* Wetter-Kulisse. Wie bei Hovi nur außerhalb der Räume sichtbar – dort per
-     SVG <mask>, hier über eine evenodd-Clip-Region: Vollfläche minus Räume. */
-  /* Stand von Sonne bzw. Mond am Himmel, als Bahnpunkt.
-     u = 0 im Osten (links), 1 im Westen (rechts); h = 0 am Horizont,
-     1 im Zenit. Die Sonne kommt aus sun.sun, der Mond wird über seine
-     Phase zeitversetzt genähert: bei Neumond läuft er mit der Sonne,
-     bei Vollmond genau gegenläufig. HA liefert keinen Mond-Azimut. */
-  _skyArc(night) {
-    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-    const att   = this._hass?.states?.["sun.sun"]?.attributes || {};
-    const azim  = parseFloat(att.azimuth);
-    const elev  = parseFloat(att.elevation);
-
-    if (!night && isFinite(azim) && isFinite(elev)) {
-      // Echte Werte: Ost (60°) bis West (300°) auf die Breite abbilden
-      return {
-        u: clamp((azim - 60) / 240, 0.04, 0.96),
-        h: clamp(elev / 55, 0.02, 1),
-      };
-    }
-
-    const now = new Date();
-    const hh  = now.getHours() + now.getMinutes() / 60;
-    // Mond: um die Phase verschobene "Ortszeit"
-    const t   = night ? (hh - this._moonPhase() * 24) : hh;
-    let   tt  = ((t % 24) + 24) % 24;
-    const u   = (tt - 6) / 12;                 // 6h→0, 18h→1
-    return {
-      u: clamp(u, 0.04, 0.96),
-      h: clamp(Math.sin(clamp(u, 0, 1) * Math.PI), 0.02, 1),
-    };
-  }
-
-  _drawWeatherLayer(rooms, o) {
-    if (!this._opts?.show_weather) return;
-    const w = this._weatherState();
-    if (!w) return;
-    const ctx = o?.ctx || this._ctx;
-    // 2D: _f2c() und _floorScale() rechnen in PHYSISCHEN Canvas-Pixeln, der
-    // Kontext wird bewusst nicht mit dpr skaliert (siehe _draw). Mit
-    // CSS-Pixeln läge die Kulisse sonst nur im linken oberen Viertel.
-    // 3D (iso): _draw3DScene skaliert selbst mit dpr und übergibt CSS-Maße.
-    const iso = !!o?.iso;
-    const W = iso ? (o.w || 0) : (this._canvas?.width  || 0);
-    const H = iso ? (o.h || 0) : (this._canvas?.height || 0);
-    if (!W || !H) return;
-    // Deko-Größen mitskalieren, sonst wirkt auf Retina alles winzig
-    const k = this._canvasCssW ? (W / this._canvasCssW) : 1;
-    // 2D: Der Himmel füllt die Canvas, die Deko hängt dagegen am Grundriss –
-    // sonst bleiben Sonne, Wolken und Regen beim Zoomen/Pannen stehen,
-    // während die ausgestanzten Räume darunter wegwandern.
-    // 3D: Der Himmel ist schlicht Hintergrund, die Szene steht davor.
-    const fr = iso ? { x: 0, y: 0, w: W, h: H } : this._floorRectC();
-    const z  = iso ? 1 : (this._zoomFactor() || 1);
-    const DW = fr.w / z;   // Grundrissbreite in ungezoomten Canvas-Pixeln
-    const DH = fr.h / z;
-
-    const fx      = this._weatherFx(w.condition);
-    // Tageszeit NICHT aus dem Wetterzustand ableiten: "clear-night" ist der
-    // einzige Zustand, der Nacht verrät – bei bewölkter Nacht meldet HA
-    // "cloudy", und der Himmel wäre cremefarben. sun.sun ist die Wahrheit.
-    const night   = this._isDark();
-    const animate = this._opts?.weather_animate !== false;
-    const T       = Date.now() / 1000;
-
-    ctx.save();
-
-    // Räume ausstanzen: Außenrechteck + Raumrechtecke, evenodd invertiert.
-    // Nur in 2D sinnvoll – in 3D liegen die Räume perspektivisch woanders
-    // und werden ohnehin nach dem Himmel über ihn gezeichnet.
-    if (!iso) {
-      ctx.beginPath();
-      ctx.rect(0, 0, W, H);
-      (rooms || []).forEach(r => {
-        if (r.x1 == null || r.x2 == null) return;
-        const a = this._f2c(r.x1, r.y1);
-        const b = this._f2c(r.x2, r.y2);
-        ctx.rect(Math.min(a.x, b.x), Math.min(a.y, b.y),
-                 Math.abs(b.x - a.x), Math.abs(b.y - a.y));
-      });
-      ctx.clip("evenodd");
-    }
-
-    // ── Himmel ────────────────────────────────────────────────────────
-    const skyDay = {
-      sun:   ["#cfe8ff", "#eaf5ff"], night: ["#2b3550", "#3d4a6b"],
-      clouds:["#dbe3ec", "#eef2f7"], fog:   ["#dfe3e8", "#f0f2f4"],
-      rain:  ["#c6d3e2", "#e3eaf2"], pour:  ["#b3c3d6", "#d6e0ec"],
-      snow:  ["#dde6f0", "#f2f6fb"], sleet: ["#d2dce8", "#eaf0f7"],
-      hail:  ["#c8d4e2", "#e6ecf4"], storm: ["#9fb0c6", "#cfd9e6"],
-      wind:  ["#d8e2ec", "#eef3f8"]
-    };
-    // Nachts bekommt jeder Zustand eine eigene dunkle Palette – sonst leuchtet
-    // z. B. bewölkte Nacht in hellem Grau.
-    const skyNight = {
-      sun:   ["#1b2440", "#2c3858"], night: ["#161e38", "#28324f"],
-      clouds:["#1d2742", "#2f3a58"], fog:   ["#222a40", "#333c54"],
-      rain:  ["#161f38", "#26304b"], pour:  ["#111930", "#1f2842"],
-      snow:  ["#212c48", "#33405f"], sleet: ["#1a2440", "#2b3554"],
-      hail:  ["#151e36", "#242e49"], storm: ["#0e1428", "#1b233c"],
-      wind:  ["#1c2540", "#2d3856"]
-    };
-    const sky = (night ? skyNight : skyDay)[fx]
-              || (night ? ["#1a2340", "#2b3454"] : ["#dde5ee", "#eff3f8"]);
-
-    const grad = ctx.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, sky[0]);
-    grad.addColorStop(1, sky[1]);
-    ctx.globalAlpha = night ? 0.55 : 0.5;
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-    ctx.globalAlpha = 1;
-
-    const tint = night ? "#c7d2ea" : "#7f93ad";
-
-    // Ab hier im Grundriss-Raum zeichnen (zoomt und pant mit)
-    ctx.save();
-    ctx.translate(fr.x, fr.y);
-    ctx.scale(z, z);
-
-    // ── Sonne / Mond mit Sternen ──────────────────────────────────────
-    // Nachts immer ein Gestirn zeigen, auch bei Wolken oder Regen –
-    // vorher blieb der Himmel bei "cloudy" leer.
-    if (fx === "sun" || fx === "night" || night) {
-      // Stand am Himmel statt fest in der Ecke: wandert im Tagesverlauf
-      // von links nach rechts am Gebäude vorbei.
-      const arc = this._skyArc(night);
-      const r   = (night ? 26 : 34) * k;       // Sonne deutlich größer
-      const mgn = r + 14 * k;                  // Rand, damit nichts anschneidet
-      const cx  = mgn + arc.u * Math.max(0, DW - mgn * 2);
-      // hoch am Himmel = weit oben; Bahn bleibt im oberen Drittel
-      const cy  = mgn + (1 - arc.h) * Math.max(0, DH * 0.34 - mgn * 0.5);
-      if (night) {
-        // Mond mit weichem Schein
-        const halo = ctx.createRadialGradient(cx, cy, r * 0.4, cx, cy, r * 3);
-        halo.addColorStop(0, "rgba(238,242,255,0.35)");
-        halo.addColorStop(1, "rgba(238,242,255,0)");
-        ctx.fillStyle = halo;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 3, 0, Math.PI * 2); ctx.fill();
-        // Sichel: Vollkreis, dann Terminator als Ellipsenbogen ausstanzen.
-        // Der Mond wird größer als vorher, damit die Temperatur Platz hat.
-        const ph     = this._moonPhase();
-        const waxing = ph < 0.5;               // zunehmend: helle Seite rechts
-        const term   = Math.cos(2 * Math.PI * ph);  // +1 Neumond … -1 Vollmond
-        ctx.save();
-        ctx.translate(cx, cy);
-        if (!waxing) ctx.scale(-1, 1);         // abnehmend: gespiegelt zeichnen
-        ctx.fillStyle = "#eef2ff";
-        ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
-        if (term > 0.995) {
-          // Neumond: nur ein schwacher Umriss bleibt übrig
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath(); ctx.arc(0, 0, r * 0.97, 0, Math.PI * 2); ctx.fill();
-        } else if (term < -0.995) {
-          // Vollmond: nichts ausstanzen
-        } else {
-          ctx.globalCompositeOperation = "destination-out";
-          ctx.beginPath();
-          // dunkle Hälfte (links) …
-          ctx.arc(0, 0, r, -Math.PI / 2, Math.PI / 2, true);
-          // … zurück über den Terminator. Wölbung folgt dem Vorzeichen:
-          // Sichel wölbt in die helle Seite, Gibbous in die dunkle.
-          ctx.ellipse(0, 0, r * Math.abs(term), r, 0,
-                      Math.PI / 2, -Math.PI / 2, term > 0);
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.restore();
-        // Sterne, langsam pulsierend
-        for (let s = 0; s < 18; s++) {
-          const sx = 20 + this._fpRand(s, 3) * (DW - 40);
-          const sy = 16 + this._fpRand(s, 4) * (DH * 0.45);
-          const per = 2 + this._fpRand(s, 5) * 3;
-          const ph  = this._fpRand(s, 6) * per;
-          const op  = animate
-            ? 0.2 + 0.7 * (0.5 + 0.5 * Math.sin(((T + ph) / per) * Math.PI * 2))
-            : 0.7;
-          ctx.globalAlpha = op;
-          ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(sx, sy, 1.2 * k, 0, Math.PI * 2); ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-      } else {
-        // Sonne mit warmem Schein und langsam rotierenden Strahlen
-        const halo = ctx.createRadialGradient(cx, cy, r * 0.3, cx, cy, r * 3.4);
-        halo.addColorStop(0, "rgba(255,210,94,0.40)");
-        halo.addColorStop(1, "rgba(255,210,94,0)");
-        ctx.fillStyle = halo;
-        ctx.beginPath(); ctx.arc(cx, cy, r * 3.4, 0, Math.PI * 2); ctx.fill();
-
-        const rot = animate ? (T / 60) * Math.PI * 2 : 0;
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(rot);
-        ctx.strokeStyle = "#ffc93c";
-        ctx.lineWidth = 2.4 * k;
-        ctx.lineCap = "round";
-        ctx.globalAlpha = 0.85;
-        for (let i = 0; i < 12; i++) {
-          const a = i * Math.PI / 6;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(a) * (r + 5 * k), Math.sin(a) * (r + 5 * k));
-          ctx.lineTo(Math.cos(a) * (r + 12 * k), Math.sin(a) * (r + 12 * k));
-          ctx.stroke();
-        }
-        ctx.restore();
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "#ffd25e";
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    // ── Wolken ────────────────────────────────────────────────────────
-    if (["clouds","rain","pour","snow","sleet","hail","storm","wind"].includes(fx)) {
-      const count = fx === "clouds" ? 3 : 4;
-      ctx.globalAlpha = fx === "storm" ? 0.55 : 0.4;
-      ctx.fillStyle = tint;
-      for (let c = 0; c < count; c++) {
-        const cw  = (60 + this._fpRand(c, 1) * 70) * k;
-        const cy2 = 24 * k + this._fpRand(c, 2) * (DH * 0.3);
-        const dur = 50 + c * 17;
-        const base = this._fpRand(c, 7) * DW;
-        // Von links nach rechts driften und weich umbrechen
-        const prog = animate ? ((T + c * 13) % dur) / dur : 0.5;
-        const cx2  = base - DW * 0.3 + prog * (DW * 0.9 + cw);
-        const sc   = cw / 40;
-        ctx.save();
-        ctx.translate(cx2 - cw, cy2);
-        ctx.scale(sc, sc);
-        // Wolkenkontur (Hovis Pfad als Bezier-Kette)
-        ctx.beginPath();
-        ctx.moveTo(0, 18);
-        ctx.bezierCurveTo(-4.4, 18, -8, 14.4, -8, 10, );
-        ctx.bezierCurveTo(-8, 5.6, -4.4, 2, 0, 2);
-        ctx.bezierCurveTo(1.8, -4.4, 8.4, -8.4, 15, -6.6);
-        ctx.bezierCurveTo(18.6, -5.6, 21, -2.6, 21, -1);
-        ctx.bezierCurveTo(25.1, -1, 28.5, 2.4, 28.5, 6.5);
-        ctx.bezierCurveTo(28.5, 12.9, 26.4, 18, 22, 18);
-        ctx.closePath();
-        ctx.fill();
-        ctx.restore();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Niederschlag ──────────────────────────────────────────────────
-    const drops = { rain: 46, pour: 90, snow: 44, sleet: 44, hail: 40, storm: 70 }[fx];
-    if (drops) {
-      const snowy = fx === "snow";
-      for (let d = 0; d < drops; d++) {
-        const x0  = this._fpRand(d, 8) * DW;
-        const dur = snowy ? 5 + this._fpRand(d, 9) * 4
-                          : (fx === "pour" ? 0.7 : 1.1) + this._fpRand(d, 9) * 0.5;
-        const ph   = this._fpRand(d, 10) * dur;
-        const prog = animate ? ((T + ph) % dur) / dur : this._fpRand(d, 10);
-        const dx   = (snowy ? 8 : -14) * prog;
-        const dy   = (DH + 20) * prog - 6;
-        // Schnee zusätzlich seitlich pendeln lassen
-        const sway = snowy && animate ? Math.sin((T + ph) * 1.4) * 4 : 0;
-        const x = x0 + dx + sway;
-        if (snowy || (fx === "sleet" && d % 2 === 0)) {
-          ctx.globalAlpha = 0.85;
-          ctx.fillStyle = "#fff";
-          ctx.beginPath(); ctx.arc(x, dy, 1.8 * k, 0, Math.PI * 2); ctx.fill();
-        } else if (fx === "hail") {
-          ctx.globalAlpha = 0.9;
-          ctx.fillStyle = "#eaf2ff";
-          ctx.strokeStyle = "#b9c9dd"; ctx.lineWidth = 0.6 * k;
-          ctx.beginPath(); ctx.arc(x, dy, 2 * k, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        } else {
-          ctx.globalAlpha = 0.75;
-          ctx.strokeStyle = "#7fa6cc";
-          ctx.lineWidth = (fx === "pour" ? 1.6 : 1.2) * k;
-          ctx.lineCap = "round";
-          ctx.beginPath();
-          ctx.moveTo(x, dy - 4 * k); ctx.lineTo(x - 2 * k, dy + 6 * k);
-          ctx.stroke();
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Nebelbänder ───────────────────────────────────────────────────
-    if (fx === "fog") {
-      for (let f = 0; f < 5; f++) {
-        const fy  = 30 + f * (DH / 6);
-        const bh  = (10 + this._fpRand(f, 11) * 12) * k;
-        const dur = 26 + f * 9;
-        const prog = animate ? ((T + f * 7) % dur) / dur : 0;
-        const bx = -DW + prog * DW;
-        ctx.globalAlpha = 0.35;
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath();
-        ctx.roundRect(bx, fy, DW * 3, bh, 8 * k);
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    // ── Windstriche ───────────────────────────────────────────────────
-    if (fx === "wind") {
-      ctx.strokeStyle = tint; ctx.lineWidth = 1.6 * k; ctx.lineCap = "round";
-      for (let i = 0; i < 14; i++) {
-        const wy  = 20 * k + this._fpRand(i, 12) * DH;
-        const len = (30 + this._fpRand(i, 13) * 60) * k;
-        const dur = 2.2 + this._fpRand(i, 14) * 2;
-        const ph  = this._fpRand(i, 15) * 3;
-        const prog = animate ? ((T + ph) % dur) / dur : 0.5;
-        const x = -len + prog * (DW + len * 2);
-        ctx.globalAlpha = 0.45;
-        ctx.beginPath(); ctx.moveTo(x - len, wy); ctx.lineTo(x, wy); ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
-    }
-
-    ctx.restore();   // zurück in Canvas-Koordinaten
-
-    // ── Blitz ─────────────────────────────────────────────────────────
-    // erhellt bewusst die ganze Fläche, nicht nur den Grundriss
-    if (fx === "storm" && animate) {
-      const c = (T % 7) / 7;
-      // zwei kurze Schläge pro Zyklus
-      let flash = 0;
-      if (c > 0.20 && c < 0.26) flash = 0.75 * (1 - Math.abs(c - 0.23) / 0.03);
-      if (c > 0.34 && c < 0.38) flash = 0.50 * (1 - Math.abs(c - 0.36) / 0.02);
-      if (flash > 0) {
-        ctx.globalAlpha = flash;
-        ctx.fillStyle = "#fff";
-        ctx.fillRect(0, 0, W, H);
-        ctx.globalAlpha = 1;
-      }
-    }
-
-    ctx.restore();
-
-    // ── Temperatur links oben am Rand ─────────────────────────────────
-    // Nach dem restore, also außerhalb der Clip-Region: sonst würde sie
-    // verschwinden, sobald links oben ein Raum liegt.
-    if (w.temp != null && isFinite(w.temp)) {
-      const label = Math.round(w.temp) + (w.unit || "°C");
-      const px = 16 * k, py = 16 * k;
-      ctx.save();
-      ctx.textAlign = "left";
-      ctx.textBaseline = "top";
-      ctx.font = "600 " + (17 * k).toFixed(1) + "px system-ui, sans-serif";
-      const tw = ctx.measureText(label).width;
-      const padX = 9 * k, padY = 6 * k, th = 17 * k;
-      ctx.globalAlpha = 0.55;
-      ctx.fillStyle = night ? "#0d1426" : "#233045";
-      ctx.beginPath();
-      ctx.roundRect(px, py, tw + padX * 2, th + padY * 2, 8 * k);
-      ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = night ? "#dfe6ff" : "#f2f6ff";
-      ctx.fillText(label, px + padX, py + padY);
-      ctx.restore();
-    }
-  }
-  _drawVolumeBar(ctx, x, y, w, volume, muted, color) {
-    const v = muted ? 0 : Math.max(0, Math.min(1, volume ?? 0));
-    const barX = x + 13, barW = w - 13 - 24;
-    ctx.save();
-    ctx.font = "8px 'JetBrains Mono',monospace";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = muted ? "#64748b" : color;
-    ctx.fillText(muted ? "\u{1F507}" : "\u{1F50A}", x, y);
-    // Spur
-    ctx.strokeStyle = "rgba(148,163,184,0.35)";
-    ctx.lineWidth = 3; ctx.lineCap = "round";
-    ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW, y); ctx.stroke();
-    // Füllung
-    if (v > 0) {
-      ctx.strokeStyle = color;
-      ctx.beginPath(); ctx.moveTo(barX, y); ctx.lineTo(barX + barW * v, y); ctx.stroke();
-      ctx.fillStyle = color;
-      ctx.beginPath(); ctx.arc(barX + barW * v, y, 2.4, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.fillStyle = muted ? "#64748b" : "#94a3b8";
-    ctx.textAlign = "right";
-    ctx.fillText(muted ? "stumm" : Math.round(v * 100) + "%", x + w, y);
-    ctx.textAlign = "left";
-    ctx.restore();
-  }
-
-  /* Fährt der Rollladen gerade? HA meldet das über die States
-     'opening' und 'closing' – die wertete die Card bisher nirgends aus. */
-  _coverMotion(entity) {
-    if (!entity || !this._hass?.states) return null;
-    const st = this._hass.states[entity];
-    if (!st) return null;
-    const s = String(st.state).toLowerCase();
-    if (s === "opening") return { dir: -1, label: "auf" };
-    if (s === "closing") return { dir: 1, label: "zu" };
-    return null;
-  }
-
-  /* Laufanzeige: wandernde Pfeile entlang einer Strecke plus pulsierende
-     Kante. Richtung folgt dir (1 = schließt, -1 = öffnet). */
-  _drawMotionChevrons(ctx, x1, y1, x2, y2, dir, color) {
-    const T = Date.now() / 1000;
-    const dx = x2 - x1, dy = y2 - y1;
-    const L  = Math.hypot(dx, dy);
-    if (L < 4) return;
-    const ux = dx / L, uy = dy / L;
-    const nx = -uy, ny = ux;
-    const n = Math.max(2, Math.round(L / 14));
-    const prog = (T * 0.9) % 1;
-
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (let i = 0; i < n; i++) {
-      let t = (i / n + (dir > 0 ? prog : 1 - prog)) % 1;
-      // an den Enden aus- und einblenden
-      const fade = Math.sin(t * Math.PI);
-      if (fade <= 0.05) continue;
-      const px = x1 + ux * L * t, py = y1 + uy * L * t;
-      const s = 3.2;
-      ctx.globalAlpha = 0.25 + fade * 0.65;
-      ctx.beginPath();
-      ctx.moveTo(px - ux * s * dir - nx * s, py - uy * s * dir - ny * s);
-      ctx.lineTo(px + ux * s * dir, py + uy * s * dir);
-      ctx.lineTo(px - ux * s * dir + nx * s, py - uy * s * dir + ny * s);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  /* Farbverlauf des Spektrums: innen Cyan, Mitte Violett, außen Magenta.
-     t läuft von 0 (Innenkante) bis 1 (äußerstes Segment). */
-  _specColor(t, alpha) {
-    const stops = [[34,211,238], [139,92,246], [236,72,153]];
-    const x = Math.max(0, Math.min(1, t)) * (stops.length - 1);
-    const i = Math.min(stops.length - 2, Math.floor(x));
-    const f = x - i;
-    const c = [0,1,2].map(k => Math.round(stops[i][k] + (stops[i+1][k] - stops[i][k]) * f));
-    return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
-  }
-
-  /* Segmentierter Spektrum-Kranz. Die Balken bestehen aus einzelnen
-     Kacheln statt durchgehender Linien – daher der Rasterlook.
-     HA liefert keine Audiodaten, der Ausschlag kann also nicht dem Takt
-     folgen; die Lautstärke steuert stattdessen, wie weit die Balken reichen. */
-  _drawSpectrumRing(ctx, cx, cy, r, volume, muted, opts = {}) {
-    const laut = muted ? 0 : (volume == null ? 0.6 : Math.max(0, Math.min(1, volume)));
-    // Deutliche Spreizung: leise bleibt flach, laut ragt weit hinaus
-    const amp  = 0.12 + 0.88 * Math.pow(laut, 0.85);
-    const bars = opts.bars || 72;
-    const segH = opts.segH || 2.6;
-    const gap  = opts.gap  || 1.6;
-    const maxLen = r * (opts.reach || 1.15) * amp;
-    const inner  = r + (opts.inset || 4);
-    const T = Date.now() / 1000;
-    const animate = this._opts?.weather_animate !== false;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Schein, der mit der Lautstärke atmet
-    const breathe = animate ? 0.5 + 0.5 * Math.sin((T / 2.2) * Math.PI * 2) : 0.5;
-    const glowR = inner + maxLen;
-    const glow = ctx.createRadialGradient(0, 0, r * 0.6, 0, 0, Math.max(glowR, r + 1));
-    glow.addColorStop(0, `rgba(139,92,246,${(0.04 + 0.14 * amp * breathe).toFixed(3)})`);
-    glow.addColorStop(1, "rgba(139,92,246,0)");
-    ctx.fillStyle = glow;
-    ctx.beginPath(); ctx.arc(0, 0, Math.max(glowR, r + 1), 0, Math.PI * 2); ctx.fill();
-
-    // Innerer Ring aus feinen Kacheln – die helle Kante aus der Vorlage
-    const ringN = Math.round(bars * 2.2);
-    ctx.globalAlpha = muted ? 0.3 : 0.9;
-    for (let i = 0; i < ringN; i++) {
-      const a = (Math.PI * 2 / ringN) * i;
-      const x1 = Math.cos(a) * (inner - 3.2), y1 = Math.sin(a) * (inner - 3.2);
-      const x2 = Math.cos(a) * (inner - 0.8), y2 = Math.sin(a) * (inner - 0.8);
-      ctx.strokeStyle = this._specColor(0, 0.95);
-      ctx.lineWidth = 1.1;
-      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-    }
-
-    // Radiale Balken aus gestapelten Segmenten
-    ctx.lineCap = "butt";
-    ctx.globalAlpha = 1;
-    for (let i = 0; i < bars; i++) {
-      // Grundlänge streut, sonst wirkt der Kranz wie ein Zahnrad
-      const f1 = 0.22 + this._fpRand(i, 21) * 0.78;
-      const f2 = 0.22 + this._fpRand(i, 22) * 0.78;
-      const dur = 0.7 + this._fpRand(i, 24) * 0.8;
-      const ph  = this._fpRand(i, 25) * dur;
-      const k = animate ? 0.5 + 0.5 * Math.sin(((T + ph) / dur) * Math.PI * 2) : 0.5;
-      const len = maxLen * (f1 + (f2 - f1) * k);
-      if (len < segH) continue;
-      const a  = (Math.PI * 2 / bars) * i - Math.PI / 2;
-      const ux = Math.cos(a), uy = Math.sin(a);
-      const nSeg = Math.floor(len / (segH + gap));
-      for (let sIdx = 0; sIdx < nSeg; sIdx++) {
-        const d0 = inner + sIdx * (segH + gap);
-        const t  = nSeg > 1 ? sIdx / (nSeg - 1) : 0;
-        // Äußere Segmente blassen leicht aus
-        const al = (muted ? 0.3 : 1) * (0.95 - 0.25 * t);
-        ctx.strokeStyle = this._specColor(t, al);
-        ctx.lineWidth = 2.2;
-        ctx.beginPath();
-        ctx.moveTo(ux * d0, uy * d0);
-        ctx.lineTo(ux * (d0 + segH), uy * (d0 + segH));
-        ctx.stroke();
-      }
-    }
-    ctx.globalAlpha = 1;
-    ctx.restore();
-  }
-
-  /* Album-Cover als rotierende Schallplatte.
-     Rillen und Glanz bleiben stehen, nur Label und Reflex drehen sich –
-     sonst wäre die Drehung auf einer symmetrischen Scheibe unsichtbar. */
-  /* Laufschrift: passt der Text in maxW, wird er zentriert gezeichnet.
-     Sonst läuft er endlos durch, mit Lücke zwischen den Wiederholungen.
-     Der Aufrufer muss ctx.font und fillStyle vorher setzen. */
-  /* Verschiebung einer Musik-Bubble. Bleibt über Neuladen erhalten,
-     ohne dafür das Backend anfassen zu müssen. */
-  /* Versatz wird in CSS-Pixeln gehalten. 2D zeichnet in physischen
-     Canvas-Pixeln, 3D in CSS-Pixeln – ohne gemeinsame Einheit springt die
-     Bubble beim Wechsel zwischen den Ansichten. */
-  _musicOffset(entity) {
-    if (!this._musicOff) {
-      this._musicOff = {};
-      try {
-        const raw = localStorage.getItem("ble_music_off");
-        if (raw) this._musicOff = JSON.parse(raw) || {};
-      } catch (e) { this._musicOff = {}; }
-    }
-    return this._musicOff[entity] || { dx: 0, dy: 0 };
-  }
-
-  _setMusicOffset(entity, dx, dy) {
-    this._musicOffset(entity);               // sorgt für geladenen Cache
-    this._musicOff[entity] = { dx, dy };
-    try {
-      localStorage.setItem("ble_music_off", JSON.stringify(this._musicOff));
-    } catch (e) { /* Speicher voll oder gesperrt – Versatz gilt nur temporär */ }
-  }
-
-  /* Play/Pause, vor und zurück. Zonen werden für _onCanvasClick registriert. */
-  _drawMediaControls(ctx, x, y, w, h, entity, st, iso) {
-    // iso: in 3D rechnet der Kontext in CSS-Pixeln, die Zonen müssen aber
-    // wie in 2D in physischen Canvas-Pixeln abgelegt werden.
-    const zd = iso ? (window.devicePixelRatio || 1) : 1;
-    const playing = st?.state === "playing";
-    const btns = [
-      { id: "prev", sym: "\u23ee" },
-      { id: "play", sym: playing ? "\u23f8" : "\u25b6" },
-      { id: "next", sym: "\u23ed" },
-    ];
-    const bw = w / btns.length;
-
-    ctx.save();
-    // Abtrennung nach oben
-    ctx.strokeStyle = "rgba(56,189,248,0.22)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(x + 4, y); ctx.lineTo(x + w - 4, y); ctx.stroke();
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    btns.forEach((b, i) => {
-      const bxx = x + i * bw;
-      const cxx = bxx + bw / 2, cyy = y + h / 2;
-      const hot = this._musicCtlHot === entity + ":" + b.id;
-      if (hot) {
-        ctx.fillStyle = "rgba(56,189,248,0.22)";
-        ctx.beginPath();
-        ctx.roundRect(bxx + 2, y + 3, bw - 4, h - 6, 5);
-        ctx.fill();
-      }
-      ctx.fillStyle = b.id === "play" ? "#38bdf8" : "#94a3b8";
-      ctx.font = (b.id === "play" ? "13px" : "11px") + " system-ui, sans-serif";
-      ctx.fillText(b.sym, cxx, cyy);
-      (this._musicClickZones ||= []).push({
-        entity, kind: "ctl", act: b.id,
-        x: bxx * zd, y: y * zd, w: bw * zd, h: h * zd,
-      });
-    });
-    ctx.textBaseline = "alphabetic";
-    ctx.restore();
-  }
-
-  _marqueeText(ctx, text, cx, y, maxW) {
-    const s = String(text || "");
-    if (!s) return false;
-    const tw = ctx.measureText(s).width;
-    if (tw <= maxW) {
-      ctx.textAlign = "center";
-      ctx.fillText(s, cx, y);
-      return false;
-    }
-    const gap  = 18;                       // Lücke zwischen den Durchläufen
-    const span = tw + gap;
-    const spd  = 22;                       // Pixel pro Sekunde
-    const off  = this._opts?.media_spin !== false
-      ? ((Date.now() / 1000) * spd) % span
-      : 0;
-    const left = cx - maxW / 2;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(left, y - 10, maxW, 16);
-    ctx.clip();
-    ctx.textAlign = "left";
-    ctx.fillText(s, left - off, y);
-    ctx.fillText(s, left - off + span, y);   // nahtlos anschließend
-    ctx.restore();
-    ctx.textAlign = "center";
-    return true;
-  }
-
-  _drawVinyl(ctx, cx, cy, R, img, spinning) {
-    const T = Date.now() / 1000;
-    // Eigenes Gate: die Drehung hing vorher an weather_animate und stand
-    // still, sobald die Wetter-Animation aus war.
-    const animate = this._opts?.media_spin !== false;
-    // Eine Umdrehung pro 2,5 s – schnell genug, dass die Drehung bei
-    // einem kleinen Label auch wirklich auffällt
-    const ang = (spinning && animate) ? (T / 2.5) * Math.PI * 2 : 0;
-
-    ctx.save();
-    ctx.translate(cx, cy);
-
-    // Scheibe
-    const disc = ctx.createRadialGradient(-R * 0.3, -R * 0.3, R * 0.1, 0, 0, R);
-    disc.addColorStop(0, "#2a2f3a");
-    disc.addColorStop(0.6, "#12151c");
-    disc.addColorStop(1, "#05070a");
-    ctx.fillStyle = disc;
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-
-    // Rillen
-    ctx.strokeStyle = "rgba(148,163,184,0.10)";
-    ctx.lineWidth = 0.5;
-    for (let gr = R * 0.68; gr < R * 0.97; gr += Math.max(1.4, R * 0.045)) {
-      ctx.beginPath(); ctx.arc(0, 0, gr, 0, Math.PI * 2); ctx.stroke();
-    }
-
-    // Wandernder Lichtreflex über die Rillen
-    ctx.save();
-    ctx.rotate(ang * 0.5);
-    const sheen = ctx.createLinearGradient(-R, -R, R, R);
-    sheen.addColorStop(0,    "rgba(255,255,255,0)");
-    sheen.addColorStop(0.45, "rgba(255,255,255,0.05)");
-    sheen.addColorStop(0.5,  "rgba(255,255,255,0.13)");
-    sheen.addColorStop(0.55, "rgba(255,255,255,0.05)");
-    sheen.addColorStop(1,    "rgba(255,255,255,0)");
-    ctx.fillStyle = sheen;
-    ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-
-    // Label aus dem Cover, dreht mit. Nimmt bewusst viel Fläche ein,
-    // vorher blieben bei R=26 nur ~11 px Cover übrig.
-    const lr = R * 0.64;
-    // Rillen nur noch außerhalb des größeren Labels
-    ctx.save();
-    ctx.rotate(ang);
-    if (img) {
-      ctx.save();
-      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.clip();
-      ctx.drawImage(img, -lr, -lr, lr * 2, lr * 2);
-      ctx.restore();
-    } else {
-      // Ohne Cover ein zweifarbiges Label, sonst wäre die Drehung
-      // auf einer einfarbigen Fläche unsichtbar.
-      ctx.fillStyle = "#1e293b";
-      ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#334155";
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.arc(0, 0, lr, -Math.PI / 2, 0);
-      ctx.closePath(); ctx.fill();
-    }
-    // Marke am Labelrand, damit die Drehung immer ablesbar bleibt
-    ctx.fillStyle = "rgba(255,255,255,0.7)";
-    ctx.beginPath();
-    ctx.arc(0, -lr * 0.78, Math.max(1.4, R * 0.075), 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-
-    // Labelkante und Spindelloch
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
-    ctx.lineWidth = 0.8;
-    ctx.beginPath(); ctx.arc(0, 0, lr, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = "#05070a";
-    ctx.beginPath(); ctx.arc(0, 0, Math.max(1.4, R * 0.055), 0, Math.PI * 2); ctx.fill();
-
-    ctx.restore();
-  }
-
-  /* Live-Anzeige des Wetter-Entities im Options-Reiter */
-  _updateWeatherStatus() {
-    const el = this.shadowRoot?.getElementById("weather-live");
-    if (!el) return;
-    const eid = this._opts?.weather_entity || this._opts?.ss_weather_entity;
-    if (!eid) { el.textContent = "keine Entity gesetzt"; el.style.color = "#445566"; return; }
-    const st = this._hass?.states?.[eid];
-    if (!st) { el.textContent = `\u26a0 ${eid} nicht gefunden`; el.style.color = "#ef4444"; return; }
-    const map = {
-      "sunny":"\u2600 sonnig","clear-night":"\u{1F319} klar","partlycloudy":"\u26c5 teils bewölkt",
-      "cloudy":"\u2601 bewölkt","fog":"\u{1F32B} Nebel","rainy":"\u{1F327} Regen",
-      "pouring":"\u26c8 Starkregen","snowy":"\u2744 Schnee","snowy-rainy":"\u{1F328} Schneeregen",
-      "hail":"\u{1F328} Hagel","lightning":"\u26a1 Gewitter","lightning-rainy":"\u26c8 Gewitter",
-      "windy":"\u{1F4A8} windig","windy-variant":"\u{1F4A8} windig","exceptional":"\u{1F321} besonders"
-    };
-    const temp = st.attributes?.temperature;
-    el.textContent = (map[st.state] || st.state) + (temp != null ? ` \u00b7 ${temp}\u00b0` : "");
-    el.style.color = "#22c55e";
-  }
 
   _drawMusicBubbles() {
     if (!this._opts?.show_music_bubble) return;
@@ -13614,31 +15342,14 @@ _drawDoors() {
       const sp   = this._f2c(deco.mx, deco.my);
       const size = (deco.size || 1.0) * 18;
 
-      // Bubble-Position: oben rechts, sanft schwebend.
-      // Der Versatz kommt aus dem Verschieben per Gedrückthalten.
+      // Bubble-Position: oben rechts, sanft schwebend
       const t      = (Date.now() / 2000) % (Math.PI * 2);
-      const off    = this._musicOffset(deco.entity);
-      const _odpr  = window.devicePixelRatio || 1;
-      const dragging = this._musicDrag?.entity === deco.entity;
-      const floatY = dragging ? 0 : Math.sin(t) * 4;
-      const bx  = sp.x + size * 2.2 + off.dx * _odpr;
+      const floatY = Math.sin(t) * 4;
+      const bx  = sp.x + size * 2.2;
       const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
-      const by  = sp.y - wPx - size * 0.8 + floatY + off.dy * _odpr;
-      const volume  = st.attributes?.volume_level;
-      const muted   = !!st.attributes?.is_volume_muted;
-      const hasVol  = volume != null || muted;
-      // Schallplatte: der Kranz ragt über die Scheibe hinaus, daher breiter
-      const vinyl    = this._opts?.media_vinyl !== false;
-      const vinylR   = 26;
-      const vinylBox = vinyl ? Math.round(vinylR * 2 * 1.9) : 0;
-      const bw   = vinyl ? vinylBox + 16 : 72;
-      const barH = duration > 0 ? 14 : 0;
-      // Steuerleiste erscheint nur für die angetippte Bubble
-      const ctlOpen = this._musicCtlOpen === deco.entity;
-      const ctlH    = ctlOpen ? 26 : 0;
-      // Die Lautstärke klappt mit der Leiste zusammen auf und zu
-      const volH    = (hasVol && ctlOpen) ? 12 : 0;
-      const bh   = (vinyl ? vinylBox + 36 : (picUrl ? 82 : 38)) + barH + volH + ctlH;
+      const by  = sp.y - wPx - size * 0.8 + floatY;
+      const bw = 72;
+      const bh = picUrl ? 82 : 38;
 
       ctx.save();
 
@@ -13692,7 +15403,7 @@ _drawDoors() {
           img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
           img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
           this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img && !vinyl) {
+        } else if (cached.img) {
           const cs = bw - 10;
           ctx.save();
           ctx.beginPath();
@@ -13703,30 +15414,17 @@ _drawDoors() {
           coverY = by + 5 + cs + 4;
         }
       }
-      // ── Schallplatte mit Spektrum-Kranz ───────────────────────
-      if (vinyl) {
-        const vcx = bx + bw / 2;
-        const vcy = by + 8 + vinylBox / 2;
-        const _vimg = picUrl ? this._imgCache?.["mc_" + deco.entity]?.img : null;
-        if (this._opts?.show_volume_ring !== false) {
-          this._drawSpectrumRing(ctx, vcx, vcy, vinylR, volume, muted);
-        }
-        this._drawVinyl(ctx, vcx, vcy, vinylR, _vimg, true);
-        coverY = by + 8 + vinylBox + 2;
-      }
 
       // ── Titel + Artist ────────────────────────────────────────
-      // Laufschrift statt Abschneiden: lange Titel liefen vorher nach
-      // 10 Zeichen ins Auslassungszeichen.
       ctx.textAlign = "center";
       ctx.fillStyle = "#e2e8f0";
       ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const txtW = bw - 8;
-      this._marqueeText(ctx, title, bx + bw/2, coverY + 9, txtW);
+      const mc = 10;
+      ctx.fillText(title.length > mc ? title.slice(0,mc) + "\u2026" : title, bx + bw/2, coverY + 9);
       if (artist) {
         ctx.fillStyle = "#64748b";
         ctx.font      = "6px 'JetBrains Mono',monospace";
-        this._marqueeText(ctx, artist, bx + bw/2, coverY + 19, txtW);
+        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
       }
 
       // ── Noten-Animation ───────────────────────────────────────
@@ -13740,7 +15438,7 @@ _drawDoors() {
         const elapsed = posTs ? (Date.now() - new Date(posTs).getTime()) / 1000 : 0;
         const curPos  = Math.min(position + elapsed, duration);
         const prog    = Math.max(0, Math.min(1, curPos / duration));
-        const barY    = by + bh - ctlH - barH + 2;
+        const barY    = by + bh - barH + 2;
         const barW2   = bw - 10;
         ctx.fillStyle = '#1c2535';
         ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2, 4, 2); ctx.fill();
@@ -13753,22 +15451,6 @@ _drawDoors() {
         ctx.textAlign = 'right'; ctx.fillText(fmt(duration), bx+bw-5, barY+11);
         ctx.textAlign = 'center';
       }
-
-      // ── Lautstärke ────────────────────────────────────────────
-      if (hasVol && ctlOpen) {
-        this._drawVolumeBar(ctx, bx + 5, by + bh - ctlH - volH / 2 - 1, bw - 10,
-                            volume, muted, "#38bdf8");
-      }
-
-      // ── Steuerleiste (nach Tippen auf die Bubble) ─────────────
-      if (ctlOpen) {
-        this._drawMediaControls(ctx, bx, by + bh - ctlH, bw, ctlH, deco.entity, st);
-      }
-
-      // Trefferfläche der Bubble für Tippen und Verschieben merken
-      (this._musicClickZones ||= []).push({
-        entity: deco.entity, x: bx, y: by, w: bw, h: bh, kind: "bubble",
-      });
 
       ctx.restore();
     });
@@ -13824,7 +15506,7 @@ _drawDoors() {
         }
         // Montageschienen
         ctx.strokeStyle="#64748b"; ctx.lineWidth=1;
-        ctx.beginPath(); ctx.moveTo(-hs+ox,-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-hs+ox,my=-hs+oy+mh/2); ctx.lineTo(hs-ox,-hs+oy+mh/2); ctx.stroke();
         break;
       }
       case "inverter": {
@@ -16281,107 +17963,59 @@ _drawDoors() {
       wrap.appendChild(row);
     });
 
-    // ── Module (v4.4: separate Dateien, Versions-Anzeige, Hot-Reload) ──────
+    // ── Module ────────────────────────────────────────────────────────────────
     const modBox = this._sbBox("📦 Module");
-
-    // Card-Hauptversion
-    const cardVerRow = document.createElement("div");
-    cardVerRow.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:4px 0;margin-bottom:6px;border-bottom:1px solid #1c2535";
-    cardVerRow.innerHTML = `<span style="font-size:8px;color:#445566">BLE Positioning Card</span><span style="font-size:8px;font-weight:700;color:#38bdf8">v${CARD_VERSION}</span>`;
-    modBox.appendChild(cardVerRow);
-
     const modHdr = document.createElement("div");
     modHdr.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:6px;line-height:1.5";
-    modHdr.innerHTML = "Optionale Module – nur aktive werden geladen.<br>" +
-      "Deaktivierte Module: <b style='color:#22c55e'>0 RAM, 0 CPU</b>.";
+    modHdr.innerHTML = "Optionale Erweiterungen – werden nur geladen wenn aktiviert.<br>" +
+      "Deaktivierte Module verbrauchen <b style='color:#22c55e'>keine</b> RAM oder CPU.";
     modBox.appendChild(modHdr);
 
-    // Bekannte Module
+    // Bekannte Module (auch wenn noch nicht geladen)
     const knownModules = [
-      { id:"elektro", name:"Elektro-Management",  icon:"🔌", desc:"Solar-Fluss, Baukasten, Forecast" },
-      { id:"energie", name:"Energie-Management",   icon:"⚡", desc:"Solar, Verbrauch, Power-Routing" },
-      { id:"pool",    name:"Pool & Teich",          icon:"🏊", desc:"Filterpumpe, Heizung, Sensoren, pH" },
-      { id:"garten",  name:"Garten",                icon:"🌿", desc:"Mähroboter, Bewässerung, Pflanzen, Gewächshaus" },
-      { id:"mmwave",  name:"mmWave Radar",            icon:"📡", desc:"Personen-Tracking, Klassifikation, Sturz-Erkennung" },
-      { id:"ki",      name:"KI-System",               icon:"🧠", desc:"Verhaltensanalyse · Mustererkennung · Solar-Scheduling" },
+      { id:"energie", name:"Energie-Management", icon:"⚡", desc:"Solar, Verbrauch, Power-Routing" },
+      { id:"pool",    name:"Pool & Garten",       icon:"🏊", desc:"Pumpen, Bewässerung, Smart Irrigation" },
+      { id:"elektro", name:"Elektro-Management",  icon:"🔌", desc:"Solar-Fluss, Logiken, Strom-Routing" },
+      // Weitere Module erscheinen hier automatisch wenn registriert
     ];
+    // Bereits geladene Module auch anzeigen
     Object.values(BLEModuleRegistry._modules).forEach(m => {
       if (!knownModules.find(k => k.id === m.id))
-        knownModules.push({ id:m.id, name:m.name, icon:m.icon||"🧩", desc:m.description||"" });
+        knownModules.push({ id:m.id, name:m.name, icon:m.icon, desc:m.description||"" });
     });
 
     knownModules.forEach(({id, name, icon, desc}) => {
-      const isActive  = !!this._opts?.['module_' + id];
-      const mod       = BLEModuleRegistry._modules[id];
-      const status    = BLEModuleRegistry.status(id);
-      const loadTime  = BLEModuleRegistry._loadTimes[id];
-      const hasUpdate = BLEModuleRegistry._updateAvail[id];
-      const hasError  = BLEModuleRegistry._errors[id];
-
+      const isActive = !!this._opts?.['module_' + id];
+      const isLoaded = !!BLEModuleRegistry._modules[id];
       const row = document.createElement("div");
-      row.style.cssText = `display:flex;flex-direction:column;gap:3px;padding:7px 8px;background:var(--surf2);border-radius:6px;margin-bottom:5px;border:1px solid ${hasUpdate?"#f59e0b66":hasError?"#ef444466":isActive?"#22c55e33":"#1c2535"}`;
-
-      // Zeile 1: Checkbox + Name + Status-Badge
-      const row1 = document.createElement("div");
-      row1.style.cssText = "display:flex;align-items:center;gap:8px";
+      row.style.cssText = "display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--surf2);border-radius:6px;margin-bottom:4px;border:1px solid " + (isActive ? "#22c55e44" : "#1c2535");
       const cb = document.createElement("input");
       cb.type = "checkbox"; cb.checked = isActive;
-      cb.style.cssText = "accent-color:#22c55e;width:14px;height:14px;flex-shrink:0;cursor:pointer";
+      cb.style.cssText = "accent-color:#22c55e;width:15px;height:15px;flex-shrink:0;cursor:pointer";
       cb.addEventListener("change", () => this._toggleModule(id, cb.checked));
-
+      const info = document.createElement("div");
+      info.style.cssText = "flex:1;min-width:0";
       const nameEl = document.createElement("div");
-      nameEl.style.cssText = "font-size:9px;font-weight:700;color:var(--text);flex:1";
+      nameEl.style.cssText = "font-size:9px;font-weight:700;color:var(--text)";
       nameEl.textContent = `${icon} ${name}`;
-
-      // Status-Badge
-      const badge = document.createElement("span");
-      let badgeText, badgeStyle;
-      if (hasError)   { badgeText = "❌ Fehler";  badgeStyle = "background:#ef444422;color:#ef4444;border:1px solid #ef444444"; }
-      else if (hasUpdate) { badgeText = "⟳ Update"; badgeStyle = "background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44"; }
-      else if (status === 'loaded')  { badgeText = `✅ v${mod?.version||"?"}${loadTime?` · ${loadTime}ms`:""}`;  badgeStyle = "background:#22c55e22;color:#22c55e;border:1px solid #22c55e44"; }
-      else if (status === 'loading') { badgeText = "⟳ Lädt..."; badgeStyle = "background:#38bdf822;color:#38bdf8;border:1px solid #38bdf844"; }
-      else { badgeText = "○ inaktiv";  badgeStyle = "background:#1c253522;color:#445566;border:1px solid #1c2535"; }
-      badge.style.cssText = `font-size:7px;padding:2px 6px;border-radius:8px;flex-shrink:0;white-space:nowrap;${badgeStyle}`;
-      badge.textContent = badgeText;
-
-      row1.append(cb, nameEl, badge);
-      row.appendChild(row1);
-
-      // Zeile 2: Beschreibung
       const descEl = document.createElement("div");
-      descEl.style.cssText = "font-size:7px;color:#334155;padding-left:22px";
+      descEl.style.cssText = "font-size:7.5px;color:#445566;margin-top:1px";
       descEl.textContent = desc;
-      row.appendChild(descEl);
-
-      // Zeile 3: Update-Button / Fehler-Info
-      if (hasUpdate && isActive) {
-        const updateRow = document.createElement("div");
-        updateRow.style.cssText = "display:flex;align-items:center;gap:6px;padding-left:22px";
-        const updateBtn = document.createElement("button");
-        updateBtn.style.cssText = "padding:2px 10px;border-radius:4px;border:1px solid #f59e0b;background:#f59e0b22;color:#f59e0b;font-size:7.5px;cursor:pointer";
-        updateBtn.textContent = "⟳ Jetzt neu laden (kein HA-Neustart)";
-        updateBtn.addEventListener("click", () => {
-          updateBtn.textContent = "⟳ Lädt..."; updateBtn.disabled = true;
-          BLEModuleRegistry.reload(id, this).then(() => this._rebuildSidebar?.());
-        });
-        updateRow.appendChild(updateBtn);
-        row.appendChild(updateRow);
-      }
-      if (hasError) {
-        const errEl = document.createElement("div");
-        errEl.style.cssText = "font-size:7px;color:#ef4444;padding-left:22px;font-family:monospace";
-        errEl.textContent = BLEModuleRegistry._errors[id];
-        row.appendChild(errEl);
-      }
-
+      const badge = document.createElement("span");
+      badge.style.cssText = "font-size:7px;padding:1px 5px;border-radius:8px;flex-shrink:0;" +
+        (isLoaded ? "background:#22c55e22;color:#22c55e;border:1px solid #22c55e44" :
+                    "background:#1c253522;color:#445566;border:1px solid #1c2535");
+      badge.textContent = isLoaded ? "● geladen" : "○ nicht geladen";
+      info.append(nameEl, descEl);
+      row.append(cb, info, badge);
       modBox.appendChild(row);
     });
 
-    // Info-Zeile
-    const infoNote = document.createElement("div");
-    infoNote.style.cssText = "font-size:7px;color:#334155;margin-top:2px;padding:4px 6px;background:#38bdf811;border-radius:4px;border:1px solid #38bdf822";
-    infoNote.textContent = "📁 Module: /config/www/ble_positioning/modules/ · Datei ersetzen → Update-Badge erscheint";
-    modBox.appendChild(infoNote);
+    // Hinweis: alle Module sind inline – kein separater Download nötig
+    const inlineNote = document.createElement("div");
+    inlineNote.style.cssText = "font-size:7.5px;color:#22c55e;margin-top:4px;padding:4px 6px;background:#22c55e11;border-radius:4px;border:1px solid #22c55e33";
+    inlineNote.textContent = "✅ Alle Module sind in der Card integriert – kein manuelles Kopieren nötig.";
+    modBox.appendChild(inlineNote);
     wrap.appendChild(modBox);
 
     // ── Modul-Konfiguration (wenn aktiviert) ─────────────────────────────────
@@ -16458,21 +18092,12 @@ _drawDoors() {
       { key:"ws_updates",          emoji:"⚡",  label:"WebSocket Live-Updates",      desc:"Sofortige Updates statt Polling (modernste Methode)" },
       { key:"ambient_light",       emoji:"💡",  label:"Umgebungslicht-Sensor",       desc:"Helligkeit automatisch anpassen (nur Chrome/HTTPS)" },
       { key:"ambient_auto_night",  emoji:"🌙",  label:"  └ Auto Nacht-Modus",        desc:"Nacht-Modus automatisch bei Dunkelheit aktivieren" },
-      { key:"show_weather",        emoji:"🌦",  label:"Wetter-Kulisse",              desc:"Animiertes Wetter außerhalb der Räume (Sonne, Wolken, Regen, Schnee, Nebel, Blitz)" },
-      { key:"weather_animate",     emoji:"🎞",  label:"  └ Wetter animieren",        desc:"Bewegung aus, wenn nur das Standbild gewünscht ist", def:true },
-      { key:"show_volume_ring",    emoji:"🔊",  label:"Lautstärke-Kranz",            desc:"Animierter Kranz um spielende Lautsprecher, Ausschlag nach Lautstärke", def:true },
-      { key:"cover_motion",        emoji:"🪟",  label:"Rollladen-Laufanzeige",       desc:"Zeigt mit laufenden Pfeilen an, dass ein Rollladen gerade fährt", def:true },
-      { key:"media_vinyl",         emoji:"💿",  label:"Medien als Schallplatte",     desc:"Album-Cover als drehende Platte mit Spektrum-Kranz statt Kachel", def:true },
-      { key:"media_spin",          emoji:"🔄",  label:"Platte dreht sich",           desc:"Drehung und Laufschrift bei langen Titeln; aus = stehendes Bild", def:true },
     ];
-    energyToggles.forEach(({key, emoji, label, desc, def}) => {
+    energyToggles.forEach(({key, emoji, label, desc}) => {
       const row = document.createElement("div");
       row.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933";
       const cb = document.createElement("input");
-      // def: Toggles, die ohne gesetzte Option aktiv sind, müssen auch
-      // angehakt erscheinen – sonst zeigt die Box "aus", während es läuft
-      cb.type = "checkbox";
-      cb.checked = this._opts?.[key] !== undefined ? !!this._opts[key] : !!def;
+      cb.type = "checkbox"; cb.checked = !!this._opts?.[key];
       cb.style.cssText = "accent-color:#f59e0b;width:13px;height:13px;flex-shrink:0";
       cb.addEventListener("change", () => {
         if (!this._opts) this._opts = {};
@@ -16498,34 +18123,6 @@ _drawDoors() {
       perfBox.appendChild(row);
     });
 
-    // ── Wetter-Entity mit Live-Status ────────────────────────────────
-    {
-      const wRow = document.createElement("div");
-      wRow.style.cssText = "padding:6px 0 2px 0";
-      const wLbl = document.createElement("div");
-      wLbl.style.cssText = "font-size:7px;color:#445566;margin-bottom:2px";
-      wLbl.textContent = "\u{1F326} Wetter-Entity (z.B. weather.home)";
-      const wInp = document.createElement("input");
-      wInp.type = "text";
-      wInp.placeholder = "weather.home";
-      // Fällt auf das alte Screensaver-Feld zurück, damit nichts doppelt gepflegt wird
-      wInp.value = this._opts?.weather_entity || this._opts?.ss_weather_entity || "";
-      wInp.style.cssText = "width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-      const wLive = document.createElement("div");
-      wLive.id = "weather-live";
-      wLive.style.cssText = "font-size:7px;color:#445566;margin-top:3px;font-family:'JetBrains Mono',monospace";
-      wInp.addEventListener("input", () => {
-        if (!this._opts) this._opts = {};
-        this._opts.weather_entity = wInp.value.trim();
-        this._saveOptions();
-        this._updateWeatherStatus();
-        this._markDirty();
-      });
-      wRow.append(wLbl, wInp, wLive);
-      perfBox.appendChild(wRow);
-      // Direkt beim Öffnen befüllen, nicht erst beim nächsten hass-Update
-      setTimeout(() => this._updateWeatherStatus(), 0);
-    }
     const perfHint = document.createElement("div");
     perfHint.style.cssText = "font-size:7.5px;color:#445566;margin-top:5px;line-height:1.6";
     perfHint.innerHTML =
@@ -16666,7 +18263,6 @@ _drawDoors() {
         { id:"comic",     label:"Comic",           icon:"(!)", desc:"Cel-Shading + Outlines" },
         { id:"painterly",  label:"Aquarell",         icon:"(p)", desc:"Malerisch + Pinselstrich" },
         { id:"realistic",  label:"Realistisch",      icon:"(R)", desc:"Texturen + 3D-Moebel" },
-        { id:"studio",     label:"Studio",           icon:"🏛", desc:"Wandvolumen, Sockelplatte, Architektur-Look" },
         { id:"floorplan",  label:"Draufsicht",        icon:"🗺",  desc:"Grundrissbild als Boden, keine Wände" },
       ];
       const themeGrid = document.createElement("div");
@@ -17470,9 +19066,6 @@ _drawDoors() {
   // ── Modul-System ─────────────────────────────────────────────────────────
 
   async _initModules() {
-    // base.js ZUERST laden (gemeinsame Basis für alle Module)
-    await BLEModuleRegistry.load('base', this);
-
     // Alle aktivierten Module laden
     const activeIds = Object.keys(this._opts || {})
       .filter(k => k.startsWith('module_') && this._opts[k] === true)
@@ -17848,17 +19441,6 @@ _drawDoors() {
   // ── FEATURE: NACHT-MODUS ─────────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
 
-  /* Ist es draußen dunkel? Unabhängig vom nightMode-Toggle, weil die
-     Wetter-Kulisse die Tageszeit auch dann braucht, wenn der Nacht-Modus
-     der Karte aus ist. */
-  _isDark() {
-    const s = this._hass?.states?.["sun.sun"]?.state;
-    if (s === "below_horizon") return true;
-    if (s === "above_horizon") return false;
-    const h = new Date().getHours();
-    return h >= 22 || h < 6;
-  }
-
   _checkNightMode() {
     if (!this._opts?.nightMode) {
       this._isNightMode = false;
@@ -17950,7 +19532,7 @@ _drawDoors() {
     const roomCount = {}; // roomIdx → [{name, color, cls}]
     sensors.forEach(sensor => {
       for (let ti=1; ti<=3; ti++) {
-        const target = this._getMmwaveTarget?.(sensor, ti);
+        const target = this._getMmwaveTarget(sensor, ti);
         if (!target?.present) continue;
         const room = this._getRoomForPoint(target.floor_mx, target.floor_my);
         if (!room) continue;
@@ -18501,11 +20083,6 @@ _drawDoors() {
   // ── AUTOMATISIERUNGS-ASSISTENT ────────────────────────────────────────────
   // ══════════════════════════════════════════════════════════════════════════
 
-  _sidebarKi() {
-    const m = BLEModuleRegistry._modules?.ki;
-    return m ? m.renderSidebar.call(m, this) : document.createElement('div');
-  }
-
   _sidebarAutomate() {
     const wrap = document.createElement("div");
     wrap.style.cssText = "padding:8px;display:flex;flex-direction:column;gap:6px";
@@ -19045,6 +20622,266 @@ trigger:
 
 
   // ── mmWave Personen im 3D-Modus ─────────────────────────────────────────
+  _drawMmwave3D(ctx, project, unitPx, wallH) {
+    const sensors = (this._pendingMmwave?.length > 0 ? this._pendingMmwave : this._data?.mmwave_sensors) || [];
+    if (!sensors.length) return;
+    const t = Date.now() / 1000;
+
+    sensors.forEach(sensor => {
+      if (sensor.hidden) return;  // ausgeblendet
+      if (sensor.mx == null || sensor.my == null) return;
+
+      // ── FOV-Kegel (flach auf Boden) ──────────────────────────────────────
+      if (sensor.show_fov !== false) {
+        const fovAngle = (sensor.fov_angle || 120) * Math.PI / 180;
+        const rot      = (sensor.rotation  || 0)   * Math.PI / 180;
+        const rangeM   = sensor.fov_range  || 6;
+        const col      = sensor.color || "#ff6b35";
+        const baseAngle = rot - Math.PI / 2;
+        const steps = 20;
+        // Polygon auf Boden-Ebene (z=0)
+        ctx.save();
+        ctx.globalAlpha = 0.13;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        const _sH3 = sensor.mount_height_m || 1.5;
+        const sc3 = project(sensor.mx, sensor.my, _sH3);  // Kegel-Spitze auf Montagehöhe
+        ctx.moveTo(sc3.x, sc3.y);
+        for (let i = 0; i <= steps; i++) {
+          const a = baseAngle - fovAngle/2 + (fovAngle * i / steps);
+          const px3 = sensor.mx + Math.cos(a) * rangeM;
+          const py3 = sensor.my + Math.sin(a) * rangeM;
+          const pp3 = project(px3, py3, 0);  // Boden-Auftreffpunkt
+          ctx.lineTo(pp3.x, pp3.y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 0.8;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      // ── Sensor-Körper auf korrekter Montagehöhe ─────────────────────────
+      const sensorH = sensor.mount_height_m || 1.5;
+      const sc3 = project(sensor.mx, sensor.my, sensorH);
+      // Verbindungslinie zum Boden
+      const scFloor = project(sensor.mx, sensor.my, 0);
+      const scol2 = sensor.color || "#ff6b35";
+      ctx.save();
+      ctx.strokeStyle = scol2 + "44";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(scFloor.x, scFloor.y); ctx.lineTo(sc3.x, sc3.y); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      const scol = sensor.color || "#ff6b35";
+      const pulse3 = 0.6 + 0.4 * Math.sin(t * 2.5);
+      ctx.save();
+      ctx.fillStyle = scol + "55";
+      ctx.beginPath(); ctx.arc(sc3.x, sc3.y, 8 * pulse3, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = scol;
+      ctx.beginPath(); ctx.arc(sc3.x, sc3.y, 4, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "white"; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.arc(sc3.x, sc3.y, 4, 0, Math.PI * 2); ctx.stroke();
+      ctx.restore();
+
+      // ── Targets / Personen ───────────────────────────────────────────────
+      const numTargets = sensor.targets || 3;
+      for (let ti = 1; ti <= numTargets; ti++) {
+        const target = this._getMmwaveTarget(sensor, ti);
+        if (!target || !target.present) continue;
+
+        const fx = target.floor_mx, fy = target.floor_my;
+        const tCol = ["#ff6b35","#00e5ff","#22c55e"][ti-1] || "#fff";
+        const tName = (sensor.target_names || [])[ti-1] || ("P" + ti);
+
+        // Klassifikation / Haltung
+        const clsResult = this._mmwaveClassify ? this._mmwaveClassify(sensor, target) : { cls:"unknown", confidence:0 };
+        const clsInfo   = this._mmwaveClasses  ? this._mmwaveClasses()[clsResult.cls] : null;
+        const col3d     = (this._opts?.mmwaveClassify && clsResult?.cls !== "unknown")
+          ? (clsInfo?.color || tCol) : tCol;
+        const cls3d     = clsResult?.cls || "unknown";
+
+        // ── Schatten auf Boden ────────────────────────────────────────────
+        const shadowP = project(fx, fy, 0);
+        ctx.save();
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        ctx.beginPath();
+        ctx.ellipse(shadowP.x, shadowP.y, 8 * unitPx/80, 3 * unitPx/80, 0, 0, Math.PI*2);
+        ctx.fill();
+        ctx.restore();
+
+        // ── 3D Personen-Figur (isometrisch, haltungsabhängig) ────────────
+        // Posture aus 2D-Overlay übernehmen (wird dort per _mmwaveDetectPosture gesetzt)
+        // Falls 3D ohne 2D läuft: Posture hier direkt ermitteln
+        if (!target._posture && this._mmwaveDetectPosture) {
+          target._posture = this._mmwaveDetectPosture(sensor, target);
+        }
+        const posture3d = target._posture || "standing";
+        const sc3d = unitPx / 80;
+        const hR = Math.max(4, 5 * sc3d);
+
+        ctx.save();
+        // Glow-Aura (immer auf Bodenhöhe)
+        const footP  = project(fx, fy, 0);
+        const aura3 = ctx.createRadialGradient(footP.x, footP.y, 0, footP.x, footP.y, 18 * sc3d);
+        aura3.addColorStop(0, col3d + "33"); aura3.addColorStop(1, col3d + "00");
+        ctx.fillStyle = aura3;
+        ctx.beginPath(); ctx.arc(footP.x, footP.y, 18 * sc3d, 0, Math.PI*2); ctx.fill();
+
+        if (posture3d === "lying") {
+          // ── Liegend: flacher Körper auf Boden-Ebene ──────────────────
+          const bodyP1 = project(fx - 0.25, fy, 0.15);
+          const bodyP2 = project(fx + 0.25, fy, 0.15);
+          const headLP = project(fx - 0.35, fy, 0.15);
+          ctx.strokeStyle = col3d; ctx.lineWidth = 6 * sc3d;
+          ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(bodyP1.x, bodyP1.y); ctx.lineTo(bodyP2.x, bodyP2.y); ctx.stroke();
+          ctx.fillStyle = col3d;
+          ctx.beginPath(); ctx.arc(headLP.x, headLP.y, hR * 1.1, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(headLP.x, headLP.y, hR * 1.1, 0, Math.PI*2); ctx.stroke();
+          // 💤 Symbol
+          const midP = project(fx, fy, 0.3);
+          ctx.font = `${10 * sc3d}px serif`; ctx.fillStyle = col3d + "cc";
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("💤", midP.x, midP.y - 8 * sc3d);
+
+        } else if (posture3d === "sitting") {
+          // ── Sitzend: Beine abgewinkelt, Torso kürzer, Kopf tiefer ────
+          const seatP  = project(fx, fy, 0.45);  // Sitzhöhe ~45cm
+          const shouldP= project(fx, fy, 0.85);  // Schultern ~85cm
+          const headP  = project(fx, fy, 1.15);  // Kopf ~1.15m (sitzend)
+          const armW3  = 5 * sc3d;
+
+          // Stuhlbein-Andeutung (kurze Linie)
+          ctx.strokeStyle = col3d + "55"; ctx.lineWidth = 2 * sc3d;
+          ctx.beginPath();
+          ctx.moveTo(footP.x - 3, footP.y); ctx.lineTo(seatP.x - 3, seatP.y);
+          ctx.moveTo(footP.x + 3, footP.y); ctx.lineTo(seatP.x + 3, seatP.y);
+          ctx.stroke();
+
+          // Torso (Sitz → Schultern)
+          ctx.strokeStyle = col3d; ctx.lineWidth = 4 * sc3d;
+          ctx.beginPath(); ctx.moveTo(seatP.x, seatP.y); ctx.lineTo(shouldP.x, shouldP.y); ctx.stroke();
+
+          // Arme auf Knien (leicht nach vorne/unten)
+          ctx.strokeStyle = col3d; ctx.lineWidth = 2 * sc3d;
+          ctx.beginPath();
+          const armMidP = project(fx, fy, 0.65);
+          ctx.moveTo(armMidP.x - armW3, armMidP.y);
+          ctx.lineTo(seatP.x - armW3 * 1.8, seatP.y + 3 * sc3d);
+          ctx.moveTo(armMidP.x + armW3, armMidP.y);
+          ctx.lineTo(seatP.x + armW3 * 1.8, seatP.y + 3 * sc3d);
+          ctx.stroke();
+
+          // Kopf
+          ctx.fillStyle = col3d;
+          ctx.beginPath(); ctx.arc(headP.x, headP.y, hR, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(headP.x, headP.y, hR, 0, Math.PI*2); ctx.stroke();
+          // Augen
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.beginPath(); ctx.arc(headP.x - hR*0.3, headP.y - hR*0.1, 1.5*sc3d, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headP.x + hR*0.3, headP.y - hR*0.1, 1.5*sc3d, 0, Math.PI*2); ctx.fill();
+
+        } else {
+          // ── Stehend (Standard) ────────────────────────────────────────
+          const hipP   = project(fx, fy, 0.55);
+          const shouldP= project(fx, fy, 1.05);
+          const headP  = project(fx, fy, 1.75);
+          const armW   = 5 * sc3d;
+          const armMid = project(fx, fy, 0.8);
+
+          // Beine
+          ctx.strokeStyle = col3d; ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(footP.x - 2, footP.y); ctx.lineTo(hipP.x - 2, hipP.y);
+          ctx.moveTo(footP.x + 2, footP.y); ctx.lineTo(hipP.x + 2, hipP.y);
+          ctx.stroke();
+
+          // Torso
+          ctx.strokeStyle = col3d; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.moveTo(hipP.x, hipP.y); ctx.lineTo(shouldP.x, shouldP.y); ctx.stroke();
+
+          // Arme
+          ctx.strokeStyle = col3d; ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(armMid.x - armW, armMid.y - 2);
+          ctx.lineTo(armMid.x - armW*2, armMid.y + (target.moving ? -3 : 2));
+          ctx.moveTo(armMid.x + armW, armMid.y - 2);
+          ctx.lineTo(armMid.x + armW*2, armMid.y + (target.moving ? 3 : 2));
+          ctx.stroke();
+
+          // Kopf
+          ctx.fillStyle = col3d;
+          ctx.beginPath(); ctx.arc(headP.x, headP.y, hR, 0, Math.PI*2); ctx.fill();
+          ctx.strokeStyle = "rgba(255,255,255,0.9)"; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(headP.x, headP.y, hR, 0, Math.PI*2); ctx.stroke();
+          // Augen
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.beginPath(); ctx.arc(headP.x - hR*0.3, headP.y - hR*0.1, 1.5*sc3d, 0, Math.PI*2); ctx.fill();
+          ctx.beginPath(); ctx.arc(headP.x + hR*0.3, headP.y - hR*0.1, 1.5*sc3d, 0, Math.PI*2); ctx.fill();
+        }
+
+        // Label-Referenzpunkt je nach Haltung
+        const labelRefP = posture3d === "lying"
+          ? project(fx - 0.35, fy, 0.35)
+          : posture3d === "sitting"
+            ? project(fx, fy, 1.25)
+            : project(fx, fy, 1.75);
+        const headP = labelRefP; // für Name-Label unten
+
+        // Bewegungspfeil
+        if (target.moving && Math.abs(target.speed) > 0.05) {
+          const ang3 = (target.angle || 0) * Math.PI/180 + (sensor.rotation||0)*Math.PI/180 - Math.PI/2;
+          const spd3 = Math.min(Math.abs(target.speed) * 0.5, 1.5);
+          const ap3  = project(fx + Math.cos(ang3)*spd3, fy + Math.sin(ang3)*spd3, 1.0);
+          ctx.strokeStyle = col3d; ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.moveTo(shouldP.x, shouldP.y); ctx.lineTo(ap3.x, ap3.y); ctx.stroke();
+          const ab3 = ang3 + Math.PI;
+          ctx.fillStyle = col3d;
+          ctx.beginPath();
+          ctx.moveTo(ap3.x, ap3.y);
+          ctx.lineTo(ap3.x + Math.cos(ab3+0.5)*5, ap3.y + Math.sin(ab3+0.5)*5);
+          ctx.lineTo(ap3.x + Math.cos(ab3-0.5)*5, ap3.y + Math.sin(ab3-0.5)*5);
+          ctx.closePath(); ctx.fill();
+        }
+
+        // ── Name-Label über dem Kopf ─────────────────────────────────────
+        const displayName3d = (this._opts?.mmwaveClassify && clsResult.cls !== "unknown")
+          ? (clsInfo?.icon || "") + " " + tName : tName;
+        const targetRoom3d = this._getRoomForPoint ? this._getRoomForPoint(fx, fy) : null;
+        const roomLabel3d  = targetRoom3d?.name || "";
+        const labelY3d = headP.y - hR - 4;
+        ctx.font = "bold 9px 'JetBrains Mono',monospace";
+        const nlw = ctx.measureText(displayName3d).width + 10;
+        ctx.fillStyle = "rgba(0,0,0,0.75)";
+        ctx.beginPath(); ctx.roundRect(headP.x - nlw/2, labelY3d - 13, nlw, 13, 3); ctx.fill();
+        ctx.strokeStyle = col3d + "88"; ctx.lineWidth = 1; ctx.stroke();
+        ctx.fillStyle = col3d;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(displayName3d, headP.x, labelY3d - 6.5);
+
+        if (roomLabel3d) {
+          ctx.font = "8px 'JetBrains Mono',monospace";
+          const rlw = ctx.measureText(roomLabel3d).width + 8;
+          ctx.fillStyle = "rgba(0,0,0,0.6)";
+          ctx.beginPath(); ctx.roundRect(headP.x - rlw/2, labelY3d - 27, rlw, 12, 3); ctx.fill();
+          ctx.fillStyle = col3d + "cc";
+          ctx.fillText(roomLabel3d, headP.x, labelY3d - 21);
+        }
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        ctx.restore();
+      }
+    });
+  }
+
+  // ── Textur-Lader: lädt alle konfigurierten Texturen als HTMLImage ─────
   _loadTextures() {
     const optKeys = { floor:"texFloor", wall_outer:"texWallOuter", wall_inner:"texWallInner", door:"texDoor" };
     Object.entries(optKeys).forEach(([k, optK]) => {
@@ -19420,43 +21257,6 @@ trigger:
         glassShimmer: true,
       },
 
-      // ── Studio: opake Materialien, Wandvolumen, Bodenplatte ─────────────
-      // Orientiert am Look klassischer Architektur-Renderings: helles
-      // Umfeld, warmes Licht von oben links, kein Durchscheinen.
-      studio: {
-        id: "studio", label: "Studio", icon: "🏛",
-        bg: "#e9ecef",
-        grid: { color: "rgba(90,105,125,0.07)", width: 0.5, step: 1 },
-        floor: () => "rgba(196,164,120,0.95)",
-        wall:  (rr,gg,bb,wa,brightness,isOuter) => {
-          // Außen fast weiß wie verputzte Fassade, innen leicht getönt
-          const base = isOuter ? 246 : 232;
-          const v = Math.round(base * (0.72 + 0.28 * brightness));
-          const r = Math.min(255, v + (isOuter ? 0 : Math.round((rr - 128) * 0.14)));
-          const g = Math.min(255, v + (isOuter ? 0 : Math.round((gg - 128) * 0.14)));
-          const b = Math.min(255, Math.round(v * 0.985)
-                             + (isOuter ? 0 : Math.round((bb - 128) * 0.14)));
-          return `rgba(${r},${g},${b},1)`;
-        },
-        ceiling:() => "rgba(0,0,0,0)",          // offenes Puppenhaus, keine Decke
-        edge:  () => "rgba(120,130,145,0.30)",
-        topEdge:() => "rgba(255,255,255,0.85)",
-        label: () => "rgba(70,80,95,0.85)",
-        door:  { frame:"#b08154", panel:"#8d6238", open:"#3fa96a", closed:"#8b7cc8" },
-        window:{ frame:"#cfd8e3", glass:"rgba(220,235,250,0.55)", open:"#e06c6c", closed:"#3fa96a", tilted:"#e0a13f" },
-        shutter:{ fill:"rgba(180,186,196,0.9)", slat:"rgba(140,148,160,0.5)", box:"rgba(160,166,178,0.95)" },
-        person:{ auraColor:"240,150,60", bodyColor:"#e88a34", headColor:"#f3b27a", labelBg:"rgba(60,70,85,0.85)" },
-        ble:   { color:"#2b9ec4", glow:"rgba(43,158,196,0.22)" },
-        decoTint: null,
-        aoCorners: true,
-        wallShading: "directional",
-        // Neu in 5.0: Wandstärke in Metern und Sockelplatte
-        wallDepth: 0.14,
-        basePlate: { fill:"#f4f6f8", edge:"rgba(150,160,175,0.5)", margin: 0.9,
-                     shadow:"rgba(60,72,92,0.22)" },
-        lightWarm: true,
-      },
-
       // ── Neon-Grid ────────────────────────────────────────────────────────
       neon: {
         id: "neon", label: "Neon-Grid", icon: "⚡",
@@ -19693,9 +21493,6 @@ trigger:
     // ── Background ───────────────────────────────────────────────────────────
     ctx.fillStyle = TH.bg;
     ctx.fillRect(0, 0, cw, ch);
-    // Wetter-Kulisse als Himmel hinter der Szene. Ohne Ausstanzen: die
-    // Räume werden gleich darüber gezeichnet und verdecken sie von selbst.
-    this._drawWeatherLayer(null, { iso: true, w: cw, h: ch, ctx });
 
     // ── Draufsicht-Theme: Grundriss-Bild als isometrischer Boden ────────────
     if (TH.floorplanMode && this._bgLoaded && this._bgImg?.complete) {
@@ -19745,37 +21542,6 @@ trigger:
         ctx.beginPath(); ctx.arc(x,y,1.4,0,Math.PI*2); ctx.fill();
       }
       ctx.restore();
-    }
-
-    // ── Sockelplatte (Studio-Theme) ────────────────────────────────────────
-    // Das Gebäude steht auf einer hellen Platte und wirft einen Schatten
-    // darauf, statt über einem Raster zu schweben.
-    if (TH.basePlate) {
-      const m  = TH.basePlate.margin ?? 0.8;
-      const bp = [project(-m,-m,0), project(fw+m,-m,0),
-                  project(fw+m,fh+m,0), project(-m,fh+m,0)];
-      // Schlagschatten nach rechts unten, Licht kommt von oben links.
-      // shadowBlur statt ctx.filter: letzteres fehlt in älteren
-      // iOS-WebViews, also auch in der Companion App.
-      const sOff = Math.max(3, unitPx * 0.13);
-      ctx.save();
-      ctx.shadowColor   = TH.basePlate.shadow;
-      ctx.shadowBlur    = Math.max(6, unitPx * 0.3);
-      ctx.shadowOffsetX = sOff;
-      ctx.shadowOffsetY = sOff * 0.6;
-      ctx.fillStyle = TH.basePlate.fill;
-      ctx.beginPath();
-      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
-      ctx.closePath(); ctx.fill();
-      ctx.restore();
-
-      ctx.fillStyle = TH.basePlate.fill;
-      ctx.beginPath();
-      bp.forEach((p,i) => i ? ctx.lineTo(p.x,p.y) : ctx.moveTo(p.x,p.y));
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = TH.basePlate.edge;
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
 
     // Floor grid
@@ -19952,32 +21718,6 @@ trigger:
           const [wr,wg,wb] = [Math.round(rr*brightness), Math.round(gg*brightness), Math.round(bb*brightness)];
           const wallPts = [f[w.bi[0]], f[w.bi[1]], t[w.ti[1]], t[w.ti[0]]];
 
-          // ── Wandvolumen: Krone und Außenseite (Studio-Theme) ──────────
-          // Ohne Dicke wirken Wände wie Pappe. Die Oberseite ist der
-          // Effekt, der ein Rendering wie ein gebautes Modell aussehen
-          // lässt. Nur an Außenwänden, innen stoßen die Räume aneinander.
-          const wd = TH.wallDepth || 0;
-          if (wd > 0 && isOuterWall) {
-            const c0 = corners[w.bi[0]], c1 = corners[w.bi[1]];
-            const ox = w.nx * wd, oy = w.ny * wd;
-            const to0 = project(c0[0] + ox, c0[1] + oy, h);
-            const to1 = project(c1[0] + ox, c1[1] + oy, h);
-            const bo0 = project(c0[0] + ox, c0[1] + oy, 0);
-            const bo1 = project(c1[0] + ox, c1[1] + oy, 0);
-            // Außenfläche
-            ctx.fillStyle = TH.wall(rr,gg,bb,1,Math.min(1,brightness+0.12),true);
-            ctx.beginPath();
-            [bo0, bo1, to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-            ctx.closePath(); ctx.fill();
-            // Krone, am hellsten weil sie zum Licht zeigt
-            ctx.fillStyle = TH.wall(rr,gg,bb,1,1.0,true);
-            ctx.beginPath();
-            [t[w.ti[0]], t[w.ti[1]], to1, to0].forEach((p,i) => i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
-            ctx.closePath(); ctx.fill();
-            ctx.strokeStyle = TH.edge(rr,gg,bb); ctx.lineWidth = 0.7;
-            ctx.stroke();
-          }
-
           // Außenwand erkennen: kein Nachbar-Raum auf Normalenseite
           const wallMidX = ((w.nx === 0)
             ? (x1+x2)/2
@@ -20064,8 +21804,8 @@ trigger:
         ctx.font = `italic ${fs}px Georgia, serif`;
         ctx.fillStyle = TH.label(rr,gg,bb);
         ctx.textAlign="center"; ctx.textBaseline="middle";
-        ctx.save(); ctx.translate(fc.x,fc.y); ctx.rotate((Math.random()-0.5)*0.06); ctx.translate(-fc.x,-fc.y);
-        ctx.fillText(name||"", fc.x, fc.y); ctx.restore();
+        ctx.translate(fc.x,fc.y); ctx.rotate((Math.random()-0.5)*0.06); ctx.translate(-fc.x,-fc.y);
+        ctx.fillText(name||"", fc.x, fc.y);
       } else {
         ctx.font = `bold ${fs}px 'JetBrains Mono',monospace`;
         if (TH.id === "arch" && TH.accentColors) {
@@ -20318,21 +22058,6 @@ trigger:
         // Bottom rail highlight
         ctx.strokeStyle="rgba(180,180,200,0.8)"; ctx.lineWidth=1.5;
         ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
-        // ── Fährt gerade? Pfeile laufen die Bahn entlang ──────────
-        const _mot3 = this._opts?.cover_motion !== false
-          ? this._coverMotion(win.cover_entity) : null;
-        if (_mot3) {
-          const _acc3 = _mot3.dir > 0 ? "#f59e0b" : "#38bdf8";
-          const _mt = project(wmx, wmy, zTop);
-          const _mb = project(wmx, wmy, rolloZ);
-          this._drawMotionChevrons(ctx, _mt.x, _mt.y, _mb.x, _mb.y, _mot3.dir, _acc3);
-          // Laufende Kante hervorheben
-          const _p3 = 0.45 + 0.55 * Math.abs(Math.sin(Date.now() / 320));
-          ctx.save();
-          ctx.strokeStyle = _acc3; ctx.globalAlpha = _p3; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo(r0b.x,r0b.y); ctx.lineTo(r1b.x,r1b.y); ctx.stroke();
-          ctx.restore();
-        }
       }
 
       // ── Label ──
@@ -20763,8 +22488,8 @@ trigger:
 
     // ── mmWave Personen (3D) ─────────────────────────────────────────────
     if (this._opts?.showMmwave !== false) {
-      this._drawMmwave3D?.(ctx, project, unitPx, wallH);
-      if (this._mode === "view") this._updateMmwavePersonsSidebar?.();
+      this._drawMmwave3D(ctx, project, unitPx, wallH);
+      if (this._mode === "view") this._updateMmwavePersonsSidebar();
     }
     // DPR-Skalierung aufheben
     ctx.restore();
@@ -20956,7 +22681,7 @@ trigger:
       await this._loadData();
       this._showToast("✓ Info-Sensoren gespeichert");
     } catch(e) {
-      this._showToast("✗ " + this._errText(e));
+      this._showToast("✗ " + (e?.body?.message || e?.message || e));
     }
     this._rebuildSidebar();
   }

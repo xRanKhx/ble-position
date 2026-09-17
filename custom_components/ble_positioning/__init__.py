@@ -241,11 +241,10 @@ def _copy_js_files(hass: HomeAssistant) -> None:
     import shutil, os
     www_dir = os.path.join(hass.config.config_dir, "www", _WWW_SUBDIR)
     os.makedirs(www_dir, exist_ok=True)
-
-    # Haupt-Dateien kopieren
     for src_path, filename in [
         (_CARD_JS,    "ble-positioning-card.js"),
         (_TRACKER_JS, "ble-positioning-tracker.js"),
+
     ]:
         dst = os.path.join(www_dir, filename)
         try:
@@ -253,21 +252,6 @@ def _copy_js_files(hass: HomeAssistant) -> None:
             _LOGGER.info("BLE Positioning: %s kopiert", filename)
         except Exception as exc:
             _LOGGER.warning("BLE Positioning: Konnte %s nicht kopieren: %s", filename, exc)
-
-    # Module-Unterordner automatisch anlegen und befüllen
-    modules_src = _FRONTEND_DIR / "modules"
-    modules_dst = os.path.join(www_dir, "modules")
-    if modules_src.is_dir():
-        os.makedirs(modules_dst, exist_ok=True)
-        for module_file in modules_src.glob("*.js"):
-            dst = os.path.join(modules_dst, module_file.name)
-            try:
-                shutil.copy2(str(module_file), dst)
-                _LOGGER.info("BLE Positioning: modules/%s kopiert", module_file.name)
-            except Exception as exc:
-                _LOGGER.warning("BLE Positioning: Konnte modules/%s nicht kopieren: %s", module_file.name, exc)
-    else:
-        _LOGGER.warning("BLE Positioning: modules/ Verzeichnis nicht gefunden in %s", _FRONTEND_DIR)
 
 
 async def _options_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -728,8 +712,10 @@ class BLEUpdateDekoView(_Base):
         if not self._check(entry_id): return self.json_message("Not found", 404)
         try: d = await request.json()
         except Exception: return self.json_message("Invalid body", 400)
-        await self._c.async_update_decos(d.get("decos", []))
+        self._c.decos = d.get("decos", [])
+        await self._c.async_save_floor_store()
         return self.json({"status": "ok"})
+
 
 class BLEUpdateEnergyView(_Base):
     url  = "/api/ble_positioning/{entry_id}/energy"
