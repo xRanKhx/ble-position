@@ -167,8 +167,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # HTTP API views
     for view_cls in [
-        BLECardDataView, BLECardDataBaseView, BLECardDataTrackingView, BLECardDataMmwaveView,
-        BLECaptureFPView, BLEClearFPView,
+        BLECardDataView, BLECaptureFPView, BLEClearFPView,
         BLEAddDeviceView, BLEUpdateDeviceView,
         BLEUpdateAlarmsView,
         BLEUpdateEnergyView,
@@ -409,39 +408,6 @@ class BLECardDataView(_Base):
         if not self._check(entry_id):
             return self.json_message("Not found", 404)
         return self.json(self._c.get_card_data())
-
-
-class BLECardDataBaseView(_Base):
-    """Segment: layout, lights, rooms, decos – immer nötig."""
-    url  = "/api/ble_positioning/{entry_id}/card_data/base"
-    name = "api:ble:card_data_base"
-
-    async def get(self, request, entry_id: str):
-        if not self._check(entry_id):
-            return self.json_message("Not found", 404)
-        return self.json(self._c.get_card_data_base())
-
-
-class BLECardDataTrackingView(_Base):
-    """Segment: devices, scanners, fingerprints – nur bei aktivem BLE-Tracking."""
-    url  = "/api/ble_positioning/{entry_id}/card_data/tracking"
-    name = "api:ble:card_data_tracking"
-
-    async def get(self, request, entry_id: str):
-        if not self._check(entry_id):
-            return self.json_message("Not found", 404)
-        return self.json(self._c.get_card_data_tracking())
-
-
-class BLECardDataMmwaveView(_Base):
-    """Segment: mmwave_sensors – nur bei aktivem mmWave-Modul."""
-    url  = "/api/ble_positioning/{entry_id}/card_data/mmwave"
-    name = "api:ble:card_data_mmwave"
-
-    async def get(self, request, entry_id: str):
-        if not self._check(entry_id):
-            return self.json_message("Not found", 404)
-        return self.json(self._c.get_card_data_mmwave())
 
 
 class BLECaptureFPView(_Base):

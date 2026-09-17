@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "3.6.0";
+const CARD_VERSION = "2.11.79";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -147,63 +147,6 @@ const CARD_CSS = `
 }
 .ss-btn:hover { background: #1e293b; border-color: #00e5ff; color: #00e5ff; }
 .ss-hint { font-size: 8px; color: #334155; text-align: right; pointer-events: none; }
-
-/* ── Kiosk-Modus ── */
-:host(.kiosk-mode) .card-header { display: none !important; }
-:host(.kiosk-mode) .sidebar      { display: none !important; }
-:host(.kiosk-mode) .sidebar-toggle { display: none !important; }
-:host(.kiosk-mode) .canvas-wrap  { border-radius: 0; }
-
-/* ── Schnellzugriff-Leiste (Kiosk-Shortbar) ── */
-.kiosk-bar {
-  position: absolute; z-index: 30;
-  display: flex; gap: 6px; align-items: center;
-  transition: opacity 0.2s, transform 0.25s;
-}
-.kiosk-bar.pos-bottom {
-  bottom: 14px; left: 50%; transform: translateX(-50%);
-  flex-direction: row;
-}
-.kiosk-bar.pos-right {
-  right: 14px; top: 50%; transform: translateY(-50%);
-  flex-direction: column;
-}
-.kiosk-bar.pos-slide-right {
-  right: 0; top: 50%; transform: translateY(-50%) translateX(calc(100% - 14px));
-  flex-direction: column;
-  background: var(--surf); border-radius: 8px 0 0 8px;
-  padding: 8px 6px; border: 1px solid var(--border); border-right: none;
-}
-.kiosk-bar.pos-slide-right:hover,
-.kiosk-bar.pos-slide-right.open { transform: translateY(-50%) translateX(0); }
-.kiosk-bar.pos-overlay {
-  top: 50%; left: 50%; transform: translate(-50%, -50%);
-  flex-wrap: wrap; justify-content: center;
-  pointer-events: all; max-width: 80%;
-}
-.kiosk-btn {
-  display: flex; flex-direction: column; align-items: center; gap: 3px;
-  padding: 8px 12px; border-radius: 8px;
-  background: rgba(13,18,25,0.82); border: 1px solid #1c2535;
-  color: var(--text); cursor: pointer; text-decoration: none;
-  font-size: 9px; backdrop-filter: blur(6px);
-  box-shadow: 0 2px 8px #0006; white-space: nowrap;
-  pointer-events: all; min-width: 48px;
-  transition: background 0.15s, border-color 0.15s;
-}
-.kiosk-btn:hover  { background: #1e293b; border-color: #00e5ff; color: #00e5ff; }
-.kiosk-btn .kb-icon { font-size: 18px; line-height: 1; }
-.kiosk-btn .kb-label { font-size: 8px; color: #94a3b8; }
-
-/* ── Wetter-Block im Screensaver ── */
-.ss-weather {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 11px; color: #94a3b8;
-  pointer-events: none;
-}
-.ss-weather-icon { font-size: 18px; }
-.ss-weather-temp { font-size: 14px; font-weight: 600; color: #e2e8f0; }
-.ss-weather-detail { font-size: 8px; color: #445566; }
 
 .mode-tab {
   padding: 3px 9px;
@@ -522,25 +465,877 @@ textarea {
 //   isActive(card):     boolean      – Saison-Check etc.
 // ════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════
-// INLINE MODULE – lazy evaluiert erst bei Aktivierung
-// Der Code liegt als String vor → kein Parse-Overhead beim Start
-// eval() erst wenn Nutzer das Modul in ⚙ OPT aktiviert
+// INLINE MODULE – werden bei Aktivierung registriert, nicht beim Start
+// Kein separater Download nötig – alles in einer Datei
 // ════════════════════════════════════════════════════════════════════════
 
-// Modul-Code als Strings (werden erst bei Aktivierung geparst)
-const _MODULE_SOURCES = {
-  energie: "// \u2500\u2500 Presets f\u00fcr bekannte Solar-Systeme \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\nconst ENERGIE_PRESETS = {\n  generic: {\n    label: \"Generisch (freie Felder)\",\n    icon: \"\u26a1\",\n    fields: {}\n  },\n  epever: {\n    label: \"Epever MPPT (ESPHome / ep-ever Integration)\",\n    icon: \"\u2600\",\n    fields: {\n      solar_power:    \"sensor.epever_solar_w\",\n      solar_voltage:  \"sensor.epever_solar_v\",\n      solar_current:  \"sensor.epever_solar_a\",\n      solar_max_v:    \"sensor.epever_solar_max\",\n      battery_soc:    \"sensor.epever_batt_soc\",\n      battery_volt:   \"sensor.epever_batt_v\",\n      battery_curr:   \"sensor.epever_batt_a\",\n      battery_power:  \"sensor.epever_batt_w\",\n      battery_temp:   \"sensor.epever_batt_temp\",\n      battery_state:  \"sensor.epever_batt_state\",\n      charge_state:   \"sensor.epever_charger_state\",\n      load_power:     \"sensor.epever_load_w\",\n      load_voltage:   \"sensor.epever_load_v\",\n      load_current:   \"sensor.epever_load_a\",\n      load_switch:    \"switch.epever_load_state\",\n      gen_day:        \"sensor.epever_gen_day\",\n      gen_month:      \"sensor.epever_gen_mon\",\n      gen_total:      \"sensor.epever_gen_tot\",\n      cons_day:       \"sensor.epever_cons_day\",\n      device_temp:    \"sensor.epever_device_temp\",\n    }\n  },\n  victron_smartshunt: {\n    label: \"Victron SmartShunt (BLE via ESP32)\",\n    icon: \"\ud83d\udd0b\",\n    // Entity-Namen vom esp32-bluetooth-proxy (BLE-Integration)\n    // Ger\u00e4tename \"Victronsmart\" \u2192 Entity-Prefix anpassen!\n    fields: {\n      battery_soc:       \"sensor.victronsmart_battery_soc\",\n      battery_volt:      \"sensor.victronsmart_battery_voltage\",\n      battery_curr:      \"sensor.victronsmart_battery_current\",\n      battery_power:     \"sensor.victronsmart_battery_power\",\n      battery_state:     \"sensor.victronsmart_battery_state\",\n      consumed_ah:       \"sensor.victronsmart_consumed_ah\",\n      time_to_go:        \"sensor.victronsmart_time_remaining\",\n      // Relais A-D (Wechselrichter, 12V Dose, 230V Steckdose, Reserve)\n      relay_a:           \"switch.victronsmart_relay_a\",   // Wechselrichter\n      relay_b:           \"switch.victronsmart_relay_b\",   // 12V Dose\n      relay_c:           \"switch.victronsmart_relay_c\",   // 230V Steckdosen\n      relay_d:           \"switch.victronsmart_relay_d\",   // Reserviert\n    }\n  },\n  victron: {\n    label: \"Victron (VE.Direct/Cerbo)\",\n    icon: \"\ud83d\udd0b\",\n    fields: {\n      solar_power:   \"sensor.victron_pv_power\",\n      battery_soc:   \"sensor.victron_battery_soc\",\n      battery_volt:  \"sensor.victron_battery_voltage\",\n      load_power:    \"sensor.victron_ac_consumption\",\n      grid_power:    \"sensor.victron_grid_power\",\n      charge_state:  \"sensor.victron_battery_state\",\n    }\n  },\n  hybrid_inverter: {\n    label: \"Hybrid-Wechselrichter (Off-Grid, PI30/SBU)\",\n    icon: \"\ud83d\udd0c\",\n    // F\u00fcr Noname-Wechselrichter mit PI30-Protokoll (SBU first, Off Grid)\n    fields: {\n      solar_power:        \"sensor.hybridwechselrichter_pv_input_power\",\n      solar_voltage:      \"sensor.hybridwechselrichter_pv_input_voltage\",\n      solar_current:      \"sensor.hybridwechselrichter_pv_input_current\",\n      solar_charging:     \"sensor.hybridwechselrichter_pv_charging_power\",\n      solar_total:        \"sensor.hybridwechselrichter_pv_generation_sum\",\n      battery_soc:        \"sensor.hybridwechselrichter_battery_percent\",\n      battery_volt:       \"sensor.hybridwechselrichter_battery_voltage\",\n      battery_curr:       \"sensor.hybridwechselrichter_battery_load\",\n      charge_state:       \"sensor.hybridwechselrichter_inverter_operation_mode\",\n      load_power:         \"sensor.hybridwechselrichter_ac_out_watt\",\n      load_voltage:       \"sensor.hybridwechselrichter_ac_out_voltage\",\n      load_percent:       \"sensor.hybridwechselrichter_ac_out_percent\",\n      inverter_mode:      \"sensor.hybridwechselrichter_inverter_operation_mode\",\n      output_priority:    \"sensor.hybridwechselrichter_output_source_priority\",\n      inverter_sw:        \"switch.victronsmart_relay_a\",  // Relais A = WR an/aus\n    }\n  },\n  fronius: {\n    label: \"Fronius Solar\",\n    icon: \"\ud83c\udf1e\",\n    fields: {\n      solar_power:   \"sensor.fronius_power_photovoltaics\",\n      grid_power:    \"sensor.fronius_power_grid\",\n      battery_soc:   \"sensor.fronius_state_of_charge\",\n      load_power:    \"sensor.fronius_power_load\",\n      charge_state:  \"sensor.fronius_storage_state\",\n    }\n  },\n  shelly_em: {\n    label: \"Shelly EM Stromz\u00e4hler\",\n    icon: \"\ud83d\udcca\",\n    fields: {\n      grid_power:    \"sensor.shelly_em_channel_1_power\",\n      grid_energy:   \"sensor.shelly_em_channel_1_energy\",\n      load_power:    \"sensor.shelly_em_channel_2_power\",\n    }\n  },\n};\n\n// \u2500\u2500 Power-Routing Stufen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n// Nutzer definiert Priorit\u00e4ten: \u00dcberschuss wird in dieser Reihenfolge geleitet\nconst DEFAULT_ROUTING = [\n  { id:\"battery\",   name:\"Batterie laden\",    icon:\"\ud83d\udd0b\", threshold_w: 0   },\n  { id:\"boiler\",    name:\"Boiler/Warmwasser\", icon:\"\u2668\",  threshold_w: 200 },\n  { id:\"wallbox\",   name:\"E-Auto Wallbox\",    icon:\"\ud83d\ude97\", threshold_w: 1400},\n  { id:\"pool\",      name:\"Pool-Pumpe\",        icon:\"\ud83c\udfca\", threshold_w: 200 },\n  { id:\"powerbank\", name:\"Powerbank\",         icon:\"\ud83d\udcf1\", threshold_w: 10  },\n];\n\n// Relais-Definitionen f\u00fcr Victron SmartShunt (Relais A-D)\n// Wird angezeigt wenn victron_smartshunt Preset aktiv\nconst VICTRON_RELAIS = [\n  {\n    id: \"relay_a\",\n    name: \"Relais A \u2013 Wechselrichter\",\n    icon: \"\ud83d\udd0c\",\n    desc: \"Hybrid-WR ein/aus (Leerlauf ~30W \u2192 im Winter aus!)\",\n    threshold_w: 300,       // WR nur bei >300W Solar\n    min_batt_pct: 40,       // Und Batterie > 40%\n    auto_off_batt_pct: 20,  // Ausschalten bei < 20%\n    seasonal: false,        // Ganzj\u00e4hrig steuerbar\n  },\n  {\n    id: \"relay_b\",\n    name: \"Relais B \u2013 12V Dose\",\n    icon: \"\ud83d\udd0b\",\n    desc: \"Winter: Batterie-Heizung | Sommer: Powerbank laden\",\n    summer_threshold_w: 50,  // Sommer: ab 50W \u00dcberschuss\n    winter_auto: true,        // Winter: automatisch wenn Temp < 5\u00b0C\n    winter_temp_entity: \"\",   // optional: Au\u00dfentemperatur-Sensor\n  },\n  {\n    id: \"relay_c\",\n    name: \"Relais C \u2013 230V Steckdose\",\n    icon: \"\ud83d\udd0c\",\n    desc: \"Garten-Akkus / Werkzeug laden (braucht WR aktiv!)\",\n    threshold_w: 400,\n    requires_relay: \"relay_a\",  // Nur wenn WR (Relay A) an\n  },\n  {\n    id: \"relay_d\",\n    name: \"Relais D \u2013 Reserviert\",\n    icon: \"\u2753\",\n    desc: \"Noch nicht belegt\",\n    threshold_w: 0,\n  },\n];\n\n// \u2500\u2500 Modul-Objekt \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\nconst EnergieModul = {\n  id:          \"energie\",\n  name:        \"Energie\",\n  icon:        \"\u26a1\",\n  tabId:       \"energie_modul\",\n  version:     \"1.0.0\",\n  description: \"Solar, Verbrauch, Power-Routing\",\n\n  _card:    null,\n  _pollBuf: [],   // Letzten N Werte f\u00fcr Sparkline\n  _lastData: {},\n\n  // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  init(card) {\n    this._card = card;\n    console.info(\"[BLE Energie] Modul initialisiert\");\n    // Saison-Check beim Start\n    if (!this.isActive(card)) {\n      console.info(\"[BLE Energie] Modul au\u00dferhalb der konfigurierten Saison \u2013 pausiert\");\n    }\n  },\n\n  destroy() {\n    this._card = null;\n    this._pollBuf = [];\n    this._lastData = {};\n  },\n\n  // Saison-Check (opt-in, default: immer aktiv)\n  isActive(card) {\n    const cfg = card?._opts?.energie_cfg || {};\n    if (!cfg.saison_active) return true; // Saison-Modus aus \u2192 immer aktiv\n    const now = new Date();\n    const mm = now.getMonth() + 1; // 1-12\n    const from = parseInt(cfg.saison_from || 1);\n    const to   = parseInt(cfg.saison_to   || 12);\n    if (from <= to) return mm >= from && mm <= to;\n    return mm >= from || mm <= to; // Jahreswechsel (z.B. Nov-Feb)\n  },\n\n  // \u2500\u2500 Poll-Hook: Werte aus HA lesen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onPoll(data, card) {\n    const cfg  = card?._opts?.energie_cfg || {};\n    const hass = card?._hass;\n    if (!hass) return;\n\n    const get = (key) => {\n      const eid = cfg[key];\n      if (!eid) return null;\n      const s = hass.states[eid];\n      if (!s || s.state === 'unavailable' || s.state === 'unknown') return null;\n      return parseFloat(s.state) || null;\n    };\n\n    // Epever MPPT Daten\n    const epever_solar = get('solar_power');\n    // Hybrid-WR Solar (addieren wenn beide vorhanden)\n    const wr_solar = get('solar_charging') || get('solar_power');\n    const total_solar = (epever_solar || 0) + (wr_solar && wr_solar !== epever_solar ? wr_solar : 0) || epever_solar || wr_solar;\n\n    // Victron SmartShunt: pr\u00e4zise Batterie-Daten (bevorzugt vor Epever)\n    const vict_soc  = get('victron_soc')  || get('battery_soc');\n    const vict_volt = get('victron_volt') || get('battery_volt');\n    const vict_curr = get('victron_curr') || get('battery_curr');\n\n    // Wechselrichter Status\n    const wr_mode = cfg.inverter_mode ? hass.states[cfg.inverter_mode]?.state : null;\n    const wr_active = wr_mode && !['Standby','standby','off','Off'].includes(wr_mode);\n\n    this._lastData = {\n      solar_w:      total_solar,\n      solar_v:      get('solar_voltage'),\n      batt_pct:     vict_soc,\n      batt_v:       vict_volt,\n      batt_curr:    vict_curr,\n      batt_w:       get('battery_power'),\n      batt_temp:    get('battery_temp'),\n      batt_state:   cfg.battery_state ? hass.states[cfg.battery_state]?.state : null,\n      load_w:       get('load_power'),\n      load_v:       get('load_voltage'),\n      load_pct:     get('load_percent'),\n      grid_w:       get('grid_power'),\n      charge:       cfg.charge_state ? hass.states[cfg.charge_state]?.state : null,\n      inverter_on:  wr_active,\n      inverter_mode: wr_mode,\n      gen_day:      get('gen_day'),\n      gen_month:    get('gen_month'),\n      cons_day:     get('cons_day'),\n      device_temp:  get('device_temp'),\n      // Relais-Status\n      relay_a: cfg.relay_a ? hass.states[cfg.relay_a]?.state : null,\n      relay_b: cfg.relay_b ? hass.states[cfg.relay_b]?.state : null,\n      relay_c: cfg.relay_c ? hass.states[cfg.relay_c]?.state : null,\n      relay_d: cfg.relay_d ? hass.states[cfg.relay_d]?.state : null,\n      ts: Date.now(),\n    };\n\n    // Sparkline-Buffer (letzten 60 Werte)\n    if (this._lastData.solar_w !== null) {\n      this._pollBuf.push({ ts: Date.now(), w: this._lastData.solar_w });\n      if (this._pollBuf.length > 60) this._pollBuf.shift();\n    }\n\n    // Power-Routing: \u00dcberschuss berechnen und Automationen triggern\n    if (cfg.routing_active) this._checkRouting(card);\n  },\n\n  // \u2500\u2500 Power-Routing Logik \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _checkRouting(card) {\n    const d    = this._lastData;\n    const cfg  = card?._opts?.energie_cfg || {};\n    const hass = card?._hass;\n    if (!hass || d.solar_w === null) return;\n\n    const surplus = (d.solar_w || 0) - (d.load_w || 0);\n    const routing = cfg.routing || DEFAULT_ROUTING;\n\n    routing.forEach(step => {\n      const entity = cfg[`routing_${step.id}_entity`];\n      if (!entity) return;\n      const shouldOn = surplus >= step.threshold_w;\n      const curState = hass.states[entity]?.state;\n      if (shouldOn && curState === 'off') {\n        hass.callService('switch', 'turn_on', { entity_id: entity })\n          .catch(() => {});\n      } else if (!shouldOn && curState === 'on' && cfg[`routing_${step.id}_auto_off`]) {\n        hass.callService('switch', 'turn_off', { entity_id: entity })\n          .catch(() => {});\n      }\n    });\n  },\n\n  // \u2500\u2500 Sidebar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildSidebar(card) {\n    const wrap = document.createElement('div');\n    wrap.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:8px';\n\n    const hdr = document.createElement('div');\n    hdr.style.cssText = 'font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:1px';\n    hdr.textContent = '\u26a1 ENERGIE';\n    wrap.appendChild(hdr);\n\n    if (!this.isActive(card)) {\n      const offNote = document.createElement('div');\n      offNote.style.cssText = 'padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center';\n      const cfg = card?._opts?.energie_cfg || {};\n      offNote.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from || 1}.\u2013${cfg.saison_to || 12}. Monat)`;\n      wrap.appendChild(offNote);\n      return wrap;\n    }\n\n    const d = this._lastData;\n\n    // \u2500\u2500 Solar-\u00dcbersicht \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const solarBox = this._mkBox('Solar & Batterie');\n    const grid2 = document.createElement('div');\n    grid2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px';\n\n    [\n      { label:'Solar',    val: d.solar_w != null ? `${Math.round(d.solar_w)} W` : '\u2013', color:'#f59e0b', icon:'\u2600' },\n      { label:'Batterie', val: d.batt_pct != null ? `${Math.round(d.batt_pct)} %` : '\u2013', color: this._battColor(d.batt_pct), icon:'\ud83d\udd0b' },\n      { label:'Verbrauch',val: d.load_w  != null ? `${Math.round(d.load_w)} W` : '\u2013', color:'#94a3b8', icon:'\ud83d\udca1' },\n      { label:'Netz',     val: d.grid_w  != null ? `${d.grid_w >= 0 ? '+' : ''}${Math.round(d.grid_w)} W` : '\u2013', color: d.grid_w >= 0 ? '#22c55e' : '#ef4444', icon:'\ud83d\udd0c' },\n    ].forEach(({label, val, color, icon}) => {\n      const tile = document.createElement('div');\n      tile.style.cssText = `background:var(--bg);border-radius:6px;padding:6px 8px;border:1px solid #1c2535`;\n      tile.innerHTML = `<div style=\"font-size:7px;color:#445566;margin-bottom:2px\">${icon} ${label}</div>\n        <div style=\"font-size:14px;font-weight:700;color:${color}\">${val}</div>`;\n      grid2.appendChild(tile);\n    });\n    solarBox.appendChild(grid2);\n\n    // Batterie-Ladebalken\n    if (d.batt_pct != null) {\n      const barWrap = document.createElement('div');\n      barWrap.style.cssText = 'height:6px;background:#1c2535;border-radius:3px;overflow:hidden;margin-bottom:4px';\n      const bar = document.createElement('div');\n      bar.style.cssText = `height:100%;width:${Math.min(100,d.batt_pct)}%;background:${this._battColor(d.batt_pct)};border-radius:3px;transition:width 0.5s`;\n      barWrap.appendChild(bar);\n      solarBox.appendChild(barWrap);\n    }\n\n    // Sparkline Solar (letzten 60 Polls)\n    if (this._pollBuf.length > 2) {\n      const spark = this._mkSparkline(this._pollBuf.map(p => p.w), '#f59e0b', 180, 32);\n      solarBox.appendChild(spark);\n    }\n\n    // \u00dcberschuss-Anzeige\n    if (d.solar_w != null && d.load_w != null) {\n      const surplus = d.solar_w - d.load_w;\n      const surEl = document.createElement('div');\n      surEl.style.cssText = 'text-align:center;font-size:8px;margin-top:4px';\n      surEl.innerHTML = `\u00dcberschuss: <span style=\"font-weight:700;color:${surplus >= 0 ? '#22c55e' : '#ef4444'}\">${surplus >= 0 ? '+' : ''}${Math.round(surplus)} W</span>`;\n      solarBox.appendChild(surEl);\n    }\n\n    wrap.appendChild(solarBox);\n\n    // \u2500\u2500 Wechselrichter & Relais Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const cfg = card?._opts?.energie_cfg || {};\n    const hasRelais = cfg.relay_a || cfg.relay_b || cfg.relay_c || cfg.relay_d;\n    if (hasRelais) {\n      const relBox = this._mkBox('Relais & Verbraucher');\n\n      // WR-Status prominent anzeigen\n      if (cfg.relay_a) {\n        const wrOn = d.relay_a === 'on';\n        const wrRow = document.createElement('div');\n        wrRow.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:6px;background:${wrOn ? '#22c55e18' : '#ef444418'};border:1px solid ${wrOn ? '#22c55e44' : '#ef444444'}`;\n        wrRow.innerHTML = `<span style=\"font-size:18px\">\ud83d\udd0c</span>\n          <div style=\"flex:1\">\n            <div style=\"font-size:9px;font-weight:700;color:var(--text)\">Wechselrichter (230V)</div>\n            <div style=\"font-size:7.5px;color:#445566\">Leerlauf ~30W \u00b7 Relay A</div>\n          </div>\n          <span style=\"font-size:11px;font-weight:700;color:${wrOn ? '#22c55e' : '#ef4444'}\">${wrOn ? '\u25cf AN' : '\u25cb AUS'}</span>`;\n        // Toggle-Button\n        const wrBtn = document.createElement('button');\n        wrBtn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${wrOn ? '#ef4444' : '#22c55e'};background:transparent;color:${wrOn ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;\n        wrBtn.textContent = wrOn ? 'AUS' : 'AN';\n        wrBtn.addEventListener('click', () => {\n          const svc = wrOn ? 'turn_off' : 'turn_on';\n          card._hass.callService('switch', svc, { entity_id: cfg.relay_a }).catch(()=>{});\n          card._showToast(`Wechselrichter ${wrOn ? 'ausschalten' : 'einschalten'}...`);\n        });\n        wrRow.appendChild(wrBtn);\n        relBox.appendChild(wrRow);\n      }\n\n      // Relais B-D\n      [\n        { key:'relay_b', name:'12V Dose (B)',   icon:'\ud83d\udd0b', desc: 'Winter: Heizung | Sommer: Powerbank' },\n        { key:'relay_c', name:'230V Steckdose (C)', icon:'\ud83d\udd0c', desc:'Garten-Akkus / Werkzeug' },\n        { key:'relay_d', name:'Relais D',        icon:'\u2753', desc:'Reserviert' },\n      ].forEach(({key, name, icon, desc}) => {\n        if (!cfg[key]) return;\n        const state = d[key];\n        if (state === null) return;\n        const on = state === 'on';\n        const row = document.createElement('div');\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:3px;background:${on ? '#22c55e11' : 'var(--surf2)'}`;\n        const btn = document.createElement('button');\n        btn.style.cssText = `padding:3px 8px;border-radius:4px;border:1px solid ${on ? '#ef4444' : '#22c55e'};background:transparent;color:${on ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;\n        btn.textContent = on ? 'AUS' : 'AN';\n        btn.addEventListener('click', () => {\n          card._hass.callService('switch', on ? 'turn_off' : 'turn_on', { entity_id: cfg[key] }).catch(()=>{});\n        });\n        row.innerHTML = `<span style=\"font-size:13px\">${icon}</span>\n          <div style=\"flex:1;min-width:0\">\n            <div style=\"font-size:8px;font-weight:700;color:var(--text)\">${name}</div>\n            <div style=\"font-size:7px;color:#445566;overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${desc}</div>\n          </div>\n          <span style=\"font-size:8px;color:${on ? '#22c55e' : '#445566'}\">${on ? '\u25cf' : '\u25cb'}</span>`;\n        row.appendChild(btn);\n        relBox.appendChild(row);\n      });\n\n      wrap.appendChild(relBox);\n    }\n\n    // \u2500\u2500 Tagesstatistik \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if (d.gen_day != null || d.cons_day != null) {\n      const statBox = this._mkBox('Heute');\n      const statGrid = document.createElement('div');\n      statGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px';\n      [\n        { label:'Solar erzeugt', val: d.gen_day != null ? `${d.gen_day} kWh` : '\u2013', color:'#f59e0b' },\n        { label:'Verbrauch',     val: d.cons_day != null ? `${d.cons_day} kWh` : '\u2013', color:'#94a3b8' },\n        { label:'Batt. Temp.',   val: d.batt_temp != null ? `${d.batt_temp} \u00b0C` : '\u2013', color: (d.batt_temp||0) < 5 ? '#ef4444' : '#22c55e' },\n        { label:'Ger\u00e4t Temp.',   val: d.device_temp != null ? `${d.device_temp} \u00b0C` : '\u2013', color:'#94a3b8' },\n      ].forEach(({label, val, color}) => {\n        const tile = document.createElement('div');\n        tile.style.cssText = 'background:var(--bg);border-radius:4px;padding:4px 6px;border:1px solid #1c2535';\n        tile.innerHTML = `<div style=\"font-size:6.5px;color:#445566;margin-bottom:1px\">${label}</div>\n          <div style=\"font-size:11px;font-weight:700;color:${color}\">${val}</div>`;\n        statGrid.appendChild(tile);\n      });\n      statBox.appendChild(statGrid);\n      wrap.appendChild(statBox);\n    }\n\n    // \u2500\u2500 Power-Routing Status \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if (cfg.routing_active) {\n      const routeBox = this._mkBox('\u26a1 Power-Routing');\n      const routing  = cfg.routing || DEFAULT_ROUTING;\n      const surplus  = (d.solar_w || 0) - (d.load_w || 0);\n\n      routing.forEach(step => {\n        const entity = cfg[`routing_${step.id}_entity`];\n        if (!entity) return;\n        const state  = card?._hass?.states[entity]?.state || 'unknown';\n        const active = state === 'on';\n        const canOn  = surplus >= step.threshold_w;\n\n        const row = document.createElement('div');\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:2px;background:${active ? '#22c55e11' : 'var(--surf2)'}`;\n        row.innerHTML = `<span style=\"font-size:12px\">${step.icon}</span>\n          <span style=\"flex:1;font-size:8px;color:var(--text)\">${step.name}</span>\n          <span style=\"font-size:7px;color:${canOn ? '#22c55e' : '#445566'}\">\u2265${step.threshold_w}W</span>\n          <span style=\"font-size:8px;font-weight:700;color:${active ? '#22c55e' : '#445566'}\">${active ? '\u25cf AN' : '\u25cb AUS'}</span>`;\n        routeBox.appendChild(row);\n      });\n\n      wrap.appendChild(routeBox);\n    }\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Konfiguration (in \u2699 OPT eingebunden) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildConfig(card) {\n    const wrap = document.createElement('div');\n    wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';\n\n    const cfg = card?._opts?.energie_cfg || {};\n    const save = (key, val) => {\n      if (!card._opts) card._opts = {};\n      if (!card._opts.energie_cfg) card._opts.energie_cfg = {};\n      card._opts.energie_cfg[key] = val;\n      card._saveOptions();\n    };\n    const mkField = (label, key, placeholder, type='text') => {\n      const row = document.createElement('div');\n      const lbl = document.createElement('div');\n      lbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px';\n      lbl.textContent = label;\n      const inp = document.createElement('input');\n      inp.type = type; inp.value = cfg[key] || '';\n      inp.placeholder = placeholder;\n      inp.style.cssText = 'width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      inp.addEventListener('input', () => save(key, inp.value.trim()));\n      row.append(lbl, inp);\n      return row;\n    };\n\n    // Preset-Auswahl\n    const presetHdr = document.createElement('div');\n    presetHdr.style.cssText = 'font-size:8px;font-weight:700;color:#f59e0b;margin-bottom:4px';\n    presetHdr.textContent = 'System-Preset w\u00e4hlen:';\n    wrap.appendChild(presetHdr);\n\n    const presetRow = document.createElement('div');\n    presetRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px';\n    Object.entries(ENERGIE_PRESETS).forEach(([id, preset]) => {\n      const btn = document.createElement('button');\n      btn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer';\n      btn.textContent = `${preset.icon} ${preset.label}`;\n      btn.title = `Felder f\u00fcr ${preset.label} vorausf\u00fcllen`;\n      btn.addEventListener('click', () => {\n        if (!card._opts) card._opts = {};\n        if (!card._opts.energie_cfg) card._opts.energie_cfg = {};\n        Object.assign(card._opts.energie_cfg, preset.fields);\n        card._saveOptions();\n        card._rebuildSidebar();\n        card._showToast(`\u2705 Preset: ${preset.label}`);\n      });\n      presetRow.appendChild(btn);\n    });\n    wrap.appendChild(presetRow);\n\n    // Entity-Felder\n    const fieldsBox = document.createElement('div');\n    fieldsBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const fieldsHdr = document.createElement('div');\n    fieldsHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';\n    fieldsHdr.textContent = 'Entity-Zuordnung (alle optional):';\n    fieldsBox.appendChild(fieldsHdr);\n    // Sensor-Felder (generisch \u2013 Preset f\u00fcllt automatisch aus)\n    const sensorFields = [\n      ['Solar Leistung (W)',         'solar_power',    'sensor.epever_solar_w'],\n      ['Solar Spannung (V)',         'solar_voltage',  'sensor.epever_solar_v'],\n      ['Batterie SOC (%)',           'battery_soc',    'sensor.epever_batt_soc'],\n      ['Batterie Spannung (V)',      'battery_volt',   'sensor.epever_batt_v'],\n      ['Batterie Leistung (W)',      'battery_power',  'sensor.epever_batt_w'],\n      ['Batterie Temperatur (\u00b0C)',   'battery_temp',   'sensor.epever_batt_temp'],\n      ['Batterie Status (Text)',     'battery_state',  'sensor.epever_batt_state'],\n      ['Ladestatus (Text)',          'charge_state',   'sensor.epever_charger_state'],\n      ['Last / Verbrauch (W)',       'load_power',     'sensor.epever_load_w'],\n      ['WR-Modus (Text)',            'inverter_mode',  'sensor.hybridwechselrichter_inverter_operation_mode'],\n      ['WR AC-Ausgang (W)',          'ac_out_power',   'sensor.hybridwechselrichter_ac_out_watt'],\n      ['Erzeugung Heute (kWh)',      'gen_day',        'sensor.epever_gen_day'],\n      ['Erzeugung Monat (kWh)',      'gen_month',      'sensor.epever_gen_mon'],\n      ['Verbrauch Heute (kWh)',      'cons_day',       'sensor.epever_cons_day'],\n      ['Ger\u00e4t Temperatur (\u00b0C)',      'device_temp',    'sensor.epever_device_temp'],\n      ['Netz-Bezug (W, +/\u2212)',        'grid_power',     'sensor.grid_power'],\n    ];\n    sensorFields.forEach(([label, key, ph]) => fieldsBox.appendChild(mkField(label, key, ph)));\n\n    // Relais A-D (Victron SmartShunt)\n    const relaisBox = document.createElement('div');\n    relaisBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:6px';\n    const relaisHdr = document.createElement('div');\n    relaisHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';\n    relaisHdr.textContent = '\ud83d\udd0c Relais A\u2013D (Victron SmartShunt)';\n    relaisBox.appendChild(relaisHdr);\n    [\n      ['relay_a', 'Relais A \u2013 Wechselrichter',  'switch.victronsmart_relay_a'],\n      ['relay_b', 'Relais B \u2013 12V Dose',         'switch.victronsmart_relay_b'],\n      ['relay_c', 'Relais C \u2013 230V Steckdose',   'switch.victronsmart_relay_c'],\n      ['relay_d', 'Relais D \u2013 Reserviert',        'switch.victronsmart_relay_d'],\n    ].forEach(([key, label, ph]) => relaisBox.appendChild(mkField(label, key, ph)));\n    wrap.appendChild(relaisBox);\n    wrap.appendChild(fieldsBox);\n\n    // Saison-Modus (opt-in)\n    const saisonBox = document.createElement('div');\n    saisonBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const saisonHdr = document.createElement('div');\n    saisonHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';\n    const saisonCb = document.createElement('input');\n    saisonCb.type = 'checkbox'; saisonCb.checked = !!cfg.saison_active;\n    saisonCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';\n    saisonCb.addEventListener('change', () => save('saison_active', saisonCb.checked));\n    const saisonLbl = document.createElement('span');\n    saisonLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';\n    saisonLbl.textContent = '\ud83d\udcc5 Saison-Modus (Modul zeitlich begrenzen)';\n    saisonHdr.append(saisonCb, saisonLbl);\n    const saisonNote = document.createElement('div');\n    saisonNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:5px';\n    saisonNote.textContent = 'F\u00fcr Indoor-Anlagen oder ganzj\u00e4hrigen Betrieb: deaktiviert lassen.';\n    saisonBox.append(saisonHdr, saisonNote);\n    const monthRow = document.createElement('div');\n    monthRow.style.cssText = 'display:flex;align-items:center;gap:6px';\n    ['saison_from', 'saison_to'].forEach((key, i) => {\n      const lbl = document.createElement('span');\n      lbl.style.cssText = 'font-size:8px;color:#94a3b8';\n      lbl.textContent = i === 0 ? 'Von Monat:' : 'Bis Monat:';\n      const sel = document.createElement('select');\n      sel.style.cssText = 'padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      const months = ['Jan','Feb','M\u00e4r','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];\n      months.forEach((m,mi) => {\n        const o = document.createElement('option'); o.value = mi+1; o.textContent = m;\n        if ((parseInt(cfg[key])||1) === mi+1) o.selected = true;\n        sel.appendChild(o);\n      });\n      sel.addEventListener('change', () => save(key, parseInt(sel.value)));\n      monthRow.append(lbl, sel);\n    });\n    saisonBox.appendChild(monthRow);\n    wrap.appendChild(saisonBox);\n\n    // Power-Routing\n    const routeBox = document.createElement('div');\n    routeBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    const routeHdr = document.createElement('div');\n    routeHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';\n    const routeCb = document.createElement('input');\n    routeCb.type = 'checkbox'; routeCb.checked = !!cfg.routing_active;\n    routeCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';\n    routeCb.addEventListener('change', () => save('routing_active', routeCb.checked));\n    const routeLbl = document.createElement('span');\n    routeLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';\n    routeLbl.textContent = '\u26a1 Power-Routing (Solar-\u00dcberschuss verteilen)';\n    routeHdr.append(routeCb, routeLbl);\n    const routeNote = document.createElement('div');\n    routeNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:6px';\n    routeNote.textContent = 'Schaltet Verbraucher automatisch bei \u00dcberschuss ein/aus.';\n    routeBox.append(routeHdr, routeNote);\n\n    DEFAULT_ROUTING.forEach(step => {\n      const stepBox = document.createElement('div');\n      stepBox.style.cssText = 'border:1px solid #1c2535;border-radius:4px;padding:5px 7px;margin-bottom:4px';\n      stepBox.innerHTML = `<div style=\"font-size:8px;font-weight:700;color:var(--text);margin-bottom:4px\">${step.icon} ${step.name}</div>`;\n      stepBox.appendChild(mkField('Entity (Switch)',\n        `routing_${step.id}_entity`, `switch.${step.id}_switch`));\n      // Schwellwert\n      const thrRow = document.createElement('div');\n      const thrLbl = document.createElement('div');\n      thrLbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px;margin-top:3px';\n      thrLbl.textContent = `Ab \u00dcberschuss (W):`;\n      const thrInp = document.createElement('input');\n      thrInp.type = 'number'; thrInp.min = 0; thrInp.max = 10000;\n      thrInp.value = cfg[`routing_${step.id}_threshold`] ?? step.threshold_w;\n      thrInp.style.cssText = 'width:80px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';\n      thrInp.addEventListener('input', () => save(`routing_${step.id}_threshold`, parseInt(thrInp.value)||0));\n      // Auto-off Toggle\n      const offRow = document.createElement('div');\n      offRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-top:3px';\n      const offCb = document.createElement('input');\n      offCb.type = 'checkbox'; offCb.checked = !!cfg[`routing_${step.id}_auto_off`];\n      offCb.style.cssText = 'accent-color:#f59e0b;width:12px;height:12px';\n      offCb.addEventListener('change', () => save(`routing_${step.id}_auto_off`, offCb.checked));\n      const offLbl = document.createElement('span');\n      offLbl.style.cssText = 'font-size:7.5px;color:#445566';\n      offLbl.textContent = 'Automatisch ausschalten wenn kein \u00dcberschuss';\n      thrRow.append(thrLbl, thrInp);\n      offRow.append(offCb, offLbl);\n      stepBox.append(thrRow, offRow);\n      routeBox.appendChild(stepBox);\n    });\n    wrap.appendChild(routeBox);\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Hilfsfunktionen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _battColor(pct) {\n    if (pct == null) return '#445566';\n    if (pct >= 80) return '#22c55e';\n    if (pct >= 40) return '#f59e0b';\n    return '#ef4444';\n  },\n\n  _mkBox(title) {\n    const box = document.createElement('div');\n    box.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';\n    if (title) {\n      const hdr = document.createElement('div');\n      hdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px';\n      hdr.textContent = title;\n      box.appendChild(hdr);\n    }\n    return box;\n  },\n\n  _mkSparkline(values, color, w=180, h=32) {\n    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');\n    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);\n    svg.style.cssText = `width:100%;height:${h}px;display:block;margin-top:4px`;\n    const max = Math.max(...values, 1);\n    const min = Math.min(...values, 0);\n    const range = max - min || 1;\n    const pts = values.map((v, i) => {\n      const x = (i / (values.length - 1)) * w;\n      const y = h - ((v - min) / range) * (h - 4) - 2;\n      return `${x.toFixed(1)},${y.toFixed(1)}`;\n    }).join(' ');\n    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');\n    poly.setAttribute('points', pts);\n    poly.setAttribute('fill', 'none');\n    poly.setAttribute('stroke', color);\n    poly.setAttribute('stroke-width', '1.5');\n    poly.setAttribute('stroke-linejoin', 'round');\n    svg.appendChild(poly);\n    return svg;\n  },\n};",
-  pool: "const PoolModul = {\n  id: \"pool\", name: \"Pool & Garten\", icon: \"\ud83c\udfca\", tabId: \"pool\",\n  version: \"1.0.0\", description: \"Pumpen, Bew\u00e4sserung, Smart Irrigation\",\n  _card: null,\n  init(card)    { this._card = card; },\n  destroy()     { this._card = null; },\n  isActive(card) {\n    const cfg = card?._opts?.pool_cfg || {};\n    if (!cfg.saison_active) return true;\n    const mm = new Date().getMonth() + 1;\n    const from = parseInt(cfg.saison_from || 4);\n    const to   = parseInt(cfg.saison_to   || 10);\n    return from <= to ? mm >= from && mm <= to : mm >= from || mm <= to;\n  },\n  buildSidebar(card) {\n    const w = document.createElement(\"div\");\n    w.style.cssText = \"padding:8px;display:flex;flex-direction:column;gap:8px\";\n    const hdr = document.createElement(\"div\");\n    hdr.style.cssText = \"font-size:10px;font-weight:700;color:#22c55e;letter-spacing:1px\";\n    hdr.textContent = \"\ud83c\udfca POOL & GARTEN\";\n    w.appendChild(hdr);\n    if (!this.isActive(card)) {\n      const note = document.createElement(\"div\");\n      note.style.cssText = \"padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center\";\n      const cfg = card?._opts?.pool_cfg || {};\n      note.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from||4}.\u2013${cfg.saison_to||10}. Monat)`;\n      w.appendChild(note); return w;\n    }\n    const cfg = card?._opts?.pool_cfg || {};\n    const hass = card?._hass;\n    // Pool-Pumpe\n    if (cfg.pool_pump) {\n      const pumpState = hass?.states[cfg.pool_pump]?.state;\n      const pumpOn = pumpState === \"on\";\n      const pumpBox = document.createElement(\"div\");\n      pumpBox.style.cssText = `padding:8px;background:${pumpOn?\"#22c55e18\":\"var(--surf2)\"};border-radius:6px;border:1px solid ${pumpOn?\"#22c55e44\":\"#1c2535\"};display:flex;align-items:center;gap:8px`;\n      pumpBox.innerHTML = `<span style=\"font-size:20px\">\ud83c\udfca</span>\n        <div style=\"flex:1\"><div style=\"font-size:9px;font-weight:700;color:var(--text)\">Pool-Pumpe</div>\n        <div style=\"font-size:7.5px;color:#445566\">${cfg.pool_pump}</div></div>\n        <span style=\"font-size:11px;font-weight:700;color:${pumpOn?\"#22c55e\":\"#445566\"}\">${pumpOn?\"\u25cf AN\":\"\u25cb AUS\"}</span>`;\n      const btn = document.createElement(\"button\");\n      btn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${pumpOn?\"#ef4444\":\"#22c55e\"};background:transparent;color:${pumpOn?\"#ef4444\":\"#22c55e\"};font-size:8px;cursor:pointer`;\n      btn.textContent = pumpOn ? \"AUS\" : \"AN\";\n      btn.addEventListener(\"click\", () => hass?.callService(\"switch\", pumpOn?\"turn_off\":\"turn_on\", {entity_id: cfg.pool_pump}).catch(()=>{}));\n      pumpBox.appendChild(btn);\n      w.appendChild(pumpBox);\n    }\n    // Smart Irrigation\n    const siEntities = Object.keys(hass?.states||{}).filter(id => id.startsWith(\"switch.\") && id.includes(\"irrigation\"));\n    if (siEntities.length) {\n      const siBox = document.createElement(\"div\");\n      siBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535\";\n      const siHdr = document.createElement(\"div\");\n      siHdr.style.cssText = \"font-size:8px;font-weight:700;color:#22c55e;margin-bottom:6px\";\n      siHdr.textContent = \"\ud83c\udf31 Smart Irrigation\";\n      siBox.appendChild(siHdr);\n      siEntities.slice(0,6).forEach(eid => {\n        const state = hass.states[eid];\n        const on = state?.state === \"on\";\n        const row = document.createElement(\"div\");\n        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933`;\n        const btn = document.createElement(\"button\");\n        btn.style.cssText = `padding:2px 7px;border-radius:3px;border:1px solid ${on?\"#ef4444\":\"#22c55e\"};background:transparent;color:${on?\"#ef4444\":\"#22c55e\"};font-size:7.5px;cursor:pointer;flex-shrink:0`;\n        btn.textContent = on ? \"Stop\" : \"Start\";\n        btn.addEventListener(\"click\", () => hass.callService(\"switch\", on?\"turn_off\":\"turn_on\", {entity_id: eid}).catch(()=>{}));\n        row.innerHTML = `<span style=\"font-size:10px\">\ud83d\udca7</span><span style=\"flex:1;font-size:7.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${state?.attributes?.friendly_name || eid.split(\".\")[1]}</span><span style=\"font-size:7.5px;font-weight:700;color:${on?\"#22c55e\":\"#445566\"}\">${on?\"\u25cf\":\"\u25cb\"}</span>`;\n        row.appendChild(btn);\n        siBox.appendChild(row);\n      });\n      w.appendChild(siBox);\n    } else if (!cfg.pool_pump) {\n      const empty = document.createElement(\"div\");\n      empty.style.cssText = \"padding:12px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center\";\n      empty.innerHTML = \"Keine Pumpen oder Smart Irrigation Entities gefunden.<br><b style='color:#94a3b8'>Konfigurieren unter \u2699 OPT \u2192 Module \u2192 Pool & Garten</b>\";\n      w.appendChild(empty);\n    }\n    return w;\n  },\n  buildConfig(card) {\n    const w = document.createElement(\"div\");\n    w.style.cssText = \"display:flex;flex-direction:column;gap:6px\";\n    const cfg = card?._opts?.pool_cfg || {};\n    const save = (key, val) => { if(!card._opts)card._opts={}; if(!card._opts.pool_cfg)card._opts.pool_cfg={}; card._opts.pool_cfg[key]=val; card._saveOptions(); };\n    const mkF = (label, key, ph) => {\n      const row = document.createElement(\"div\");\n      const lbl = document.createElement(\"div\"); lbl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\"; lbl.textContent=label;\n      const inp = document.createElement(\"input\"); inp.type=\"text\"; inp.value=cfg[key]||\"\"; inp.placeholder=ph;\n      inp.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      inp.addEventListener(\"input\", ()=>save(key, inp.value.trim()));\n      row.append(lbl,inp); return row;\n    };\n    const fieldsBox = document.createElement(\"div\");\n    fieldsBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535\";\n    const fHdr = document.createElement(\"div\"); fHdr.style.cssText=\"font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px\"; fHdr.textContent=\"Entities:\";\n    fieldsBox.appendChild(fHdr);\n    [[\"Pool-Pumpe\",\"pool_pump\",\"switch.pool_pumpe\"],[\"Brunnen-Pumpe\",\"well_pump\",\"switch.brunnen_pumpe\"],\n     [\"Pool-Heizung\",\"pool_heat\",\"switch.pool_heizung\"],[\"Filterlaufzeit Sensor\",\"filter_time\",\"sensor.pool_filter_h\"]\n    ].forEach(([l,k,p])=>fieldsBox.appendChild(mkF(l,k,p)));\n    w.appendChild(fieldsBox);\n    // Saison-Modus\n    const sBox = document.createElement(\"div\");\n    sBox.style.cssText = \"background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:4px\";\n    const sCb = document.createElement(\"input\"); sCb.type=\"checkbox\"; sCb.checked=!!cfg.saison_active; sCb.style.cssText=\"accent-color:#22c55e;width:13px;height:13px\";\n    sCb.addEventListener(\"change\",()=>save(\"saison_active\",sCb.checked));\n    const sRow = document.createElement(\"div\"); sRow.style.cssText=\"display:flex;align-items:center;gap:6px;margin-bottom:4px\";\n    const sLbl = document.createElement(\"span\"); sLbl.style.cssText=\"font-size:8px;font-weight:700;color:#94a3b8\";\n    sLbl.textContent=\"\ud83d\udcc5 Saison-Modus\"; sRow.append(sCb,sLbl); sBox.appendChild(sRow);\n    const sNote = document.createElement(\"div\"); sNote.style.cssText=\"font-size:7.5px;color:#445566;margin-bottom:5px\";\n    sNote.textContent=\"F\u00fcr Indoor-Pools: deaktiviert lassen.\"; sBox.appendChild(sNote);\n    const mRow = document.createElement(\"div\"); mRow.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    [\"saison_from\",\"saison_to\"].forEach((key,i)=>{\n      const l=document.createElement(\"span\"); l.style.cssText=\"font-size:8px;color:#94a3b8\"; l.textContent=i===0?\"Von:\":\"Bis:\";\n      const sel=document.createElement(\"select\"); sel.style.cssText=\"padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      [\"Jan\",\"Feb\",\"M\u00e4r\",\"Apr\",\"Mai\",\"Jun\",\"Jul\",\"Aug\",\"Sep\",\"Okt\",\"Nov\",\"Dez\"].forEach((m,mi)=>{\n        const o=document.createElement(\"option\"); o.value=mi+1; o.textContent=m;\n        if((parseInt(cfg[key])||(i===0?4:10))===mi+1)o.selected=true; sel.appendChild(o);\n      });\n      sel.addEventListener(\"change\",()=>save(key,parseInt(sel.value)));\n      mRow.append(l,sel);\n    });\n    sBox.appendChild(mRow); w.appendChild(sBox);\n    return w;\n  },\n  onPoll(data, card) {\n    // Solar-\u00dcberschuss \u2192 Pool-Pumpe automatisch (wenn aktiviert)\n    const cfg = card?._opts?.pool_cfg || {};\n    if (!cfg.solar_auto || !cfg.pool_pump) return;\n    const hass = card?._hass;\n    if (!hass) return;\n    const energyCfg = card?._opts?.energie_cfg || {};\n    const solarW = parseFloat(hass.states[energyCfg.solar_power]?.state) || 0;\n    const loadW  = parseFloat(hass.states[energyCfg.load_power]?.state)  || 0;\n    const surplus = solarW - loadW;\n    const threshold = parseInt(cfg.solar_threshold || 300);\n    const pumpState = hass.states[cfg.pool_pump]?.state;\n    if (surplus >= threshold && pumpState === \"off\") {\n      hass.callService(\"switch\",\"turn_on\",{entity_id:cfg.pool_pump}).catch(()=>{});\n    } else if (surplus < threshold * 0.7 && pumpState === \"on\" && cfg.solar_auto_off) {\n      hass.callService(\"switch\",\"turn_off\",{entity_id:cfg.pool_pump}).catch(()=>{});\n    }\n  },\n};",
-  elektro: "// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n// ELEKTRO-MANAGEMENT MODUL v3.0.0\n// HA-Automationen visualisieren \u00b7 Entity-Picker \u00b7 Multi-System \u00b7 Log \u00b7 KI\n// \u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\n\nconst ElektroModul = {\n  id: \"elektro\", name: \"Elektro\", icon: \"\ud83d\udd0c\", tabId: \"elektro\", version: \"3.0.0\",\n  description: \"Solar-Fluss \u00b7 HA-Automationen \u00b7 KI-Analyse\",\n\n  _card: null, _nodes: null, _wires: null, _autos: null,\n  _selNode: null, _selWire: null, _selAuto: null,\n  _sidebarTab: \"autos\",  // autos | elements | ha_import | ai\n  _haAutos: [],          // Aus HA importierte Automationen\n  _haAutoStates: {},     // Aktueller State jeder HA-Automation\n  _log: [],              // Lokales Ausf\u00fchrungs-Log (max 200)\n  _history: [],          // Sensor-Verlauf f\u00fcr KI\n  _lastAutoRun: {},\n  _systems: null,        // Multi-System: [{id, name, nodes, wires, autos}]\n  _activeSystem: 0,\n  _haEntities: null,     // Gecachte Entity-Liste f\u00fcr Picker\n  _connectFrom: null,\n\n  // \u2500\u2500 Node-Typen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  NODE_TYPES: {\n    solar:     {label:\"Solar-Panel\",    icon:\"\u2600\",  color:\"#fbbf24\",shape:\"circle\"},\n    mppt:      {label:\"MPPT Regler\",    icon:\"\u26a1\", color:\"#f59e0b\",shape:\"circle\"},\n    battery:   {label:\"Batterie\",       icon:\"\ud83d\udd0b\", color:\"#22c55e\",shape:\"rect\"  },\n    inverter:  {label:\"Wechselrichter\", icon:\"\ud83d\udd0c\", color:\"#a855f7\",shape:\"circle\"},\n    load_12v:  {label:\"12V Last\",       icon:\"\ud83d\udca1\", color:\"#38bdf8\",shape:\"circle\"},\n    load_230v: {label:\"230V Last\",      icon:\"\ud83d\udd0c\", color:\"#f97316\",shape:\"circle\"},\n    wallbox:   {label:\"Wallbox\",        icon:\"\ud83d\ude97\", color:\"#06b6d4\",shape:\"circle\"},\n    pool:      {label:\"Pool-Pumpe\",     icon:\"\ud83c\udfca\", color:\"#0ea5e9\",shape:\"circle\"},\n    boiler:    {label:\"Boiler\",         icon:\"\u2668\",  color:\"#ef4444\",shape:\"circle\"},\n    powerbank: {label:\"Powerbank\",      icon:\"\ud83d\udcf1\", color:\"#8b5cf6\",shape:\"circle\"},\n    meter:     {label:\"Stromz\u00e4hler\",    icon:\"\ud83d\udcca\", color:\"#64748b\",shape:\"rect\"  },\n    custom:    {label:\"Eigenes Ger\u00e4t\",  icon:\"\u2699\",  color:\"#475569\",shape:\"circle\"},\n  },\n\n  CONDITION_TYPES: {\n    surplus_gt: {label:\"\u00dcberschuss > X W\",  icon:\"\u26a1\",params:[\"threshold_w\"]},\n    surplus_lt: {label:\"\u00dcberschuss < X W\",  icon:\"\u26a1\",params:[\"threshold_w\"]},\n    soc_gt:     {label:\"Batterie > X %\",    icon:\"\ud83d\udd0b\",params:[\"threshold_pct\"]},\n    soc_lt:     {label:\"Batterie < X %\",    icon:\"\ud83d\udd0b\",params:[\"threshold_pct\"]},\n    watt_gt:    {label:\"Solar > X W\",       icon:\"\u2600\", params:[\"threshold_w\"]},\n    watt_lt:    {label:\"Solar < X W\",       icon:\"\u2600\", params:[\"threshold_w\"]},\n    time_between:{label:\"Uhrzeit zwischen\", icon:\"\ud83d\udd50\",params:[\"time_from\",\"time_to\"]},\n    weekday:    {label:\"Wochentag\",         icon:\"\ud83d\udcc5\",params:[\"days\"]},\n    entity_on:  {label:\"Entity ist AN\",     icon:\"\ud83d\udca1\",params:[\"entity\"]},\n    entity_off: {label:\"Entity ist AUS\",    icon:\"\ud83d\udca1\",params:[\"entity\"]},\n    temp_lt:    {label:\"Temperatur < X\u00b0C\",  icon:\"\ud83c\udf21\",params:[\"threshold_temp\",\"entity\"]},\n    temp_gt:    {label:\"Temperatur > X\u00b0C\",  icon:\"\ud83c\udf21\",params:[\"threshold_temp\",\"entity\"]},\n  },\n\n  ACTION_TYPES: {\n    switch_on:    {label:\"Schalter AN\",       icon:\"\u2705\",params:[\"entity\"]},\n    switch_off:   {label:\"Schalter AUS\",      icon:\"\u274c\",params:[\"entity\"]},\n    switch_toggle:{label:\"Schalter toggeln\",  icon:\"\ud83d\udd04\",params:[\"entity\"]},\n    notify:       {label:\"Benachrichtigung\",  icon:\"\ud83d\udd14\",params:[\"message\"]},\n    scene:        {label:\"Szene aktivieren\",  icon:\"\ud83c\udfad\",params:[\"scene_id\"]},\n    script:       {label:\"Script ausf\u00fchren\",  icon:\"\ud83d\udcdc\",params:[\"script_id\"]},\n  },\n\n  // KI-Vorschl\u00e4ge mit Saison-Awareness\n  AI_SUGGESTIONS: [\n    {id:\"s1\",title:\"\ud83d\udd0b Tiefentladungsschutz\",        risk:\"low\",  category:\"battery\",  season:\"all\",\n     desc:\"WR aus wenn SOC < 20% und kein Solar. Sch\u00fctzt die Batterie.\",\n     detect:(v)=>!v.hasSocProtection&&v.hasInverter,\n     auto:{name:\"Batterie Tiefentladungsschutz\",conditions:[{type:\"soc_lt\",threshold_pct:20},{type:\"watt_lt\",threshold_w:10}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{relay_a}}\"}],actions_else:[],cooldown_min:30}},\n    {id:\"s2\",title:\"\u2600 \u00dcberschuss \u2192 Warmwasser\",      risk:\"low\",  category:\"surplus\",  season:\"all\",\n     desc:\"Boiler bei > 500W \u00dcberschuss. G\u00fcnstiger als Netzstrom.\",\n     detect:(v)=>!v.hasBoilerAuto,\n     auto:{name:\"\u00dcberschuss Boiler\",conditions:[{type:\"surplus_gt\",threshold_w:500}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{boiler_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{boiler_entity}}\"}],cooldown_min:15}},\n    {id:\"s3\",title:\"\ud83d\ude97 Wallbox Solar-Laden\",          risk:\"low\",  category:\"surplus\",  season:\"all\",\n     desc:\"E-Auto nur laden wenn > 1400W \u00dcberschuss.\",\n     detect:(v)=>!v.hasWallboxAuto,\n     auto:{name:\"Wallbox Solar\",conditions:[{type:\"surplus_gt\",threshold_w:1400},{type:\"soc_gt\",threshold_pct:50}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{wallbox_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{wallbox_entity}}\"}],cooldown_min:30}},\n    {id:\"s4\",title:\"\u2744 Winter: Batterie-Heizung\",      risk:\"medium\",category:\"seasonal\",season:\"winter\",\n     desc:\"12V-Dose AN bei < 5\u00b0C Au\u00dfentemperatur. Wichtig f\u00fcr Batterie-Lebensdauer!\",\n     detect:(v)=>!v.hasTempProtection,\n     auto:{name:\"Batterie-Heizschutz\",conditions:[{type:\"temp_lt\",threshold_temp:5,entity:\"{{temp_entity}}\"}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{relay_b}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{relay_b}}\"}],cooldown_min:60}},\n    {id:\"s5\",title:\"\ud83c\udf19 Nacht: Wechselrichter aus\",    risk:\"low\",  category:\"efficiency\",season:\"all\",\n     desc:\"WR nachts aus = ~240Wh/Tag weniger Verlust. 87 kWh/Jahr.\",\n     detect:(v)=>v.hasInverter&&!v.hasNightOff,\n     auto:{name:\"WR Nacht-Aus\",conditions:[{type:\"time_between\",time_from:\"22:00\",time_to:\"06:00\"}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{relay_a}}\"}],actions_else:[],cooldown_min:120}},\n    {id:\"s6\",title:\"\ud83c\udfca Pool Solar-Betrieb\",           risk:\"low\",  category:\"surplus\",  season:\"summer\",\n     desc:\"Pool-Pumpe nur bei Solar\u00fcberschuss. Spart Netzstrom.\",\n     detect:(v)=>!v.hasPoolAuto,\n     auto:{name:\"Pool Solar-Pumpe\",conditions:[{type:\"surplus_gt\",threshold_w:200},{type:\"time_between\",time_from:\"08:00\",time_to:\"20:00\"}],operator:\"AND\",actions:[{type:\"switch_on\",entity:\"{{pool_entity}}\"}],actions_else:[{type:\"switch_off\",entity:\"{{pool_entity}}\"}],cooldown_min:20}},\n    {id:\"s7\",title:\"\ud83d\udcf1 Batterie voll \u2013 Hinweis\",      risk:\"low\",  category:\"notify\",   season:\"all\",\n     desc:\"Benachrichtigung wenn Batterie > 95% \u2192 Verbraucher einschalten.\",\n     detect:(v)=>!v.hasFullNotify,\n     auto:{name:\"Batterie voll\",conditions:[{type:\"soc_gt\",threshold_pct:95}],operator:\"AND\",actions:[{type:\"notify\",message:\"\u2600 Batterie voll! Schalte Verbraucher ein.\"}],actions_else:[],cooldown_min:480}},\n    {id:\"s8\",title:\"\u26a1 Lastspitzen-Schutz\",           risk:\"high\", category:\"protection\",season:\"all\",\n     desc:\"WR + Wallbox nie gleichzeitig. Verhindert \u00dcberlastung.\",\n     detect:(v)=>v.hasInverter&&!v.hasLoadManagement,\n     auto:{name:\"Anti-Peak\",conditions:[{type:\"entity_on\",entity:\"{{relay_a}}\"},{type:\"entity_on\",entity:\"{{wallbox_entity}}\"}],operator:\"AND\",actions:[{type:\"switch_off\",entity:\"{{boiler_entity}}\"},{type:\"notify\",message:\"\u26a0 Lastspitze: Boiler deaktiviert\"}],actions_else:[],cooldown_min:60}},\n  ],\n\n  // \u2500\u2500 Lifecycle \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  init(card) {\n    this._card = card;\n    // Multi-System initialisieren\n    this._systems = card._opts?.elektro_systems || [\n      {id:\"sys1\", name:\"Wohnung\", nodes:card._opts?.elektro_nodes||this._defaultNodes(), wires:card._opts?.elektro_wires||this._defaultWires(), autos:card._opts?.elektro_autos||[]},\n    ];\n    this._activeSystem = card._opts?.elektro_active_system || 0;\n    this._loadSystem();\n    this._haAutos = []; this._log = card._opts?.elektro_log || [];\n    this._history = []; this._lastAutoRun = {};\n    this._loadHaAutomations(card);\n    console.info(\"[BLE Elektro v3] initialisiert\");\n  },\n\n  destroy() { this._card=this._nodes=this._wires=this._autos=null; },\n\n  _loadSystem() {\n    const sys = this._systems[this._activeSystem] || this._systems[0];\n    this._nodes = sys.nodes; this._wires = sys.wires; this._autos = sys.autos;\n  },\n\n  _saveSystem(card) {\n    const sys = this._systems[this._activeSystem];\n    if (!sys) return;\n    sys.nodes = this._nodes; sys.wires = this._wires; sys.autos = this._autos;\n    if (!card._opts) card._opts = {};\n    card._opts.elektro_systems = this._systems;\n    card._opts.elektro_active_system = this._activeSystem;\n    // Kompatibilit\u00e4t\n    card._opts.elektro_nodes = this._nodes;\n    card._opts.elektro_wires = this._wires;\n    card._opts.elektro_autos = this._autos;\n    card._saveOptions();\n  },\n\n  _defaultNodes() {\n    return [\n      {id:\"solar1\",  type:\"solar\",    x:0.5,  y:0.07, label:\"Solar-Panel\",   entity:\"\"},\n      {id:\"mppt1\",   type:\"mppt\",     x:0.5,  y:0.27, label:\"MPPT\",          entity:\"\"},\n      {id:\"batt1\",   type:\"battery\",  x:0.22, y:0.52, label:\"Batterie\",      entity:\"\"},\n      {id:\"load12v\", type:\"load_12v\", x:0.78, y:0.52, label:\"12V Netz\",      entity:\"\"},\n      {id:\"inv1\",    type:\"inverter\", x:0.22, y:0.76, label:\"Wechselrichter\", entity:\"\"},\n      {id:\"load230v\",type:\"load_230v\",x:0.78, y:0.76, label:\"230V\",          entity:\"\"},\n    ];\n  },\n  _defaultWires() {\n    return [\n      {id:\"w1\",from:\"solar1\",  to:\"mppt1\",   sensor_key:\"solar_power\",   logics:[]},\n      {id:\"w2\",from:\"mppt1\",   to:\"batt1\",   sensor_key:\"battery_power\", logics:[]},\n      {id:\"w3\",from:\"mppt1\",   to:\"load12v\", sensor_key:\"load_power\",    logics:[]},\n      {id:\"w4\",from:\"batt1\",   to:\"inv1\",    sensor_key:\"battery_power\", logics:[]},\n      {id:\"w5\",from:\"inv1\",    to:\"load230v\",sensor_key:\"ac_out_power\",  logics:[]},\n    ];\n  },\n\n  // \u2500\u2500 HA-Automationen laden \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  async _loadHaAutomations(card) {\n    try {\n      const autos = await card._hass.callApi(\"GET\",\"config/automation/config\");\n      this._haAutos = (Array.isArray(autos) ? autos : Object.values(autos||{}))\n        .map(a=>({\n          id:     a.id||a.alias,\n          alias:  a.alias||a.id||\"Automation\",\n          state:  card._hass?.states[`automation.${(a.alias||\"\").toLowerCase().replace(/[^a-z0-9]/g,\"_\")}`]?.state || \"unknown\",\n          mode:   a.mode||\"single\",\n          conditions: a.condition||[],\n          actions:    a.action||[],\n          raw:        a,\n        }));\n      // States aus hass.states lesen\n      Object.keys(card._hass?.states||{}).filter(k=>k.startsWith(\"automation.\")).forEach(k=>{\n        const friendly = card._hass.states[k].attributes?.friendly_name||\"\";\n        const match = this._haAutos.find(a=>a.alias===friendly||k.includes((a.alias||\"\").toLowerCase().replace(/\\s/g,\"_\")));\n        if (match) { match.entity_id = k; match.state = card._hass.states[k].state; match.last_triggered = card._hass.states[k].attributes?.last_triggered; }\n      });\n      card._markDirty();\n    } catch(e) {\n      // Fallback: aus hass.states lesen\n      this._haAutos = Object.entries(card._hass?.states||{})\n        .filter(([k])=>k.startsWith(\"automation.\"))\n        .map(([k,s])=>({\n          id: k, alias: s.attributes?.friendly_name||k.replace(\"automation.\",\"\"),\n          entity_id: k, state: s.state,\n          last_triggered: s.attributes?.last_triggered,\n          mode: s.attributes?.mode||\"single\",\n          raw: s.attributes,\n        }));\n    }\n  },\n\n  // \u2500\u2500 Entity-Cache aufbauen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _getEntities(card, filter) {\n    if (!this._haEntities) {\n      this._haEntities = Object.entries(card._hass?.states||{}).map(([k,s])=>({\n        id: k, domain: k.split(\".\")[0],\n        name: s.attributes?.friendly_name || k,\n        state: s.state,\n      }));\n    }\n    if (!filter) return this._haEntities;\n    return this._haEntities.filter(e=>filter.includes(e.domain));\n  },\n\n  // \u2500\u2500 Canvas zeichnen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onDraw(ctx, card) {\n    if (card._mode !== \"elektro\") return;\n    const c = card._canvas;\n    if (!c) return;\n    const W=c.width, H=c.height, t=Date.now(), dpr=window.devicePixelRatio||1;\n    const hass=card._hass, cfg=card._opts?.energie_cfg||{};\n    const getW=(k)=>{const e=cfg[k];return e&&hass?.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const vals={solarW:getW(\"solar_power\"),battPct:getW(\"battery_soc\"),battW:getW(\"battery_power\"),loadW:getW(\"load_power\"),acW:getW(\"ac_out_power\")};\n    vals.surplus=Math.max(0,vals.solarW-vals.loadW);\n\n    ctx.fillStyle=\"#070a10\"; ctx.fillRect(0,0,W,H);\n    ctx.strokeStyle=\"#0d1829\"; ctx.lineWidth=1;\n    const gs=40*dpr;\n    for(let x=0;x<W;x+=gs){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}\n    for(let y=0;y<H;y+=gs){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}\n\n    // System-Name oben rechts\n    const sys=this._systems?.[this._activeSystem];\n    if(sys&&this._systems.length>1){\n      ctx.font=`bold ${8*dpr}px 'JetBrains Mono',monospace`;\n      ctx.fillStyle=\"#334155\"; ctx.textAlign=\"right\";\n      ctx.fillText(`\ud83d\udccd ${sys.name}`, W-10*dpr, 16*dpr);\n    }\n\n    // \u2500\u2500 Leitungen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._wires||[]).forEach(wire=>{\n      const nA=(this._nodes||[]).find(n=>n.id===wire.from);\n      const nB=(this._nodes||[]).find(n=>n.id===wire.to);\n      if(!nA||!nB)return;\n      const ax=nA.x*W, ay=nA.y*H, bx=nB.x*W, by=nB.y*H;\n      const watts=wire.sensor_key?(getW(wire.sensor_key)||0):0;\n      const color=this._wireColor(nA.type);\n      const lw=Math.max(1.5,Math.min(7,Math.abs(watts)/120))*dpr;\n      const active=Math.abs(watts)>5;\n      const cp1x=ax+(bx-ax)*0.15, cp1y=ay+(by-ay)*0.45;\n      const cp2x=bx-(bx-ax)*0.15, cp2y=by-(by-ay)*0.45;\n\n      ctx.beginPath(); ctx.moveTo(ax,ay); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,bx,by);\n      ctx.strokeStyle=active?color:\"#1c2535\"; ctx.lineWidth=lw; ctx.lineCap=\"round\";\n      if(active&&Math.abs(watts)>300){ctx.shadowColor=color;ctx.shadowBlur=6*dpr;}\n      ctx.stroke(); ctx.shadowBlur=0;\n\n      // Richtungspfeil\n      const arrowT=0.72;\n      const px2=Math.pow(1-arrowT,3)*ax+3*Math.pow(1-arrowT,2)*arrowT*cp1x+3*(1-arrowT)*arrowT*arrowT*cp2x+arrowT*arrowT*arrowT*bx;\n      const py2=Math.pow(1-arrowT,3)*ay+3*Math.pow(1-arrowT,2)*arrowT*cp1y+3*(1-arrowT)*arrowT*arrowT*cp2y+arrowT*arrowT*arrowT*by;\n      const px3=Math.pow(1-0.78,3)*ax+3*Math.pow(1-0.78,2)*0.78*cp1x+3*(1-0.78)*0.78*0.78*cp2x+0.78*0.78*0.78*bx;\n      const py3=Math.pow(1-0.78,3)*ay+3*Math.pow(1-0.78,2)*0.78*cp1y+3*(1-0.78)*0.78*0.78*cp2y+0.78*0.78*0.78*by;\n      const ang=Math.atan2(py3-py2,px3-px2);\n      const as=5*dpr;\n      ctx.beginPath();\n      ctx.moveTo(px2+Math.cos(ang)*as, py2+Math.sin(ang)*as);\n      ctx.lineTo(px2+Math.cos(ang+2.4)*as*0.7, py2+Math.sin(ang+2.4)*as*0.7);\n      ctx.lineTo(px2+Math.cos(ang-2.4)*as*0.7, py2+Math.sin(ang-2.4)*as*0.7);\n      ctx.closePath();\n      ctx.fillStyle=active?color:\"#1c2535\"; ctx.fill();\n\n      // Partikel\n      if(active){\n        const speed=Math.min(2.5,Math.abs(watts)/300);\n        const count=Math.max(2,Math.floor(Math.abs(watts)/250));\n        for(let i=0;i<count;i++){\n          const ph=((t/800*speed+i/count)%1);\n          const u=ph;\n          const ppx=Math.pow(1-u,3)*ax+3*Math.pow(1-u,2)*u*cp1x+3*(1-u)*u*u*cp2x+u*u*u*bx;\n          const ppy=Math.pow(1-u,3)*ay+3*Math.pow(1-u,2)*u*cp1y+3*(1-u)*u*u*cp2y+u*u*u*by;\n          const al=Math.sin(Math.PI*ph)*0.9;\n          ctx.beginPath(); ctx.arc(ppx,ppy,lw*0.85,0,Math.PI*2);\n          ctx.fillStyle=color.replace(\"1)\",`${al})`); ctx.fill();\n        }\n        // Watt-Label\n        const mx2=ax+(bx-ax)*0.5, my2=ay+(by-ay)*0.5;\n        const lbl=Math.abs(watts)>=1000?`${(Math.abs(watts)/1000).toFixed(1)}kW`:`${Math.abs(watts).toFixed(0)}W`;\n        ctx.font=`bold ${7*dpr}px 'JetBrains Mono',monospace`;\n        ctx.fillStyle=color.replace(\"1)\",\"0.9)\"); ctx.textAlign=\"center\";\n        ctx.fillRect(mx2-20*dpr, my2-8*dpr, 40*dpr, 11*dpr);\n        ctx.fillStyle=\"#070a10\"; ctx.fillText(lbl, mx2, my2+1*dpr);\n      }\n\n      if(this._selWire===wire){\n        ctx.beginPath(); ctx.moveTo(ax,ay); ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,bx,by);\n        ctx.strokeStyle=\"#00e5ff55\"; ctx.lineWidth=lw+6; ctx.stroke();\n      }\n    });\n\n    // \u2500\u2500 Eigene Automations-Rauten \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._autos||[]).forEach(auto=>{\n      if(!auto.x||!auto.y) return;\n      const ax2=auto.x*W, ay2=auto.y*H;\n      const running=this._evalAuto(auto,vals,hass,cfg);\n      const dr=18*dpr;\n      ctx.save(); ctx.translate(ax2,ay2); ctx.rotate(Math.PI/4);\n      if(running){ctx.shadowColor=\"#22c55e\";ctx.shadowBlur=14*dpr;}\n      ctx.fillStyle=running?\"#22c55e22\":\"#0d1829\";\n      ctx.strokeStyle=running?\"#22c55e\":this._selAuto===auto?\"#00e5ff\":\"#334155\";\n      ctx.lineWidth=this._selAuto===auto?2.5:1.5;\n      ctx.fillRect(-dr,-dr,dr*2,dr*2); ctx.strokeRect(-dr,-dr,dr*2,dr*2);\n      ctx.shadowBlur=0; ctx.restore();\n      ctx.font=`${8*dpr}px serif`; ctx.fillStyle=running?\"#22c55e\":\"#64748b\"; ctx.textAlign=\"center\";\n      ctx.fillText(\"\u25c6\",ax2,ay2+3*dpr);\n      ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle=running?\"#22c55e\":\"#445566\";\n      ctx.fillText((auto.name||\"Auto\").slice(0,16), ax2, ay2+dr+9*dpr);\n      ctx.beginPath(); ctx.arc(ax2+dr+4*dpr, ay2-dr-4*dpr, 4*dpr,0,Math.PI*2);\n      ctx.fillStyle=auto.enabled===false?\"#334155\":running?\"#22c55e\":\"#f59e0b\"; ctx.fill();\n    });\n\n    // \u2500\u2500 Knoten \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    (this._nodes||[]).forEach(node=>{\n      const nx=node.x*W, ny=node.y*H;\n      const nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;\n      const r=28*dpr, sel=this._selNode===node;\n      const entityState=node.entity?hass?.states[node.entity]?.state:null;\n      const isActive=entityState&&[\"on\",\"playing\",\"heat\",\"cool\",\"active\"].includes(entityState.toLowerCase());\n      if((isActive||(node.type===\"solar\"&&vals.solarW>50))&&!sel){ctx.shadowColor=nt.color;ctx.shadowBlur=14*dpr;}\n      if(nt.shape===\"rect\"){\n        const rw=r*1.7,rh=r*1.25;\n        ctx.fillStyle=\"#0d1219\"; ctx.strokeStyle=sel?\"#00e5ff\":isActive?nt.color:\"#1c2535\"; ctx.lineWidth=sel?2.5:1.5;\n        ctx.beginPath(); ctx.roundRect(nx-rw/2,ny-rh/2,rw,rh,6); ctx.fill(); ctx.stroke();\n        if(node.type===\"battery\"&&vals.battPct>0){\n          const bw2=rw-8,bh2=rh-8;\n          const fh=bh2*0.85*(vals.battPct/100);\n          const bc=vals.battPct>60?\"#22c55e\":vals.battPct>30?\"#f59e0b\":\"#ef4444\";\n          ctx.fillStyle=bc+\"44\"; ctx.beginPath(); ctx.roundRect(nx-bw2/2,ny+bh2/2*0.85-fh-4*dpr,bw2,fh,3); ctx.fill();\n        }\n      } else {\n        ctx.fillStyle=\"#0d1219\"; ctx.strokeStyle=sel?\"#00e5ff\":isActive?nt.color:\"#1c2535\"; ctx.lineWidth=sel?2.5:1.5;\n        ctx.beginPath(); ctx.arc(nx,ny,r,0,Math.PI*2); ctx.fill(); ctx.stroke();\n      }\n      ctx.shadowBlur=0;\n      if(node.type===\"solar\"&&vals.solarW>30){\n        const phase=(t/1800)%1;\n        [0,1,2].forEach(ri=>{const rp=(phase+ri*0.33)%1;const rr=r*(1+rp*0.85);const al=(1-rp)*0.4*(vals.solarW/3000);ctx.beginPath();ctx.arc(nx,ny,rr,0,Math.PI*2);ctx.strokeStyle=`rgba(251,191,36,${al})`;ctx.lineWidth=1.5;ctx.stroke();});\n      }\n      ctx.font=`${15*dpr}px serif`; ctx.fillStyle=isActive?nt.color:\"#94a3b8\"; ctx.textAlign=\"center\";\n      ctx.fillText(nt.icon,nx,ny+5*dpr);\n      const vt=this._nodeValue(node,vals,hass,cfg);\n      if(vt){ctx.font=`bold ${7.5*dpr}px 'JetBrains Mono',monospace`;ctx.fillStyle=nt.color;ctx.fillText(vt,nx,ny+(nt.shape===\"rect\"?20:r+12)*dpr);}\n      ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`; ctx.fillStyle=\"#334155\";\n      ctx.fillText(node.label||nt.label,nx,ny+(nt.shape===\"rect\"?30:r+21)*dpr);\n    });\n\n    // \u2500\u2500 Status-Bar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    const runCount=(this._autos||[]).filter(a=>a.enabled!==false&&this._evalAuto(a,vals,hass,cfg)).length;\n    const haCount=this._haAutos.filter(a=>a.state===\"on\").length;\n    ctx.fillStyle=\"rgba(7,10,16,0.9)\"; ctx.fillRect(0,0,W,22*dpr);\n    ctx.font=`${7*dpr}px 'JetBrains Mono',monospace`; ctx.textAlign=\"left\"; ctx.fillStyle=\"#445566\";\n    ctx.fillText(`\u2600${vals.solarW.toFixed(0)}W  \ud83d\udd0b${vals.battPct.toFixed(0)}%  \u26a1+${vals.surplus.toFixed(0)}W  \u25c6${runCount}/${(this._autos||[]).length} eigen  \ud83c\udfe0${haCount}/${this._haAutos.length} HA`, 10*dpr, 14*dpr);\n    ctx.fillStyle=\"#1c2535\"; ctx.font=`${6*dpr}px 'JetBrains Mono',monospace`;\n    ctx.fillText(\"Antippen = ausw\u00e4hlen  \u00b7  Sidebar: Automationen | Elemente | HA-Import | \ud83e\udd16 KI\", 10*dpr, H-8*dpr);\n  },\n\n  // \u2500\u2500 Poll \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  onPoll(data, card) {\n    const hass=card?._hass, cfg=card?._opts?.energie_cfg||{};\n    if(!hass)return;\n    const getW=(k)=>{const e=cfg[k];return e&&hass.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const vals={solarW:getW(\"solar_power\"),battPct:getW(\"battery_soc\"),battW:getW(\"battery_power\"),loadW:getW(\"load_power\"),acW:getW(\"ac_out_power\")};\n    vals.surplus=Math.max(0,vals.solarW-vals.loadW);\n    this._history.push({ts:Date.now(),...vals});\n    if(this._history.length>360)this._history.shift();\n\n    // HA-Automation States aktualisieren\n    this._haAutos.forEach(a=>{\n      if(a.entity_id&&hass.states[a.entity_id]){\n        a.state=hass.states[a.entity_id].state;\n        a.last_triggered=hass.states[a.entity_id].attributes?.last_triggered;\n      }\n    });\n\n    // Eigene Automationen ausf\u00fchren\n    (this._autos||[]).forEach(auto=>{\n      if(auto.enabled===false)return;\n      const met=this._evalAuto(auto,vals,hass,cfg);\n      const now=Date.now(), cooldown=(auto.cooldown_min||5)*60000;\n      const last=this._lastAutoRun[auto.id]||0;\n      if(met&&now-last>cooldown){\n        this._runActions(auto.actions||[],hass,card,cfg);\n        this._lastAutoRun[auto.id]=now; auto._lastState=true;\n        const entry={ts:now,name:auto.name,type:\"own\",state:\"fired\",vals:{solarW:vals.solarW.toFixed(0),battPct:vals.battPct.toFixed(0),surplus:vals.surplus.toFixed(0)}};\n        this._log.unshift(entry); if(this._log.length>200)this._log.pop();\n        if(card._opts)card._opts.elektro_log=this._log.slice(0,50);\n        if(auto.actions?.length)card._showToast(`\u25c6 ${auto.name||\"Auto\"}: ausgef\u00fchrt`);\n      } else if(!met&&auto._lastState){\n        if((auto.actions_else||[]).length&&now-last>cooldown){this._runActions(auto.actions_else,hass,card,cfg);this._lastAutoRun[auto.id]=now;}\n        auto._lastState=false;\n      }\n    });\n  },\n\n  _evalAuto(auto,vals,hass,cfg){\n    if(!auto?.conditions?.length)return false;\n    const r=auto.conditions.map(c=>this._evalCond(c,vals,hass,cfg));\n    return auto.operator===\"OR\"?r.some(Boolean):r.every(Boolean);\n  },\n\n  _evalCond(c,vals,hass,cfg){\n    const v=parseFloat(c.threshold_w||c.threshold_pct||c.threshold_temp||0);\n    switch(c.type){\n      case\"watt_gt\":    return vals.solarW>v;\n      case\"watt_lt\":    return vals.solarW<v;\n      case\"surplus_gt\": return vals.surplus>v;\n      case\"surplus_lt\": return vals.surplus<v;\n      case\"soc_gt\":     return vals.battPct>v;\n      case\"soc_lt\":     return vals.battPct<v;\n      case\"entity_on\":  return hass?.states[c.entity]?.state===\"on\";\n      case\"entity_off\": return hass?.states[c.entity]?.state===\"off\";\n      case\"temp_gt\":    return(parseFloat(hass?.states[c.entity]?.state)||0)>v;\n      case\"temp_lt\":    return(parseFloat(hass?.states[c.entity]?.state)||0)<v;\n      case\"time_between\":{\n        const now=new Date(), hm=now.getHours()*60+now.getMinutes();\n        const[fh,fm]=(c.time_from||\"00:00\").split(\":\").map(Number);\n        const[th,tm]=(c.time_to||\"23:59\").split(\":\").map(Number);\n        const from=fh*60+fm, to=th*60+tm;\n        return from<=to?(hm>=from&&hm<=to):(hm>=from||hm<=to);\n      }\n      case\"weekday\":    return(c.days||[1,2,3,4,5]).includes(new Date().getDay());\n      default:          return false;\n    }\n  },\n\n  _runActions(actions,hass,card,cfg){\n    const res=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||s);\n    actions.forEach(a=>{\n      const eid=res(a.entity);\n      switch(a.type){\n        case\"switch_on\":     if(eid)hass.callService(\"switch\",\"turn_on\",{entity_id:eid}).catch(()=>{});break;\n        case\"switch_off\":    if(eid)hass.callService(\"switch\",\"turn_off\",{entity_id:eid}).catch(()=>{});break;\n        case\"switch_toggle\": if(eid)hass.callService(\"switch\",\"toggle\",{entity_id:eid}).catch(()=>{});break;\n        case\"notify\":        hass.callService(\"notify\",\"notify\",{message:a.message||\"\"}).catch(()=>{});break;\n        case\"scene\":         if(a.scene_id)hass.callService(\"scene\",\"turn_on\",{entity_id:a.scene_id}).catch(()=>{});break;\n        case\"script\":        if(a.script_id)hass.callService(\"script\",\"turn_on\",{entity_id:a.script_id}).catch(()=>{});break;\n      }\n    });\n  },\n\n  // \u2500\u2500 HA-Export \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  exportToHA(auto,cfg){\n    const r=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||`ENTITY_${k}`);\n    const cToY=(c)=>{\n      const v=c.threshold_w||c.threshold_pct||c.threshold_temp||0;\n      const sp=cfg.solar_power||\"sensor.solar\", lp=cfg.load_power||\"sensor.load\", bs=cfg.battery_soc||\"sensor.battery\";\n      switch(c.type){\n        case\"surplus_gt\": return `  - condition: template\\n    value_template: \"{{ (states('${sp}')|float - states('${lp}')|float) > ${v} }}\"`;\n        case\"soc_gt\":     return `  - condition: template\\n    value_template: \"{{ states('${bs}')|float > ${v} }}\"`;\n        case\"soc_lt\":     return `  - condition: template\\n    value_template: \"{{ states('${bs}')|float < ${v} }}\"`;\n        case\"entity_on\":  return `  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"on\"`;\n        case\"entity_off\": return `  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"off\"`;\n        case\"time_between\":return`  - condition: time\\n    after: \"${c.time_from}\"\\n    before: \"${c.time_to}\"`;\n        case\"temp_lt\":    return `  - condition: template\\n    value_template: \"{{ states('${r(c.entity)}')|float < ${v} }}\"`;\n        default:          return `  # ${c.type}`;\n      }\n    };\n    const aToY=(a)=>{\n      switch(a.type){\n        case\"switch_on\":  return `  - service: switch.turn_on\\n    target:\\n      entity_id: ${r(a.entity)}`;\n        case\"switch_off\": return `  - service: switch.turn_off\\n    target:\\n      entity_id: ${r(a.entity)}`;\n        case\"notify\":     return `  - service: notify.notify\\n    data:\\n      message: \"${a.message}\"`;\n        default:          return `  # ${a.type}`;\n      }\n    };\n    return `alias: \"${auto.name||'BLE Export'}\"\\ndescription: \"Export aus BLE Positioning\"\\ntrigger:\\n  - platform: time_pattern\\n    minutes: \"/5\"\\ncondition:\\n${(auto.conditions||[]).map(cToY).join(\"\\n\")}\\naction:\\n${(auto.actions||[]).map(aToY).join(\"\\n\")}\\nmode: single`;\n  },\n\n  // \u2500\u2500 Dynamische KI-Analyse \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _analyzeSystem(card){\n    const cfg=card._opts?.energie_cfg||{};\n    const history=this._history;\n    const insights=[];\n    if(history.length<10) return [\"Zu wenig Daten \u2013 bitte l\u00e4nger warten.\"];\n\n    const avgSurplus=history.reduce((a,v)=>a+v.surplus,0)/history.length;\n    const maxSolar=Math.max(...history.map(v=>v.solarW));\n    const minBatt=Math.min(...history.map(v=>v.battPct));\n    const existingIds=(this._autos||[]).map(a=>a.source_suggestion).filter(Boolean);\n    const month=new Date().getMonth()+1;\n    const isWinter=month<=3||month>=10;\n\n    if(avgSurplus>300&&!existingIds.includes(\"s2\"))\n      insights.push(`\ud83d\udca1 \u00d8 ${avgSurplus.toFixed(0)}W \u00dcberschuss \u2192 Boiler-Automation w\u00fcrde ~${(avgSurplus*0.3/1000*0.3).toFixed(2)}\u20ac/Tag sparen`);\n    if(minBatt<25&&!existingIds.includes(\"s1\"))\n      insights.push(`\u26a0 Batterie war bei ${minBatt.toFixed(0)}% \u2192 Tiefentladungsschutz empfohlen`);\n    if(maxSolar>1000&&!existingIds.includes(\"s5\"))\n      insights.push(`\ud83c\udf19 ${maxSolar.toFixed(0)}W Spitze \u2192 WR-Nacht-Aus spart ~240Wh t\u00e4glich`);\n    if(isWinter&&!existingIds.includes(\"s4\"))\n      insights.push(`\u2744 Winter erkannt \u2192 Batterie-Heizschutz pr\u00fcfen`);\n    if(avgSurplus>1400&&!existingIds.includes(\"s3\"))\n      insights.push(`\ud83d\ude97 Genug \u00dcberschuss f\u00fcr Wallbox-Laden (> 1400W)`);\n    if(this._log.length>0){\n      const today=this._log.filter(l=>Date.now()-l.ts<86400000);\n      if(today.length>0)insights.push(`\u25c6 ${today.length} Automationen heute ausgef\u00fchrt`);\n    }\n    if(this._haAutos.filter(a=>a.state===\"off\").length>5)\n      insights.push(`\ud83c\udfe0 ${this._haAutos.filter(a=>a.state===\"off\").length} HA-Automationen deaktiviert \u2013 \u00dcberblick n\u00f6tig?`);\n\n    return insights.length?insights:[\"\u2705 System optimal konfiguriert. Keine weiteren Vorschl\u00e4ge.\"];\n  },\n\n  // \u2500\u2500 Sidebar \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  buildSidebar(card){\n    const wrap=document.createElement(\"div\");\n    wrap.style.cssText=\"padding:8px;display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:100%\";\n\n    if(this._selNode) return(wrap.appendChild(this._buildNodeEditor(card)),wrap);\n    if(this._selWire) return(wrap.appendChild(this._buildWireEditor(card)),wrap);\n    if(this._selAuto) return(wrap.appendChild(this._buildAutoEditor(card)),wrap);\n\n    // System-W\u00e4hler\n    if((this._systems||[]).length>0){\n      const sysRow=document.createElement(\"div\");\n      sysRow.style.cssText=\"display:flex;align-items:center;gap:4px;margin-bottom:2px\";\n      const sysLbl=document.createElement(\"span\"); sysLbl.style.cssText=\"font-size:7px;color:#445566\"; sysLbl.textContent=\"System:\";\n      const sysSel=document.createElement(\"select\"); sysSel.style.cssText=\"flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n      this._systems.forEach((s,i)=>{const o=document.createElement(\"option\");o.value=i;o.textContent=s.name||`System ${i+1}`;if(i===this._activeSystem)o.selected=true;sysSel.appendChild(o);});\n      sysSel.addEventListener(\"change\",()=>{this._activeSystem=parseInt(sysSel.value);this._loadSystem();card._markDirty();card._rebuildSidebar();});\n      const addSysBtn=document.createElement(\"button\"); addSysBtn.style.cssText=\"padding:3px 7px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:7.5px;cursor:pointer\"; addSysBtn.textContent=\"+\";\n      addSysBtn.addEventListener(\"click\",()=>{\n        const name=prompt(\"Name des neuen Systems (z.B. Grundst\u00fcck 2):\");\n        if(!name)return;\n        this._systems.push({id:\"sys_\"+Date.now(),name,nodes:this._defaultNodes(),wires:this._defaultWires(),autos:[]});\n        this._activeSystem=this._systems.length-1; this._loadSystem(); this._saveSystem(card); card._rebuildSidebar();\n      });\n      sysRow.append(sysLbl,sysSel,addSysBtn); wrap.appendChild(sysRow);\n    }\n\n    // Status\n    const cfg=card._opts?.energie_cfg||{}, hass=card._hass;\n    const getW=(k)=>{const e=cfg[k];return e&&hass?.states[e]?(parseFloat(hass.states[e].state)||0):0;};\n    const sW=getW(\"solar_power\"),lW=getW(\"load_power\"),bPct=getW(\"battery_soc\"),surp=sW-lW;\n    const sb=document.createElement(\"div\"); sb.style.cssText=\"background:var(--surf2);border-radius:5px;padding:5px 8px;border:1px solid #1c2535\";\n    sb.innerHTML=`<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px\"><div><div style=\"font-size:6px;color:#445566\">\u2600 Solar</div><div style=\"font-size:11px;font-weight:700;color:#fbbf24\">${sW.toFixed(0)}W</div></div><div><div style=\"font-size:6px;color:#445566\">\ud83d\udd0b SOC</div><div style=\"font-size:11px;font-weight:700;color:${bPct>60?\"#22c55e\":bPct>30?\"#f59e0b\":\"#ef4444\"}\">${bPct.toFixed(0)}%</div></div><div><div style=\"font-size:6px;color:#445566\">\u26a1 \u00dcberschuss</div><div style=\"font-size:11px;font-weight:700;color:${surp>=0?\"#22c55e\":\"#ef4444\"}\">${surp>=0?\"+\":\"\"}${surp.toFixed(0)}W</div></div></div>`;\n    wrap.appendChild(sb);\n\n    // Tabs\n    const tabs=[[\"autos\",\"\u25c6 Eigene\"],[\"ha_import\",\"\ud83c\udfe0 HA\"],[\"elements\",\"\ud83d\udd27 Elemente\"],[\"ai\",\"\ud83e\udd16 KI\"]];\n    const tabBar=document.createElement(\"div\"); tabBar.style.cssText=\"display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:2px\";\n    const active=this._sidebarTab||\"autos\";\n    tabs.forEach(([tid,label])=>{\n      const btn=document.createElement(\"button\");\n      btn.style.cssText=`padding:4px 2px;border-radius:4px;border:1px solid ${active===tid?\"#f59e0b\":\"#1c2535\"};background:${active===tid?\"#f59e0b22\":\"var(--surf2)\"};color:${active===tid?\"#f59e0b\":\"#445566\"};font-size:7px;cursor:pointer`;\n      btn.textContent=label;\n      btn.addEventListener(\"click\",()=>{this._sidebarTab=tid;card._rebuildSidebar();});\n      tabBar.appendChild(btn);\n    });\n    wrap.appendChild(tabBar);\n\n    // \u2500\u2500 TAB: Eigene Automationen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"autos\"){\n      const hdr=document.createElement(\"div\"); hdr.style.cssText=\"display:flex;align-items:center;gap:5px;margin-top:3px\";\n      const t=document.createElement(\"div\"); t.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;flex:1\"; t.textContent=`EIGENE (${(this._autos||[]).length})`;\n      const add=document.createElement(\"button\"); add.style.cssText=\"padding:3px 8px;border-radius:4px;border:1px solid #22c55e;background:transparent;color:#22c55e;font-size:7.5px;cursor:pointer\"; add.textContent=\"+ Neu\";\n      add.addEventListener(\"click\",()=>{\n        const na={id:\"auto_\"+Date.now(),name:\"Neue Automation\",enabled:true,conditions:[],operator:\"AND\",actions:[],actions_else:[],cooldown_min:15,x:0.4+Math.random()*0.2,y:0.4+Math.random()*0.2};\n        if(!card._opts.elektro_autos)card._opts.elektro_autos=[];\n        card._opts.elektro_autos.push(na); this._autos=card._opts.elektro_autos;\n        this._selAuto=na; this._saveSystem(card); card._rebuildSidebar();\n      });\n      hdr.append(t,add); wrap.appendChild(hdr);\n\n      const vals2={solarW:sW,battPct:bPct,surplus:surp};\n      (this._autos||[]).forEach(auto=>{\n        const running=this._evalAuto(auto,vals2,hass,cfg);\n        const row=document.createElement(\"div\");\n        row.style.cssText=`display:flex;align-items:center;gap:5px;padding:5px 6px;border-radius:5px;border:1px solid ${running?\"#22c55e44\":\"#1c2535\"};background:${running?\"#22c55e0a\":\"var(--surf2)\"};cursor:pointer;margin-bottom:2px`;\n        const tog=document.createElement(\"input\"); tog.type=\"checkbox\"; tog.checked=auto.enabled!==false; tog.style.cssText=\"accent-color:#22c55e;width:12px;height:12px;cursor:pointer\";\n        tog.addEventListener(\"click\",(e)=>{e.stopPropagation();auto.enabled=tog.checked;this._saveSystem(card);card._markDirty();});\n        row.innerHTML=`<span style=\"font-size:11px\">\u25c6</span><div style=\"flex:1;min-width:0\"><div style=\"font-size:8px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${auto.name||\"Auto\"}</div><div style=\"font-size:6.5px;color:#445566\">${auto.conditions?.length||0} Bed \u00b7 ${auto.actions?.length||0} Akt \u00b7 ${auto.cooldown_min||5}min</div></div><span style=\"font-size:7px;font-weight:700;color:${running?\"#22c55e\":\"#445566\"}\">${running?\"\u25b6\":\"\u25cf\"}</span>`;\n        row.insertBefore(tog,row.firstChild);\n        row.addEventListener(\"click\",()=>{this._selAuto=auto;card._rebuildSidebar();});\n        wrap.appendChild(row);\n      });\n\n      // Log\n      if(this._log.length>0){\n        const logHdr=document.createElement(\"div\"); logHdr.style.cssText=\"font-size:7px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:3px\"; logHdr.textContent=`LOG (${this._log.length})`;\n        wrap.appendChild(logHdr);\n        this._log.slice(0,8).forEach(entry=>{\n          const r=document.createElement(\"div\"); r.style.cssText=\"font-size:6.5px;color:#445566;padding:2px 0;border-bottom:1px solid #0d121944\";\n          const ts=new Date(entry.ts); const hhmm=`${ts.getHours().toString().padStart(2,\"0\")}:${ts.getMinutes().toString().padStart(2,\"0\")}`;\n          r.textContent=`${hhmm} \u25c6 ${entry.name} (\u2600${entry.vals?.solarW}W, \ud83d\udd0b${entry.vals?.battPct}%)`;\n          wrap.appendChild(r);\n        });\n      }\n    }\n\n    // \u2500\u2500 TAB: HA-Automationen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"ha_import\"){\n      const hdr2=document.createElement(\"div\"); hdr2.style.cssText=\"display:flex;align-items:center;gap:5px;margin-top:3px\";\n      const t2=document.createElement(\"div\"); t2.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;flex:1\"; t2.textContent=`HA-AUTOMATIONEN (${this._haAutos.length})`;\n      const reload=document.createElement(\"button\"); reload.style.cssText=\"padding:3px 7px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:7.5px;cursor:pointer\"; reload.textContent=\"\u21bb\";\n      reload.addEventListener(\"click\",()=>{this._haEntities=null;this._loadHaAutomations(card).then(()=>card._rebuildSidebar());});\n      hdr2.append(t2,reload); wrap.appendChild(hdr2);\n\n      // Filter\n      const filterInp=document.createElement(\"input\"); filterInp.type=\"text\"; filterInp.placeholder=\"Suchen\u2026\";\n      filterInp.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n      wrap.appendChild(filterInp);\n\n      const listEl=document.createElement(\"div\");\n      const renderHaList=(filter)=>{\n        listEl.innerHTML=\"\";\n        const filtered=this._haAutos.filter(a=>!filter||(a.alias||\"\").toLowerCase().includes(filter.toLowerCase()));\n        filtered.slice(0,40).forEach(ha=>{\n          const on=ha.state===\"on\";\n          const row=document.createElement(\"div\");\n          row.style.cssText=`display:flex;align-items:center;gap:5px;padding:4px 6px;border-radius:4px;border:1px solid ${on?\"#22c55e22\":\"#1c2535\"};background:${on?\"#22c55e08\":\"var(--surf2)\"};margin-bottom:2px`;\n          const tog=document.createElement(\"input\"); tog.type=\"checkbox\"; tog.checked=on; tog.style.cssText=\"accent-color:#22c55e;width:12px;height:12px;cursor:pointer\";\n          tog.addEventListener(\"change\",()=>{\n            if(ha.entity_id){card._hass.callService(\"automation\",tog.checked?\"turn_on\":\"turn_off\",{entity_id:ha.entity_id}).then(()=>{ha.state=tog.checked?\"on\":\"off\";}).catch(()=>{});}\n          });\n          const lastT=ha.last_triggered?new Date(ha.last_triggered):null;\n          const lastStr=lastT?`${lastT.getDate()}.${lastT.getMonth()+1} ${lastT.getHours()}:${String(lastT.getMinutes()).padStart(2,\"0\")}`:\"nie\";\n          row.innerHTML=`<div style=\"flex:1;min-width:0\"><div style=\"font-size:7.5px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap\">${ha.alias}</div><div style=\"font-size:6px;color:#445566\">Letzte Ausf.: ${lastStr} \u00b7 ${ha.mode||\"single\"}</div></div><span style=\"font-size:7px;font-weight:700;color:${on?\"#22c55e\":\"#445566\"}\">${on?\"AN\":\"AUS\"}</span>`;\n          row.insertBefore(tog,row.firstChild);\n          wrap.appendChild; listEl.appendChild(row);\n        });\n        if(filtered.length===0){const e=document.createElement(\"div\");e.style.cssText=\"font-size:8px;color:#445566;text-align:center;padding:10px\";e.textContent=\"Keine Automationen gefunden\";listEl.appendChild(e);}\n      };\n      filterInp.addEventListener(\"input\",()=>renderHaList(filterInp.value));\n      renderHaList(\"\");\n      wrap.appendChild(listEl);\n    }\n\n    // \u2500\u2500 TAB: Elemente \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"elements\"){\n      const addHdr=document.createElement(\"div\"); addHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:4px;margin-bottom:4px\"; addHdr.textContent=\"HARDWARE HINZUF\u00dcGEN\";\n      wrap.appendChild(addHdr);\n      const grid=document.createElement(\"div\"); grid.style.cssText=\"display:grid;grid-template-columns:1fr 1fr;gap:3px\";\n      Object.entries(this.NODE_TYPES).forEach(([type,def])=>{\n        const btn=document.createElement(\"button\"); btn.style.cssText=\"padding:4px;border-radius:4px;border:1px solid #1c2535;background:var(--surf2);color:var(--text);font-size:7.5px;cursor:pointer;text-align:left;display:flex;align-items:center;gap:4px\";\n        btn.innerHTML=`<span style=\"font-size:11px\">${def.icon}</span><span>${def.label}</span>`;\n        btn.addEventListener(\"click\",()=>{\n          const n={id:type+\"_\"+Date.now(),type,label:def.label,entity:\"\",x:0.3+Math.random()*0.4,y:0.3+Math.random()*0.4};\n          if(!this._nodes)this._nodes=[];\n          this._nodes.push(n); this._selNode=n; this._saveSystem(card); card._rebuildSidebar();\n        });\n        grid.appendChild(btn);\n      });\n      wrap.appendChild(grid);\n      const connHdr=document.createElement(\"div\"); connHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:3px\"; connHdr.textContent=`LEITUNGEN (${(this._wires||[]).length})`;\n      wrap.appendChild(connHdr);\n      const connBtn=document.createElement(\"button\"); connBtn.style.cssText=\"width:100%;padding:5px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer\"; connBtn.textContent=\"\u2192 Knoten verbinden\";\n      connBtn.addEventListener(\"click\",()=>{card._showToast(\"Ersten Knoten antippen \u2192 dann zweiten\");if(!card._opts)card._opts={};card._opts._elektro_connecting=true;});\n      wrap.appendChild(connBtn);\n    }\n\n    // \u2500\u2500 TAB: KI \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n    if(active===\"ai\"){\n      const insights=this._analyzeSystem(card);\n      if(insights.length){\n        const iHdr=document.createElement(\"div\"); iHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#f59e0b;margin-top:4px;margin-bottom:4px\"; iHdr.textContent=\"\ud83e\udd16 DYNAMISCHE ANALYSE\";\n        wrap.appendChild(iHdr);\n        insights.forEach(ins=>{\n          const r=document.createElement(\"div\"); r.style.cssText=\"font-size:7.5px;color:#94a3b8;padding:5px 7px;background:var(--surf2);border-radius:4px;border:1px solid #1c2535;margin-bottom:3px\"; r.textContent=ins;\n          wrap.appendChild(r);\n        });\n      }\n      const sugHdr=document.createElement(\"div\"); sugHdr.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:6px;margin-bottom:4px\"; sugHdr.textContent=\"VORSCHL\u00c4GE\";\n      wrap.appendChild(sugHdr);\n      const vals3={solarW:sW,battPct:bPct,surplus:surp,hasInverter:!!(this._nodes||[]).find(n=>n.type===\"inverter\"),hasSocProtection:false,hasBoilerAuto:false,hasWallboxAuto:false,hasTempProtection:false,hasNightOff:false,hasPoolAuto:false,hasFullNotify:false,hasLoadManagement:false};\n      const existIds=(this._autos||[]).map(a=>a.source_suggestion).filter(Boolean);\n      this.AI_SUGGESTIONS.filter(s=>!existIds.includes(s.id)).forEach(s=>{\n        const rc=s.risk===\"high\"?\"#ef4444\":s.risk===\"medium\"?\"#f59e0b\":\"#22c55e\";\n        const card2=document.createElement(\"div\"); card2.style.cssText=`border-radius:5px;border:1px solid ${rc}33;background:${rc}0a;padding:6px;margin-bottom:4px`;\n        card2.innerHTML=`<div style=\"font-size:8px;font-weight:700;color:var(--text);margin-bottom:2px\">${s.title}</div><div style=\"font-size:7px;color:#64748b;margin-bottom:4px\">${s.desc}</div>`;\n        const add2=document.createElement(\"button\"); add2.style.cssText=`width:100%;padding:3px;border-radius:4px;border:1px solid ${rc};background:transparent;color:${rc};font-size:7.5px;cursor:pointer`; add2.textContent=\"\u25c6 Hinzuf\u00fcgen\";\n        add2.addEventListener(\"click\",()=>{\n          const na={...s.auto,id:\"auto_\"+Date.now(),enabled:true,source_suggestion:s.id,x:0.35+Math.random()*0.3,y:0.35+Math.random()*0.3};\n          if(!card._opts.elektro_autos)card._opts.elektro_autos=[];\n          card._opts.elektro_autos.push(na); this._autos=card._opts.elektro_autos;\n          this._selAuto=na; this._saveSystem(card); card._rebuildSidebar();\n        });\n        card2.appendChild(add2); wrap.appendChild(card2);\n      });\n    }\n\n    return wrap;\n  },\n\n  // \u2500\u2500 Entity-Picker (Dropdown mit HA-Entities) \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _mkEntityPicker(label, value, domains, onChange, card){\n    const wrap=document.createElement(\"div\");\n    const lbl=document.createElement(\"div\"); lbl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\"; lbl.textContent=label;\n    const row=document.createElement(\"div\"); row.style.cssText=\"display:flex;gap:3px\";\n    const inp=document.createElement(\"input\"); inp.type=\"text\"; inp.value=value||\"\"; inp.placeholder=`${(domains||[]).join(\"/\")} Entity`;\n    inp.style.cssText=\"flex:1;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n    inp.addEventListener(\"input\",()=>onChange(inp.value.trim()));\n    const pickerBtn=document.createElement(\"button\"); pickerBtn.style.cssText=\"padding:3px 6px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer\"; pickerBtn.textContent=\"\ud83d\udd0d\";\n    pickerBtn.addEventListener(\"click\",()=>{\n      const entities=this._getEntities(card,domains);\n      const dl=document.createElement(\"div\"); dl.style.cssText=\"position:absolute;z-index:100;background:#0d1219;border:1px solid #334155;border-radius:6px;max-height:180px;overflow-y:auto;width:220px;box-shadow:0 4px 12px #000a\";\n      const si=document.createElement(\"input\"); si.type=\"text\"; si.placeholder=\"Suchen\u2026\"; si.style.cssText=\"width:100%;padding:4px 6px;border:none;border-bottom:1px solid #334155;background:transparent;color:var(--text);font-size:8px;box-sizing:border-box\";\n      dl.appendChild(si);\n      const renderList=(filter)=>{\n        dl.querySelectorAll(\".pick-item\").forEach(e=>e.remove());\n        entities.filter(e=>!filter||e.name.toLowerCase().includes(filter.toLowerCase())||e.id.includes(filter)).slice(0,30).forEach(e=>{\n          const item=document.createElement(\"div\"); item.className=\"pick-item\";\n          item.style.cssText=\"padding:4px 8px;cursor:pointer;font-size:7.5px;border-bottom:1px solid #0d121966;display:flex;align-items:center;gap:6px\";\n          item.innerHTML=`<span style=\"color:#445566;font-size:6.5px\">${e.id}</span><span style=\"flex:1;color:var(--text)\">${e.name}</span><span style=\"color:${e.state===\"on\"?\"#22c55e\":\"#445566\"};font-size:6.5px\">${e.state}</span>`;\n          item.addEventListener(\"click\",()=>{inp.value=e.id;onChange(e.id);dl.remove();});\n          item.addEventListener(\"mouseenter\",()=>item.style.background=\"#1c2535\");\n          item.addEventListener(\"mouseleave\",()=>item.style.background=\"\");\n          dl.appendChild(item);\n        });\n      };\n      si.addEventListener(\"input\",()=>renderList(si.value));\n      renderList(\"\");\n      document.body.appendChild(dl);\n      const rect=pickerBtn.getBoundingClientRect();\n      dl.style.top=(rect.bottom+4)+\"px\"; dl.style.left=Math.max(4,rect.left-80)+\"px\";\n      setTimeout(()=>document.addEventListener(\"click\",function h(e){if(!dl.contains(e.target)&&e.target!==pickerBtn){dl.remove();document.removeEventListener(\"click\",h);}},{once:false}),100);\n    });\n    row.append(inp,pickerBtn); wrap.append(lbl,row); return wrap;\n  },\n\n  // \u2500\u2500 Auto-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildAutoEditor(card){\n    const auto=this._selAuto;\n    const div=document.createElement(\"div\"); div.style.cssText=\"display:flex;flex-direction:column;gap:4px\";\n    const hdr=document.createElement(\"div\"); hdr.style.cssText=\"display:flex;align-items:center;gap:6px;margin-bottom:3px\";\n    hdr.innerHTML=`<span style=\"font-size:13px\">\u25c6</span><span style=\"font-size:9px;font-weight:700;color:#22c55e\">Automation</span>`;\n    const back=document.createElement(\"button\"); back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\"; back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selAuto=null;card._rebuildSidebar();});\n    hdr.appendChild(back); div.appendChild(hdr);\n    const save=(k,v)=>{auto[k]=v;this._saveSystem(card);card._markDirty();};\n    // Name\n    div.appendChild(this._mkEntityPicker? (() => {\n      const r=document.createElement(\"div\"); const l=document.createElement(\"div\");l.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";l.textContent=\"Name\";\n      const i=document.createElement(\"input\");i.type=\"text\";i.value=auto.name||\"\";i.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n      i.addEventListener(\"input\",()=>save(\"name\",i.value));r.append(l,i);return r;\n    })():null);\n    // Aktiv + Cooldown\n    const tr=document.createElement(\"div\"); tr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    const ec=document.createElement(\"input\");ec.type=\"checkbox\";ec.checked=auto.enabled!==false;ec.style.cssText=\"accent-color:#22c55e;width:13px;height:13px\";\n    ec.addEventListener(\"change\",()=>save(\"enabled\",ec.checked));\n    const el=document.createElement(\"span\");el.style.cssText=\"font-size:8px;color:#94a3b8;flex:1\";el.textContent=\"Aktiv\";\n    const cl=document.createElement(\"span\");cl.style.cssText=\"font-size:7px;color:#445566\";cl.textContent=\"Cooldown:\";\n    const ci=document.createElement(\"input\");ci.type=\"number\";ci.value=auto.cooldown_min||15;ci.min=1;ci.max=1440;\n    ci.style.cssText=\"width:40px;padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    ci.addEventListener(\"input\",()=>save(\"cooldown_min\",parseInt(ci.value)||15));\n    const cm=document.createElement(\"span\");cm.style.cssText=\"font-size:6.5px;color:#445566\";cm.textContent=\"min\";\n    tr.append(ec,el,cl,ci,cm); div.appendChild(tr);\n    // Operator\n    const op=document.createElement(\"div\"); op.style.cssText=\"display:flex;align-items:center;gap:5px\";\n    const ol=document.createElement(\"span\");ol.style.cssText=\"font-size:7px;color:#445566\";ol.textContent=\"Verkn\u00fcpfung:\";\n    [\"AND\",\"OR\"].forEach(o=>{\n      const b=document.createElement(\"button\");b.style.cssText=`padding:2px 10px;border-radius:4px;border:1px solid ${auto.operator===o?\"#38bdf8\":\"#1c2535\"};background:${auto.operator===o?\"#38bdf822\":\"var(--surf2)\"};color:${auto.operator===o?\"#38bdf8\":\"#445566\"};font-size:8px;cursor:pointer`;b.textContent=o;\n      b.addEventListener(\"click\",()=>{save(\"operator\",o);card._rebuildSidebar();});op.appendChild(b);\n    });\n    op.insertBefore(ol,op.firstChild); div.appendChild(op);\n    // Bedingungen\n    const ch=document.createElement(\"div\");ch.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:3px\";ch.textContent=\"WENN\";div.appendChild(ch);\n    if(!auto.conditions)auto.conditions=[];\n    auto.conditions.forEach((c,ci2)=>{\n      const ct=this.CONDITION_TYPES[c.type]||{};\n      const rb=document.createElement(\"div\");rb.style.cssText=\"background:var(--surf2);border-radius:4px;padding:5px;border:1px solid #38bdf822;margin-bottom:3px\";\n      rb.innerHTML=`<div style=\"font-size:7.5px;font-weight:700;color:#38bdf8;margin-bottom:3px\">${ct.icon||\"\"} ${ct.label||c.type}</div>`;\n      (ct.params||[]).forEach(param=>{\n        const isEntity=param===\"entity\";\n        if(isEntity){\n          rb.appendChild(this._mkEntityPicker({threshold_w:\"Ab Watt\",threshold_pct:\"Ab %\",threshold_temp:\"Ab \u00b0C\",entity:\"Entity\",time_from:\"Von\",time_to:\"Bis\",days:\"Tage\"}[param]||param,c[param],[\"switch\",\"sensor\",\"binary_sensor\",\"input_boolean\"],(v)=>{c[param]=v;this._saveSystem(card);},card));\n        } else {\n          const pr=document.createElement(\"div\");const pl=document.createElement(\"div\");pl.style.cssText=\"font-size:6.5px;color:#445566;margin-bottom:1px\";pl.textContent={threshold_w:\"Ab Watt\",threshold_pct:\"Ab %\",threshold_temp:\"Ab \u00b0C\",time_from:\"Von (HH:MM)\",time_to:\"Bis (HH:MM)\"}[param]||param;\n          const pi=document.createElement(\"input\");pi.type=\"text\";pi.value=c[param]||\"\";pi.style.cssText=\"width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n          pi.addEventListener(\"input\",()=>{c[param]=pi.value.trim();this._saveSystem(card);});pr.append(pl,pi);rb.appendChild(pr);\n        }\n      });\n      const db=document.createElement(\"button\");db.style.cssText=\"width:100%;padding:2px;border-radius:3px;border:1px solid #ef444466;background:transparent;color:#ef4444;font-size:7px;cursor:pointer;margin-top:3px\";db.textContent=\"Entfernen\";\n      db.addEventListener(\"click\",()=>{auto.conditions.splice(ci2,1);this._saveSystem(card);card._rebuildSidebar();});rb.appendChild(db);div.appendChild(rb);\n    });\n    const cs=document.createElement(\"select\");cs.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n    const cd=document.createElement(\"option\");cd.value=\"\";cd.textContent=\"+ Bedingung\u2026\";cs.appendChild(cd);\n    Object.entries(this.CONDITION_TYPES).forEach(([id,ct])=>{const o=document.createElement(\"option\");o.value=id;o.textContent=`${ct.icon} ${ct.label}`;cs.appendChild(o);});\n    cs.addEventListener(\"change\",()=>{if(!cs.value)return;auto.conditions.push({type:cs.value});cs.value=\"\";this._saveSystem(card);card._rebuildSidebar();});div.appendChild(cs);\n    // Aktionen\n    const ah=document.createElement(\"div\");ah.style.cssText=\"font-size:7.5px;font-weight:700;color:#94a3b8;margin-top:2px\";ah.textContent=\"DANN\";div.appendChild(ah);\n    if(!auto.actions)auto.actions=[];\n    auto.actions.forEach((a,ai)=>{\n      const at=this.ACTION_TYPES[a.type]||{};\n      const rb=document.createElement(\"div\");rb.style.cssText=\"background:var(--surf2);border-radius:4px;padding:5px;border:1px solid #22c55e22;margin-bottom:3px\";\n      rb.innerHTML=`<div style=\"font-size:7.5px;font-weight:700;color:#22c55e;margin-bottom:3px\">${at.icon||\"\"} ${at.label||a.type}</div>`;\n      (at.params||[]).forEach(param=>{\n        const isEntity=param===\"entity\";\n        if(isEntity){\n          rb.appendChild(this._mkEntityPicker(\"Entity\",a[param],[\"switch\",\"light\",\"input_boolean\"],(v)=>{a[param]=v;this._saveSystem(card);},card));\n        } else {\n          const pr=document.createElement(\"div\");const pl=document.createElement(\"div\");pl.style.cssText=\"font-size:6.5px;color:#445566;margin-bottom:1px\";pl.textContent={message:\"Nachricht\",scene_id:\"Szenen-ID\",script_id:\"Script-ID\"}[param]||param;\n          const pi=document.createElement(\"input\");pi.type=\"text\";pi.value=a[param]||\"\";pi.style.cssText=\"width:100%;padding:2px 5px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n          pi.addEventListener(\"input\",()=>{a[param]=pi.value.trim();this._saveSystem(card);});pr.append(pl,pi);rb.appendChild(pr);\n        }\n      });\n      const db=document.createElement(\"button\");db.style.cssText=\"width:100%;padding:2px;border-radius:3px;border:1px solid #ef444466;background:transparent;color:#ef4444;font-size:7px;cursor:pointer;margin-top:3px\";db.textContent=\"Entfernen\";\n      db.addEventListener(\"click\",()=>{auto.actions.splice(ai,1);this._saveSystem(card);card._rebuildSidebar();});rb.appendChild(db);div.appendChild(rb);\n    });\n    const as=document.createElement(\"select\");as.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px;margin-bottom:4px\";\n    const ad=document.createElement(\"option\");ad.value=\"\";ad.textContent=\"+ Aktion\u2026\";as.appendChild(ad);\n    Object.entries(this.ACTION_TYPES).forEach(([id,at])=>{const o=document.createElement(\"option\");o.value=id;o.textContent=`${at.icon} ${at.label}`;as.appendChild(o);});\n    as.addEventListener(\"change\",()=>{if(!as.value)return;auto.actions.push({type:as.value});as.value=\"\";this._saveSystem(card);card._rebuildSidebar();});div.appendChild(as);\n    // Export\n    const exp=document.createElement(\"button\");exp.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #38bdf8;background:transparent;color:#38bdf8;font-size:8px;cursor:pointer;margin-top:3px\";exp.textContent=\"\ud83d\udce4 Als HA-Automation exportieren\";\n    exp.addEventListener(\"click\",()=>{\n      const yaml=this.exportToHA(auto,card._opts?.energie_cfg||{});\n      const ta=document.createElement(\"textarea\");ta.value=yaml;ta.style.cssText=\"width:100%;height:130px;font-size:6.5px;font-family:monospace;background:#0d1219;color:#94a3b8;border:1px solid #334155;border-radius:4px;padding:5px;margin-top:4px;resize:vertical\";\n      const cp=document.createElement(\"button\");cp.style.cssText=\"width:100%;padding:3px;border-radius:4px;border:1px solid #22c55e;background:transparent;color:#22c55e;font-size:7.5px;cursor:pointer;margin-top:2px\";cp.textContent=\"\ud83d\udccb Kopieren\";\n      cp.addEventListener(\"click\",()=>navigator.clipboard?.writeText(yaml).then(()=>card._showToast(\"\u2705 YAML kopiert\")));\n      div.appendChild(ta);div.appendChild(cp);\n    });\n    div.appendChild(exp);\n    const del2=document.createElement(\"button\");del2.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:2px\";del2.textContent=\"\ud83d\uddd1 L\u00f6schen\";\n    del2.addEventListener(\"click\",()=>{card._opts.elektro_autos=(card._opts.elektro_autos||[]).filter(a=>a.id!==auto.id);this._autos=card._opts.elektro_autos;this._selAuto=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del2);\n    return div;\n  },\n\n  // \u2500\u2500 Node-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildNodeEditor(card){\n    const node=this._selNode, nt=this.NODE_TYPES[node.type]||this.NODE_TYPES.custom;\n    const div=document.createElement(\"div\");div.style.cssText=\"display:flex;flex-direction:column;gap:5px\";\n    const hdr=document.createElement(\"div\");hdr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    hdr.innerHTML=`<span style=\"font-size:15px\">${nt.icon}</span><span style=\"font-size:9px;font-weight:700;color:${nt.color}\">${nt.label}</span>`;\n    const back=document.createElement(\"button\");back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\";back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selNode=null;card._rebuildSidebar();});\n    hdr.appendChild(back);div.appendChild(hdr);\n    const save=(k,v)=>{node[k]=v;this._saveSystem(card);card._markDirty();};\n    // Label\n    const lr=document.createElement(\"div\");const ll=document.createElement(\"div\");ll.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";ll.textContent=\"Label\";\n    const li=document.createElement(\"input\");li.type=\"text\";li.value=node.label||\"\";li.style.cssText=\"width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    li.addEventListener(\"input\",()=>save(\"label\",li.value));lr.append(ll,li);div.appendChild(lr);\n    // Entity-Picker\n    const domains={solar:[\"sensor\"],mppt:[\"sensor\"],battery:[\"sensor\",\"input_number\"],inverter:[\"switch\",\"input_boolean\"],load_12v:[\"sensor\",\"switch\"],load_230v:[\"switch\",\"sensor\"],wallbox:[\"switch\",\"sensor\"],pool:[\"switch\"],boiler:[\"switch\"],powerbank:[\"sensor\"],meter:[\"sensor\"],custom:[\"switch\",\"sensor\",\"light\"]}[node.type]||[\"switch\",\"sensor\"];\n    div.appendChild(this._mkEntityPicker(\"Entity (Sensor/Switch)\", node.entity, domains, (v)=>save(\"entity\",v), card));\n    // Sensor-Key\n    const skr=document.createElement(\"div\");const skl=document.createElement(\"div\");skl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";skl.textContent=\"Leitungs-Messwert-Key\";\n    const sks=document.createElement(\"select\");sks.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:7.5px\";\n    [\"\",\"solar_power\",\"battery_power\",\"load_power\",\"ac_out_power\",\"grid_power\"].forEach(k=>{const o=document.createElement(\"option\");o.value=k;o.textContent=k||\"(automatisch)\";if(node.sensor_key===k)o.selected=true;sks.appendChild(o);});\n    sks.addEventListener(\"change\",()=>save(\"sensor_key\",sks.value));skr.append(skl,sks);div.appendChild(skr);\n    const del=document.createElement(\"button\");del.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:4px\";del.textContent=\"\ud83d\uddd1 Knoten l\u00f6schen\";\n    del.addEventListener(\"click\",()=>{if(!this._nodes)return;const idx=this._nodes.indexOf(node);if(idx>=0)this._nodes.splice(idx,1);this._wires=(this._wires||[]).filter(w=>w.from!==node.id&&w.to!==node.id);this._selNode=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del);return div;\n  },\n\n  // \u2500\u2500 Wire-Editor \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _buildWireEditor(card){\n    const wire=this._selWire;\n    const div=document.createElement(\"div\");div.style.cssText=\"display:flex;flex-direction:column;gap:5px\";\n    const hdr=document.createElement(\"div\");hdr.style.cssText=\"display:flex;align-items:center;gap:6px\";\n    hdr.innerHTML=`<span style=\"font-size:12px\">\u21c9</span><span style=\"font-size:9px;font-weight:700;color:#38bdf8\">Leitung</span>`;\n    const back=document.createElement(\"button\");back.style.cssText=\"margin-left:auto;padding:2px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer\";back.textContent=\"\u2190 Zur\u00fcck\";\n    back.addEventListener(\"click\",()=>{this._selWire=null;card._rebuildSidebar();});\n    hdr.appendChild(back);div.appendChild(hdr);\n    const fN=(this._nodes||[]).find(n=>n.id===wire.from), tN=(this._nodes||[]).find(n=>n.id===wire.to);\n    const info=document.createElement(\"div\");info.style.cssText=\"font-size:7.5px;color:#445566;background:var(--surf2);padding:4px 6px;border-radius:4px\";\n    info.textContent=`${fN?.label||wire.from} \u2192 ${tN?.label||wire.to}`;div.appendChild(info);\n    const sks=document.createElement(\"select\");sks.style.cssText=\"width:100%;padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px\";\n    const skl=document.createElement(\"div\");skl.style.cssText=\"font-size:7px;color:#445566;margin-bottom:2px\";skl.textContent=\"Messwert (Watt auf Leitung)\";\n    [\"solar_power\",\"battery_power\",\"load_power\",\"ac_out_power\",\"grid_power\",\"\"].forEach(k=>{const o=document.createElement(\"option\");o.value=k;o.textContent=k||\"(keiner)\";if(wire.sensor_key===k)o.selected=true;sks.appendChild(o);});\n    sks.addEventListener(\"change\",()=>{wire.sensor_key=sks.value;this._saveSystem(card);card._markDirty();});\n    div.appendChild(skl);div.appendChild(sks);\n    const del=document.createElement(\"button\");del.style.cssText=\"width:100%;padding:4px;border-radius:4px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;margin-top:4px\";del.textContent=\"\ud83d\uddd1 Leitung l\u00f6schen\";\n    del.addEventListener(\"click\",()=>{if(!this._wires)return;const idx=this._wires.indexOf(wire);if(idx>=0)this._wires.splice(idx,1);this._selWire=null;this._saveSystem(card);card._rebuildSidebar();});\n    div.appendChild(del);return div;\n  },\n\n  // \u2500\u2500 Helpers \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n  _wireColor(t){return({solar:\"rgba(251,191,36,1)\",mppt:\"rgba(245,158,11,1)\",battery:\"rgba(34,197,94,1)\",inverter:\"rgba(168,85,247,1)\",load_12v:\"rgba(56,189,248,1)\"})[t]||\"rgba(100,116,139,1)\";},\n  _nodeValue(node,vals,hass,cfg){\n    if(node.type===\"solar\")   return `${vals.solarW.toFixed(0)}W`;\n    if(node.type===\"battery\") return `${vals.battPct.toFixed(0)}%`;\n    if(node.type===\"inverter\"&&vals.acW>0) return `${vals.acW.toFixed(0)}W`;\n    if(node.type===\"load_12v\"&&vals.loadW>0) return `${vals.loadW.toFixed(0)}W`;\n    if(node.entity&&hass?.states[node.entity]){const s=hass.states[node.entity];const v=parseFloat(s.state);if(!isNaN(v))return v>1000?`${(v/1000).toFixed(1)}kW`:`${v.toFixed(0)}${v>5?\"W\":s.attributes?.unit_of_measurement||\"\"}`;return s.state.slice(0,8);}\n    return null;\n  },\n  exportToHA(auto,cfg){\n    const r=(s)=>s?.replace(/\\{\\{(\\w+)\\}\\}/g,(_,k)=>cfg[k]||`ENTITY_${k}`);\n    const sp=cfg.solar_power||\"sensor.solar\",lp=cfg.load_power||\"sensor.load\",bs=cfg.battery_soc||\"sensor.battery\";\n    const cToY=(c)=>{const v=c.threshold_w||c.threshold_pct||c.threshold_temp||0;switch(c.type){case\"surplus_gt\":return`  - condition: template\\n    value_template: \"{{ (states('${sp}')|float-states('${lp}')|float)>${v} }}\"`;case\"soc_gt\":return`  - condition: template\\n    value_template: \"{{ states('${bs}')|float>${v} }}\"`;case\"soc_lt\":return`  - condition: template\\n    value_template: \"{{ states('${bs}')|float<${v} }}\"`;case\"entity_on\":return`  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"on\"`;case\"entity_off\":return`  - condition: state\\n    entity_id: ${r(c.entity)}\\n    state: \"off\"`;case\"time_between\":return`  - condition: time\\n    after: \"${c.time_from}\"\\n    before: \"${c.time_to}\"`;default:return`  # ${c.type}`;}};\n    const aToY=(a)=>{switch(a.type){case\"switch_on\":return`  - service: switch.turn_on\\n    target:\\n      entity_id: ${r(a.entity)}`;case\"switch_off\":return`  - service: switch.turn_off\\n    target:\\n      entity_id: ${r(a.entity)}`;case\"notify\":return`  - service: notify.notify\\n    data:\\n      message: \"${a.message}\"`;default:return`  # ${a.type}`;}};\n    return `alias: \"${auto.name||'BLE Export'}\"\\ndescription: \"Export aus BLE Positioning\"\\ntrigger:\\n  - platform: time_pattern\\n    minutes: \"/5\"\\ncondition:\\n${(auto.conditions||[]).map(cToY).join(\"\\n\")}\\naction:\\n${(auto.actions||[]).map(aToY).join(\"\\n\")}\\nmode: single`;\n  },\n};\n// Ende ElektroModul v3\n"
+/**
+ * BLE Positioning – Energie-Modul v1.0.0
+ * Optionales Modul für Solar, Verbrauch und Power-Management.
+ *
+ * Wird NUR geladen wenn in ⚙ OPT → Module → Energie-Management aktiviert.
+ * Solange deaktiviert: 0 RAM, 0 CPU, keine HA-Requests.
+ *
+ * Unterstützte Systeme (Presets):
+ *   - Generisch (freie Entity-Felder)
+ *   - Epever MPPT (via ESPHome/Modbus)
+ *   - Victron (VE.Direct / Cerbo GX)
+ *   - Fronius Solar
+ *   - Shelly EM Stromzähler
+ */
+
+// ── Presets für bekannte Solar-Systeme ───────────────────────────────────────
+const ENERGIE_PRESETS = {
+  generic: {
+    label: "Generisch (freie Felder)",
+    icon: "⚡",
+    fields: {}
+  },
+  epever: {
+    label: "Epever MPPT (ESPHome / ep-ever Integration)",
+    icon: "☀",
+    fields: {
+      solar_power:    "sensor.epever_solar_w",
+      solar_voltage:  "sensor.epever_solar_v",
+      solar_current:  "sensor.epever_solar_a",
+      solar_max_v:    "sensor.epever_solar_max",
+      battery_soc:    "sensor.epever_batt_soc",
+      battery_volt:   "sensor.epever_batt_v",
+      battery_curr:   "sensor.epever_batt_a",
+      battery_power:  "sensor.epever_batt_w",
+      battery_temp:   "sensor.epever_batt_temp",
+      battery_state:  "sensor.epever_batt_state",
+      charge_state:   "sensor.epever_charger_state",
+      load_power:     "sensor.epever_load_w",
+      load_voltage:   "sensor.epever_load_v",
+      load_current:   "sensor.epever_load_a",
+      load_switch:    "switch.epever_load_state",
+      gen_day:        "sensor.epever_gen_day",
+      gen_month:      "sensor.epever_gen_mon",
+      gen_total:      "sensor.epever_gen_tot",
+      cons_day:       "sensor.epever_cons_day",
+      device_temp:    "sensor.epever_device_temp",
+    }
+  },
+  victron_smartshunt: {
+    label: "Victron SmartShunt (BLE via ESP32)",
+    icon: "🔋",
+    // Entity-Namen vom esp32-bluetooth-proxy (BLE-Integration)
+    // Gerätename "Victronsmart" → Entity-Prefix anpassen!
+    fields: {
+      battery_soc:       "sensor.victronsmart_battery_soc",
+      battery_volt:      "sensor.victronsmart_battery_voltage",
+      battery_curr:      "sensor.victronsmart_battery_current",
+      battery_power:     "sensor.victronsmart_battery_power",
+      battery_state:     "sensor.victronsmart_battery_state",
+      consumed_ah:       "sensor.victronsmart_consumed_ah",
+      time_to_go:        "sensor.victronsmart_time_remaining",
+      // Relais A-D (Wechselrichter, 12V Dose, 230V Steckdose, Reserve)
+      relay_a:           "switch.victronsmart_relay_a",   // Wechselrichter
+      relay_b:           "switch.victronsmart_relay_b",   // 12V Dose
+      relay_c:           "switch.victronsmart_relay_c",   // 230V Steckdosen
+      relay_d:           "switch.victronsmart_relay_d",   // Reserviert
+    }
+  },
+  victron: {
+    label: "Victron (VE.Direct/Cerbo)",
+    icon: "🔋",
+    fields: {
+      solar_power:   "sensor.victron_pv_power",
+      battery_soc:   "sensor.victron_battery_soc",
+      battery_volt:  "sensor.victron_battery_voltage",
+      load_power:    "sensor.victron_ac_consumption",
+      grid_power:    "sensor.victron_grid_power",
+      charge_state:  "sensor.victron_battery_state",
+    }
+  },
+  hybrid_inverter: {
+    label: "Hybrid-Wechselrichter (Off-Grid, PI30/SBU)",
+    icon: "🔌",
+    // Für Noname-Wechselrichter mit PI30-Protokoll (SBU first, Off Grid)
+    fields: {
+      solar_power:        "sensor.hybridwechselrichter_pv_input_power",
+      solar_voltage:      "sensor.hybridwechselrichter_pv_input_voltage",
+      solar_current:      "sensor.hybridwechselrichter_pv_input_current",
+      solar_charging:     "sensor.hybridwechselrichter_pv_charging_power",
+      solar_total:        "sensor.hybridwechselrichter_pv_generation_sum",
+      battery_soc:        "sensor.hybridwechselrichter_battery_percent",
+      battery_volt:       "sensor.hybridwechselrichter_battery_voltage",
+      battery_curr:       "sensor.hybridwechselrichter_battery_load",
+      charge_state:       "sensor.hybridwechselrichter_inverter_operation_mode",
+      load_power:         "sensor.hybridwechselrichter_ac_out_watt",
+      load_voltage:       "sensor.hybridwechselrichter_ac_out_voltage",
+      load_percent:       "sensor.hybridwechselrichter_ac_out_percent",
+      inverter_mode:      "sensor.hybridwechselrichter_inverter_operation_mode",
+      output_priority:    "sensor.hybridwechselrichter_output_source_priority",
+      inverter_sw:        "switch.victronsmart_relay_a",  // Relais A = WR an/aus
+    }
+  },
+  fronius: {
+    label: "Fronius Solar",
+    icon: "🌞",
+    fields: {
+      solar_power:   "sensor.fronius_power_photovoltaics",
+      grid_power:    "sensor.fronius_power_grid",
+      battery_soc:   "sensor.fronius_state_of_charge",
+      load_power:    "sensor.fronius_power_load",
+      charge_state:  "sensor.fronius_storage_state",
+    }
+  },
+  shelly_em: {
+    label: "Shelly EM Stromzähler",
+    icon: "📊",
+    fields: {
+      grid_power:    "sensor.shelly_em_channel_1_power",
+      grid_energy:   "sensor.shelly_em_channel_1_energy",
+      load_power:    "sensor.shelly_em_channel_2_power",
+    }
+  },
 };
 
-// Module-IDs die per lazy eval geladen werden können
+// ── Power-Routing Stufen ─────────────────────────────────────────────────────
+// Nutzer definiert Prioritäten: Überschuss wird in dieser Reihenfolge geleitet
+const DEFAULT_ROUTING = [
+  { id:"battery",   name:"Batterie laden",    icon:"🔋", threshold_w: 0   },
+  { id:"boiler",    name:"Boiler/Warmwasser", icon:"♨",  threshold_w: 200 },
+  { id:"wallbox",   name:"E-Auto Wallbox",    icon:"🚗", threshold_w: 1400},
+  { id:"pool",      name:"Pool-Pumpe",        icon:"🏊", threshold_w: 200 },
+  { id:"powerbank", name:"Powerbank",         icon:"📱", threshold_w: 10  },
+];
+
+// Relais-Definitionen für Victron SmartShunt (Relais A-D)
+// Wird angezeigt wenn victron_smartshunt Preset aktiv
+const VICTRON_RELAIS = [
+  {
+    id: "relay_a",
+    name: "Relais A – Wechselrichter",
+    icon: "🔌",
+    desc: "Hybrid-WR ein/aus (Leerlauf ~30W → im Winter aus!)",
+    threshold_w: 300,       // WR nur bei >300W Solar
+    min_batt_pct: 40,       // Und Batterie > 40%
+    auto_off_batt_pct: 20,  // Ausschalten bei < 20%
+    seasonal: false,        // Ganzjährig steuerbar
+  },
+  {
+    id: "relay_b",
+    name: "Relais B – 12V Dose",
+    icon: "🔋",
+    desc: "Winter: Batterie-Heizung | Sommer: Powerbank laden",
+    summer_threshold_w: 50,  // Sommer: ab 50W Überschuss
+    winter_auto: true,        // Winter: automatisch wenn Temp < 5°C
+    winter_temp_entity: "",   // optional: Außentemperatur-Sensor
+  },
+  {
+    id: "relay_c",
+    name: "Relais C – 230V Steckdose",
+    icon: "🔌",
+    desc: "Garten-Akkus / Werkzeug laden (braucht WR aktiv!)",
+    threshold_w: 400,
+    requires_relay: "relay_a",  // Nur wenn WR (Relay A) an
+  },
+  {
+    id: "relay_d",
+    name: "Relais D – Reserviert",
+    icon: "❓",
+    desc: "Noch nicht belegt",
+    threshold_w: 0,
+  },
+];
+
+// ── Modul-Objekt ─────────────────────────────────────────────────────────────
+const EnergieModul = {
+  id:          "energie",
+  name:        "Energie",
+  icon:        "⚡",
+  tabId:       "energie_modul",
+  version:     "1.0.0",
+  description: "Solar, Verbrauch, Power-Routing",
+
+  _card:    null,
+  _pollBuf: [],   // Letzten N Werte für Sparkline
+  _lastData: {},
+
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  init(card) {
+    this._card = card;
+    console.info("[BLE Energie] Modul initialisiert");
+    // Saison-Check beim Start
+    if (!this.isActive(card)) {
+      console.info("[BLE Energie] Modul außerhalb der konfigurierten Saison – pausiert");
+    }
+  },
+
+  destroy() {
+    this._card = null;
+    this._pollBuf = [];
+    this._lastData = {};
+  },
+
+  // Saison-Check (opt-in, default: immer aktiv)
+  isActive(card) {
+    const cfg = card?._opts?.energie_cfg || {};
+    if (!cfg.saison_active) return true; // Saison-Modus aus → immer aktiv
+    const now = new Date();
+    const mm = now.getMonth() + 1; // 1-12
+    const from = parseInt(cfg.saison_from || 1);
+    const to   = parseInt(cfg.saison_to   || 12);
+    if (from <= to) return mm >= from && mm <= to;
+    return mm >= from || mm <= to; // Jahreswechsel (z.B. Nov-Feb)
+  },
+
+  // ── Poll-Hook: Werte aus HA lesen ─────────────────────────────────────────
+  onPoll(data, card) {
+    const cfg  = card?._opts?.energie_cfg || {};
+    const hass = card?._hass;
+    if (!hass) return;
+
+    const get = (key) => {
+      const eid = cfg[key];
+      if (!eid) return null;
+      const s = hass.states[eid];
+      if (!s || s.state === 'unavailable' || s.state === 'unknown') return null;
+      return parseFloat(s.state) || null;
+    };
+
+    // Epever MPPT Daten
+    const epever_solar = get('solar_power');
+    // Hybrid-WR Solar (addieren wenn beide vorhanden)
+    const wr_solar = get('solar_charging') || get('solar_power');
+    const total_solar = (epever_solar || 0) + (wr_solar && wr_solar !== epever_solar ? wr_solar : 0) || epever_solar || wr_solar;
+
+    // Victron SmartShunt: präzise Batterie-Daten (bevorzugt vor Epever)
+    const vict_soc  = get('victron_soc')  || get('battery_soc');
+    const vict_volt = get('victron_volt') || get('battery_volt');
+    const vict_curr = get('victron_curr') || get('battery_curr');
+
+    // Wechselrichter Status
+    const wr_mode = cfg.inverter_mode ? hass.states[cfg.inverter_mode]?.state : null;
+    const wr_active = wr_mode && !['Standby','standby','off','Off'].includes(wr_mode);
+
+    this._lastData = {
+      solar_w:      total_solar,
+      solar_v:      get('solar_voltage'),
+      batt_pct:     vict_soc,
+      batt_v:       vict_volt,
+      batt_curr:    vict_curr,
+      batt_w:       get('battery_power'),
+      batt_temp:    get('battery_temp'),
+      batt_state:   cfg.battery_state ? hass.states[cfg.battery_state]?.state : null,
+      load_w:       get('load_power'),
+      load_v:       get('load_voltage'),
+      load_pct:     get('load_percent'),
+      grid_w:       get('grid_power'),
+      charge:       cfg.charge_state ? hass.states[cfg.charge_state]?.state : null,
+      inverter_on:  wr_active,
+      inverter_mode: wr_mode,
+      gen_day:      get('gen_day'),
+      gen_month:    get('gen_month'),
+      cons_day:     get('cons_day'),
+      device_temp:  get('device_temp'),
+      // Relais-Status
+      relay_a: cfg.relay_a ? hass.states[cfg.relay_a]?.state : null,
+      relay_b: cfg.relay_b ? hass.states[cfg.relay_b]?.state : null,
+      relay_c: cfg.relay_c ? hass.states[cfg.relay_c]?.state : null,
+      relay_d: cfg.relay_d ? hass.states[cfg.relay_d]?.state : null,
+      ts: Date.now(),
+    };
+
+    // Sparkline-Buffer (letzten 60 Werte)
+    if (this._lastData.solar_w !== null) {
+      this._pollBuf.push({ ts: Date.now(), w: this._lastData.solar_w });
+      if (this._pollBuf.length > 60) this._pollBuf.shift();
+    }
+
+    // Power-Routing: Überschuss berechnen und Automationen triggern
+    if (cfg.routing_active) this._checkRouting(card);
+  },
+
+  // ── Power-Routing Logik ───────────────────────────────────────────────────
+  _checkRouting(card) {
+    const d    = this._lastData;
+    const cfg  = card?._opts?.energie_cfg || {};
+    const hass = card?._hass;
+    if (!hass || d.solar_w === null) return;
+
+    const surplus = (d.solar_w || 0) - (d.load_w || 0);
+    const routing = cfg.routing || DEFAULT_ROUTING;
+
+    routing.forEach(step => {
+      const entity = cfg[`routing_${step.id}_entity`];
+      if (!entity) return;
+      const shouldOn = surplus >= step.threshold_w;
+      const curState = hass.states[entity]?.state;
+      if (shouldOn && curState === 'off') {
+        hass.callService('switch', 'turn_on', { entity_id: entity })
+          .catch(() => {});
+      } else if (!shouldOn && curState === 'on' && cfg[`routing_${step.id}_auto_off`]) {
+        hass.callService('switch', 'turn_off', { entity_id: entity })
+          .catch(() => {});
+      }
+    });
+  },
+
+  // ── Sidebar ───────────────────────────────────────────────────────────────
+  buildSidebar(card) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'padding:8px;display:flex;flex-direction:column;gap:8px';
+
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-size:10px;font-weight:700;color:#f59e0b;letter-spacing:1px';
+    hdr.textContent = '⚡ ENERGIE';
+    wrap.appendChild(hdr);
+
+    if (!this.isActive(card)) {
+      const offNote = document.createElement('div');
+      offNote.style.cssText = 'padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center';
+      const cfg = card?._opts?.energie_cfg || {};
+      offNote.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from || 1}.–${cfg.saison_to || 12}. Monat)`;
+      wrap.appendChild(offNote);
+      return wrap;
+    }
+
+    const d = this._lastData;
+
+    // ── Solar-Übersicht ──────────────────────────────────────────
+    const solarBox = this._mkBox('Solar & Batterie');
+    const grid2 = document.createElement('div');
+    grid2.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:6px';
+
+    [
+      { label:'Solar',    val: d.solar_w != null ? `${Math.round(d.solar_w)} W` : '–', color:'#f59e0b', icon:'☀' },
+      { label:'Batterie', val: d.batt_pct != null ? `${Math.round(d.batt_pct)} %` : '–', color: this._battColor(d.batt_pct), icon:'🔋' },
+      { label:'Verbrauch',val: d.load_w  != null ? `${Math.round(d.load_w)} W` : '–', color:'#94a3b8', icon:'💡' },
+      { label:'Netz',     val: d.grid_w  != null ? `${d.grid_w >= 0 ? '+' : ''}${Math.round(d.grid_w)} W` : '–', color: d.grid_w >= 0 ? '#22c55e' : '#ef4444', icon:'🔌' },
+    ].forEach(({label, val, color, icon}) => {
+      const tile = document.createElement('div');
+      tile.style.cssText = `background:var(--bg);border-radius:6px;padding:6px 8px;border:1px solid #1c2535`;
+      tile.innerHTML = `<div style="font-size:7px;color:#445566;margin-bottom:2px">${icon} ${label}</div>
+        <div style="font-size:14px;font-weight:700;color:${color}">${val}</div>`;
+      grid2.appendChild(tile);
+    });
+    solarBox.appendChild(grid2);
+
+    // Batterie-Ladebalken
+    if (d.batt_pct != null) {
+      const barWrap = document.createElement('div');
+      barWrap.style.cssText = 'height:6px;background:#1c2535;border-radius:3px;overflow:hidden;margin-bottom:4px';
+      const bar = document.createElement('div');
+      bar.style.cssText = `height:100%;width:${Math.min(100,d.batt_pct)}%;background:${this._battColor(d.batt_pct)};border-radius:3px;transition:width 0.5s`;
+      barWrap.appendChild(bar);
+      solarBox.appendChild(barWrap);
+    }
+
+    // Sparkline Solar (letzten 60 Polls)
+    if (this._pollBuf.length > 2) {
+      const spark = this._mkSparkline(this._pollBuf.map(p => p.w), '#f59e0b', 180, 32);
+      solarBox.appendChild(spark);
+    }
+
+    // Überschuss-Anzeige
+    if (d.solar_w != null && d.load_w != null) {
+      const surplus = d.solar_w - d.load_w;
+      const surEl = document.createElement('div');
+      surEl.style.cssText = 'text-align:center;font-size:8px;margin-top:4px';
+      surEl.innerHTML = `Überschuss: <span style="font-weight:700;color:${surplus >= 0 ? '#22c55e' : '#ef4444'}">${surplus >= 0 ? '+' : ''}${Math.round(surplus)} W</span>`;
+      solarBox.appendChild(surEl);
+    }
+
+    wrap.appendChild(solarBox);
+
+    // ── Wechselrichter & Relais Panel ───────────────────────────
+    const cfg = card?._opts?.energie_cfg || {};
+    const hasRelais = cfg.relay_a || cfg.relay_b || cfg.relay_c || cfg.relay_d;
+    if (hasRelais) {
+      const relBox = this._mkBox('Relais & Verbraucher');
+
+      // WR-Status prominent anzeigen
+      if (cfg.relay_a) {
+        const wrOn = d.relay_a === 'on';
+        const wrRow = document.createElement('div');
+        wrRow.style.cssText = `display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:6px;background:${wrOn ? '#22c55e18' : '#ef444418'};border:1px solid ${wrOn ? '#22c55e44' : '#ef444444'}`;
+        wrRow.innerHTML = `<span style="font-size:18px">🔌</span>
+          <div style="flex:1">
+            <div style="font-size:9px;font-weight:700;color:var(--text)">Wechselrichter (230V)</div>
+            <div style="font-size:7.5px;color:#445566">Leerlauf ~30W · Relay A</div>
+          </div>
+          <span style="font-size:11px;font-weight:700;color:${wrOn ? '#22c55e' : '#ef4444'}">${wrOn ? '● AN' : '○ AUS'}</span>`;
+        // Toggle-Button
+        const wrBtn = document.createElement('button');
+        wrBtn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${wrOn ? '#ef4444' : '#22c55e'};background:transparent;color:${wrOn ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;
+        wrBtn.textContent = wrOn ? 'AUS' : 'AN';
+        wrBtn.addEventListener('click', () => {
+          const svc = wrOn ? 'turn_off' : 'turn_on';
+          card._hass.callService('switch', svc, { entity_id: cfg.relay_a }).catch(()=>{});
+          card._showToast(`Wechselrichter ${wrOn ? 'ausschalten' : 'einschalten'}...`);
+        });
+        wrRow.appendChild(wrBtn);
+        relBox.appendChild(wrRow);
+      }
+
+      // Relais B-D
+      [
+        { key:'relay_b', name:'12V Dose (B)',   icon:'🔋', desc: 'Winter: Heizung | Sommer: Powerbank' },
+        { key:'relay_c', name:'230V Steckdose (C)', icon:'🔌', desc:'Garten-Akkus / Werkzeug' },
+        { key:'relay_d', name:'Relais D',        icon:'❓', desc:'Reserviert' },
+      ].forEach(({key, name, icon, desc}) => {
+        if (!cfg[key]) return;
+        const state = d[key];
+        if (state === null) return;
+        const on = state === 'on';
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:3px;background:${on ? '#22c55e11' : 'var(--surf2)'}`;
+        const btn = document.createElement('button');
+        btn.style.cssText = `padding:3px 8px;border-radius:4px;border:1px solid ${on ? '#ef4444' : '#22c55e'};background:transparent;color:${on ? '#ef4444' : '#22c55e'};font-size:8px;cursor:pointer;flex-shrink:0`;
+        btn.textContent = on ? 'AUS' : 'AN';
+        btn.addEventListener('click', () => {
+          card._hass.callService('switch', on ? 'turn_off' : 'turn_on', { entity_id: cfg[key] }).catch(()=>{});
+        });
+        row.innerHTML = `<span style="font-size:13px">${icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:8px;font-weight:700;color:var(--text)">${name}</div>
+            <div style="font-size:7px;color:#445566;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${desc}</div>
+          </div>
+          <span style="font-size:8px;color:${on ? '#22c55e' : '#445566'}">${on ? '●' : '○'}</span>`;
+        row.appendChild(btn);
+        relBox.appendChild(row);
+      });
+
+      wrap.appendChild(relBox);
+    }
+
+    // ── Tagesstatistik ────────────────────────────────────────────
+    if (d.gen_day != null || d.cons_day != null) {
+      const statBox = this._mkBox('Heute');
+      const statGrid = document.createElement('div');
+      statGrid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr;gap:4px';
+      [
+        { label:'Solar erzeugt', val: d.gen_day != null ? `${d.gen_day} kWh` : '–', color:'#f59e0b' },
+        { label:'Verbrauch',     val: d.cons_day != null ? `${d.cons_day} kWh` : '–', color:'#94a3b8' },
+        { label:'Batt. Temp.',   val: d.batt_temp != null ? `${d.batt_temp} °C` : '–', color: (d.batt_temp||0) < 5 ? '#ef4444' : '#22c55e' },
+        { label:'Gerät Temp.',   val: d.device_temp != null ? `${d.device_temp} °C` : '–', color:'#94a3b8' },
+      ].forEach(({label, val, color}) => {
+        const tile = document.createElement('div');
+        tile.style.cssText = 'background:var(--bg);border-radius:4px;padding:4px 6px;border:1px solid #1c2535';
+        tile.innerHTML = `<div style="font-size:6.5px;color:#445566;margin-bottom:1px">${label}</div>
+          <div style="font-size:11px;font-weight:700;color:${color}">${val}</div>`;
+        statGrid.appendChild(tile);
+      });
+      statBox.appendChild(statGrid);
+      wrap.appendChild(statBox);
+    }
+
+    // ── Power-Routing Status ─────────────────────────────────────
+    if (cfg.routing_active) {
+      const routeBox = this._mkBox('⚡ Power-Routing');
+      const routing  = cfg.routing || DEFAULT_ROUTING;
+      const surplus  = (d.solar_w || 0) - (d.load_w || 0);
+
+      routing.forEach(step => {
+        const entity = cfg[`routing_${step.id}_entity`];
+        if (!entity) return;
+        const state  = card?._hass?.states[entity]?.state || 'unknown';
+        const active = state === 'on';
+        const canOn  = surplus >= step.threshold_w;
+
+        const row = document.createElement('div');
+        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:4px;margin-bottom:2px;background:${active ? '#22c55e11' : 'var(--surf2)'}`;
+        row.innerHTML = `<span style="font-size:12px">${step.icon}</span>
+          <span style="flex:1;font-size:8px;color:var(--text)">${step.name}</span>
+          <span style="font-size:7px;color:${canOn ? '#22c55e' : '#445566'}">≥${step.threshold_w}W</span>
+          <span style="font-size:8px;font-weight:700;color:${active ? '#22c55e' : '#445566'}">${active ? '● AN' : '○ AUS'}</span>`;
+        routeBox.appendChild(row);
+      });
+
+      wrap.appendChild(routeBox);
+    }
+
+    return wrap;
+  },
+
+  // ── Konfiguration (in ⚙ OPT eingebunden) ─────────────────────────────────
+  buildConfig(card) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;gap:6px';
+
+    const cfg = card?._opts?.energie_cfg || {};
+    const save = (key, val) => {
+      if (!card._opts) card._opts = {};
+      if (!card._opts.energie_cfg) card._opts.energie_cfg = {};
+      card._opts.energie_cfg[key] = val;
+      card._saveOptions();
+    };
+    const mkField = (label, key, placeholder, type='text') => {
+      const row = document.createElement('div');
+      const lbl = document.createElement('div');
+      lbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px';
+      lbl.textContent = label;
+      const inp = document.createElement('input');
+      inp.type = type; inp.value = cfg[key] || '';
+      inp.placeholder = placeholder;
+      inp.style.cssText = 'width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';
+      inp.addEventListener('input', () => save(key, inp.value.trim()));
+      row.append(lbl, inp);
+      return row;
+    };
+
+    // Preset-Auswahl
+    const presetHdr = document.createElement('div');
+    presetHdr.style.cssText = 'font-size:8px;font-weight:700;color:#f59e0b;margin-bottom:4px';
+    presetHdr.textContent = 'System-Preset wählen:';
+    wrap.appendChild(presetHdr);
+
+    const presetRow = document.createElement('div');
+    presetRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px';
+    Object.entries(ENERGIE_PRESETS).forEach(([id, preset]) => {
+      const btn = document.createElement('button');
+      btn.style.cssText = 'padding:4px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer';
+      btn.textContent = `${preset.icon} ${preset.label}`;
+      btn.title = `Felder für ${preset.label} vorausfüllen`;
+      btn.addEventListener('click', () => {
+        if (!card._opts) card._opts = {};
+        if (!card._opts.energie_cfg) card._opts.energie_cfg = {};
+        Object.assign(card._opts.energie_cfg, preset.fields);
+        card._saveOptions();
+        card._rebuildSidebar();
+        card._showToast(`✅ Preset: ${preset.label}`);
+      });
+      presetRow.appendChild(btn);
+    });
+    wrap.appendChild(presetRow);
+
+    // Entity-Felder
+    const fieldsBox = document.createElement('div');
+    fieldsBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';
+    const fieldsHdr = document.createElement('div');
+    fieldsHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';
+    fieldsHdr.textContent = 'Entity-Zuordnung (alle optional):';
+    fieldsBox.appendChild(fieldsHdr);
+    // Sensor-Felder (generisch – Preset füllt automatisch aus)
+    const sensorFields = [
+      ['Solar Leistung (W)',         'solar_power',    'sensor.epever_solar_w'],
+      ['Solar Spannung (V)',         'solar_voltage',  'sensor.epever_solar_v'],
+      ['Batterie SOC (%)',           'battery_soc',    'sensor.epever_batt_soc'],
+      ['Batterie Spannung (V)',      'battery_volt',   'sensor.epever_batt_v'],
+      ['Batterie Leistung (W)',      'battery_power',  'sensor.epever_batt_w'],
+      ['Batterie Temperatur (°C)',   'battery_temp',   'sensor.epever_batt_temp'],
+      ['Batterie Status (Text)',     'battery_state',  'sensor.epever_batt_state'],
+      ['Ladestatus (Text)',          'charge_state',   'sensor.epever_charger_state'],
+      ['Last / Verbrauch (W)',       'load_power',     'sensor.epever_load_w'],
+      ['WR-Modus (Text)',            'inverter_mode',  'sensor.hybridwechselrichter_inverter_operation_mode'],
+      ['WR AC-Ausgang (W)',          'ac_out_power',   'sensor.hybridwechselrichter_ac_out_watt'],
+      ['Erzeugung Heute (kWh)',      'gen_day',        'sensor.epever_gen_day'],
+      ['Erzeugung Monat (kWh)',      'gen_month',      'sensor.epever_gen_mon'],
+      ['Verbrauch Heute (kWh)',      'cons_day',       'sensor.epever_cons_day'],
+      ['Gerät Temperatur (°C)',      'device_temp',    'sensor.epever_device_temp'],
+      ['Netz-Bezug (W, +/−)',        'grid_power',     'sensor.grid_power'],
+    ];
+    sensorFields.forEach(([label, key, ph]) => fieldsBox.appendChild(mkField(label, key, ph)));
+
+    // Relais A-D (Victron SmartShunt)
+    const relaisBox = document.createElement('div');
+    relaisBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:6px';
+    const relaisHdr = document.createElement('div');
+    relaisHdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px';
+    relaisHdr.textContent = '🔌 Relais A–D (Victron SmartShunt)';
+    relaisBox.appendChild(relaisHdr);
+    [
+      ['relay_a', 'Relais A – Wechselrichter',  'switch.victronsmart_relay_a'],
+      ['relay_b', 'Relais B – 12V Dose',         'switch.victronsmart_relay_b'],
+      ['relay_c', 'Relais C – 230V Steckdose',   'switch.victronsmart_relay_c'],
+      ['relay_d', 'Relais D – Reserviert',        'switch.victronsmart_relay_d'],
+    ].forEach(([key, label, ph]) => relaisBox.appendChild(mkField(label, key, ph)));
+    wrap.appendChild(relaisBox);
+    wrap.appendChild(fieldsBox);
+
+    // Saison-Modus (opt-in)
+    const saisonBox = document.createElement('div');
+    saisonBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';
+    const saisonHdr = document.createElement('div');
+    saisonHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';
+    const saisonCb = document.createElement('input');
+    saisonCb.type = 'checkbox'; saisonCb.checked = !!cfg.saison_active;
+    saisonCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';
+    saisonCb.addEventListener('change', () => save('saison_active', saisonCb.checked));
+    const saisonLbl = document.createElement('span');
+    saisonLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';
+    saisonLbl.textContent = '📅 Saison-Modus (Modul zeitlich begrenzen)';
+    saisonHdr.append(saisonCb, saisonLbl);
+    const saisonNote = document.createElement('div');
+    saisonNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:5px';
+    saisonNote.textContent = 'Für Indoor-Anlagen oder ganzjährigen Betrieb: deaktiviert lassen.';
+    saisonBox.append(saisonHdr, saisonNote);
+    const monthRow = document.createElement('div');
+    monthRow.style.cssText = 'display:flex;align-items:center;gap:6px';
+    ['saison_from', 'saison_to'].forEach((key, i) => {
+      const lbl = document.createElement('span');
+      lbl.style.cssText = 'font-size:8px;color:#94a3b8';
+      lbl.textContent = i === 0 ? 'Von Monat:' : 'Bis Monat:';
+      const sel = document.createElement('select');
+      sel.style.cssText = 'padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';
+      const months = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+      months.forEach((m,mi) => {
+        const o = document.createElement('option'); o.value = mi+1; o.textContent = m;
+        if ((parseInt(cfg[key])||1) === mi+1) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => save(key, parseInt(sel.value)));
+      monthRow.append(lbl, sel);
+    });
+    saisonBox.appendChild(monthRow);
+    wrap.appendChild(saisonBox);
+
+    // Power-Routing
+    const routeBox = document.createElement('div');
+    routeBox.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';
+    const routeHdr = document.createElement('div');
+    routeHdr.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:5px';
+    const routeCb = document.createElement('input');
+    routeCb.type = 'checkbox'; routeCb.checked = !!cfg.routing_active;
+    routeCb.style.cssText = 'accent-color:#f59e0b;width:13px;height:13px';
+    routeCb.addEventListener('change', () => save('routing_active', routeCb.checked));
+    const routeLbl = document.createElement('span');
+    routeLbl.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8';
+    routeLbl.textContent = '⚡ Power-Routing (Solar-Überschuss verteilen)';
+    routeHdr.append(routeCb, routeLbl);
+    const routeNote = document.createElement('div');
+    routeNote.style.cssText = 'font-size:7.5px;color:#445566;margin-bottom:6px';
+    routeNote.textContent = 'Schaltet Verbraucher automatisch bei Überschuss ein/aus.';
+    routeBox.append(routeHdr, routeNote);
+
+    DEFAULT_ROUTING.forEach(step => {
+      const stepBox = document.createElement('div');
+      stepBox.style.cssText = 'border:1px solid #1c2535;border-radius:4px;padding:5px 7px;margin-bottom:4px';
+      stepBox.innerHTML = `<div style="font-size:8px;font-weight:700;color:var(--text);margin-bottom:4px">${step.icon} ${step.name}</div>`;
+      stepBox.appendChild(mkField('Entity (Switch)',
+        `routing_${step.id}_entity`, `switch.${step.id}_switch`));
+      // Schwellwert
+      const thrRow = document.createElement('div');
+      const thrLbl = document.createElement('div');
+      thrLbl.style.cssText = 'font-size:7px;color:#445566;margin-bottom:2px;margin-top:3px';
+      thrLbl.textContent = `Ab Überschuss (W):`;
+      const thrInp = document.createElement('input');
+      thrInp.type = 'number'; thrInp.min = 0; thrInp.max = 10000;
+      thrInp.value = cfg[`routing_${step.id}_threshold`] ?? step.threshold_w;
+      thrInp.style.cssText = 'width:80px;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px';
+      thrInp.addEventListener('input', () => save(`routing_${step.id}_threshold`, parseInt(thrInp.value)||0));
+      // Auto-off Toggle
+      const offRow = document.createElement('div');
+      offRow.style.cssText = 'display:flex;align-items:center;gap:5px;margin-top:3px';
+      const offCb = document.createElement('input');
+      offCb.type = 'checkbox'; offCb.checked = !!cfg[`routing_${step.id}_auto_off`];
+      offCb.style.cssText = 'accent-color:#f59e0b;width:12px;height:12px';
+      offCb.addEventListener('change', () => save(`routing_${step.id}_auto_off`, offCb.checked));
+      const offLbl = document.createElement('span');
+      offLbl.style.cssText = 'font-size:7.5px;color:#445566';
+      offLbl.textContent = 'Automatisch ausschalten wenn kein Überschuss';
+      thrRow.append(thrLbl, thrInp);
+      offRow.append(offCb, offLbl);
+      stepBox.append(thrRow, offRow);
+      routeBox.appendChild(stepBox);
+    });
+    wrap.appendChild(routeBox);
+
+    return wrap;
+  },
+
+  // ── Hilfsfunktionen ────────────────────────────────────────────────────────
+  _battColor(pct) {
+    if (pct == null) return '#445566';
+    if (pct >= 80) return '#22c55e';
+    if (pct >= 40) return '#f59e0b';
+    return '#ef4444';
+  },
+
+  _mkBox(title) {
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535';
+    if (title) {
+      const hdr = document.createElement('div');
+      hdr.style.cssText = 'font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px;letter-spacing:0.5px';
+      hdr.textContent = title;
+      box.appendChild(hdr);
+    }
+    return box;
+  },
+
+  _mkSparkline(values, color, w=180, h=32) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    svg.style.cssText = `width:100%;height:${h}px;display:block;margin-top:4px`;
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const range = max - min || 1;
+    const pts = values.map((v, i) => {
+      const x = (i / (values.length - 1)) * w;
+      const y = h - ((v - min) / range) * (h - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    poly.setAttribute('points', pts);
+    poly.setAttribute('fill', 'none');
+    poly.setAttribute('stroke', color);
+    poly.setAttribute('stroke-width', '1.5');
+    poly.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(poly);
+    return svg;
+  },
+};
+
+
+// ════════════════════════════════════════════════════════════════════════
+// WEITERE INLINE-MODULE (wrappen bestehende _sidebarXxx Methoden)
+// Alle opt-in via ⚙ OPT → Module
+// ════════════════════════════════════════════════════════════════════════
+
+// Pool & Garten Modul (Platzhalter – wird nach Hardware-Feedback ausgebaut)
+const PoolModul = {
+  id: "pool", name: "Pool & Garten", icon: "🏊", tabId: "pool",
+  version: "1.0.0", description: "Pumpen, Bewässerung, Smart Irrigation",
+  _card: null,
+  init(card)    { this._card = card; },
+  destroy()     { this._card = null; },
+  isActive(card) {
+    const cfg = card?._opts?.pool_cfg || {};
+    if (!cfg.saison_active) return true;
+    const mm = new Date().getMonth() + 1;
+    const from = parseInt(cfg.saison_from || 4);
+    const to   = parseInt(cfg.saison_to   || 10);
+    return from <= to ? mm >= from && mm <= to : mm >= from || mm <= to;
+  },
+  buildSidebar(card) {
+    const w = document.createElement("div");
+    w.style.cssText = "padding:8px;display:flex;flex-direction:column;gap:8px";
+    const hdr = document.createElement("div");
+    hdr.style.cssText = "font-size:10px;font-weight:700;color:#22c55e;letter-spacing:1px";
+    hdr.textContent = "🏊 POOL & GARTEN";
+    w.appendChild(hdr);
+    if (!this.isActive(card)) {
+      const note = document.createElement("div");
+      note.style.cssText = "padding:10px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center";
+      const cfg = card?._opts?.pool_cfg || {};
+      note.textContent = `Saison-Modus: Modul pausiert (${cfg.saison_from||4}.–${cfg.saison_to||10}. Monat)`;
+      w.appendChild(note); return w;
+    }
+    const cfg = card?._opts?.pool_cfg || {};
+    const hass = card?._hass;
+    // Pool-Pumpe
+    if (cfg.pool_pump) {
+      const pumpState = hass?.states[cfg.pool_pump]?.state;
+      const pumpOn = pumpState === "on";
+      const pumpBox = document.createElement("div");
+      pumpBox.style.cssText = `padding:8px;background:${pumpOn?"#22c55e18":"var(--surf2)"};border-radius:6px;border:1px solid ${pumpOn?"#22c55e44":"#1c2535"};display:flex;align-items:center;gap:8px`;
+      pumpBox.innerHTML = `<span style="font-size:20px">🏊</span>
+        <div style="flex:1"><div style="font-size:9px;font-weight:700;color:var(--text)">Pool-Pumpe</div>
+        <div style="font-size:7.5px;color:#445566">${cfg.pool_pump}</div></div>
+        <span style="font-size:11px;font-weight:700;color:${pumpOn?"#22c55e":"#445566"}">${pumpOn?"● AN":"○ AUS"}</span>`;
+      const btn = document.createElement("button");
+      btn.style.cssText = `padding:4px 10px;border-radius:4px;border:1px solid ${pumpOn?"#ef4444":"#22c55e"};background:transparent;color:${pumpOn?"#ef4444":"#22c55e"};font-size:8px;cursor:pointer`;
+      btn.textContent = pumpOn ? "AUS" : "AN";
+      btn.addEventListener("click", () => hass?.callService("switch", pumpOn?"turn_off":"turn_on", {entity_id: cfg.pool_pump}).catch(()=>{}));
+      pumpBox.appendChild(btn);
+      w.appendChild(pumpBox);
+    }
+    // Smart Irrigation
+    const siEntities = Object.keys(hass?.states||{}).filter(id => id.startsWith("switch.") && id.includes("irrigation"));
+    if (siEntities.length) {
+      const siBox = document.createElement("div");
+      siBox.style.cssText = "background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535";
+      const siHdr = document.createElement("div");
+      siHdr.style.cssText = "font-size:8px;font-weight:700;color:#22c55e;margin-bottom:6px";
+      siHdr.textContent = "🌱 Smart Irrigation";
+      siBox.appendChild(siHdr);
+      siEntities.slice(0,6).forEach(eid => {
+        const state = hass.states[eid];
+        const on = state?.state === "on";
+        const row = document.createElement("div");
+        row.style.cssText = `display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid #0d121933`;
+        const btn = document.createElement("button");
+        btn.style.cssText = `padding:2px 7px;border-radius:3px;border:1px solid ${on?"#ef4444":"#22c55e"};background:transparent;color:${on?"#ef4444":"#22c55e"};font-size:7.5px;cursor:pointer;flex-shrink:0`;
+        btn.textContent = on ? "Stop" : "Start";
+        btn.addEventListener("click", () => hass.callService("switch", on?"turn_off":"turn_on", {entity_id: eid}).catch(()=>{}));
+        row.innerHTML = `<span style="font-size:10px">💧</span><span style="flex:1;font-size:7.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${state?.attributes?.friendly_name || eid.split(".")[1]}</span><span style="font-size:7.5px;font-weight:700;color:${on?"#22c55e":"#445566"}">${on?"●":"○"}</span>`;
+        row.appendChild(btn);
+        siBox.appendChild(row);
+      });
+      w.appendChild(siBox);
+    } else if (!cfg.pool_pump) {
+      const empty = document.createElement("div");
+      empty.style.cssText = "padding:12px;background:var(--surf2);border-radius:6px;font-size:8px;color:#445566;text-align:center";
+      empty.innerHTML = "Keine Pumpen oder Smart Irrigation Entities gefunden.<br><b style='color:#94a3b8'>Konfigurieren unter ⚙ OPT → Module → Pool & Garten</b>";
+      w.appendChild(empty);
+    }
+    return w;
+  },
+  buildConfig(card) {
+    const w = document.createElement("div");
+    w.style.cssText = "display:flex;flex-direction:column;gap:6px";
+    const cfg = card?._opts?.pool_cfg || {};
+    const save = (key, val) => { if(!card._opts)card._opts={}; if(!card._opts.pool_cfg)card._opts.pool_cfg={}; card._opts.pool_cfg[key]=val; card._saveOptions(); };
+    const mkF = (label, key, ph) => {
+      const row = document.createElement("div");
+      const lbl = document.createElement("div"); lbl.style.cssText="font-size:7px;color:#445566;margin-bottom:2px"; lbl.textContent=label;
+      const inp = document.createElement("input"); inp.type="text"; inp.value=cfg[key]||""; inp.placeholder=ph;
+      inp.style.cssText="width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+      inp.addEventListener("input", ()=>save(key, inp.value.trim()));
+      row.append(lbl,inp); return row;
+    };
+    const fieldsBox = document.createElement("div");
+    fieldsBox.style.cssText = "background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535";
+    const fHdr = document.createElement("div"); fHdr.style.cssText="font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:6px"; fHdr.textContent="Entities:";
+    fieldsBox.appendChild(fHdr);
+    [["Pool-Pumpe","pool_pump","switch.pool_pumpe"],["Brunnen-Pumpe","well_pump","switch.brunnen_pumpe"],
+     ["Pool-Heizung","pool_heat","switch.pool_heizung"],["Filterlaufzeit Sensor","filter_time","sensor.pool_filter_h"]
+    ].forEach(([l,k,p])=>fieldsBox.appendChild(mkF(l,k,p)));
+    w.appendChild(fieldsBox);
+    // Saison-Modus
+    const sBox = document.createElement("div");
+    sBox.style.cssText = "background:var(--surf2);border-radius:6px;padding:8px;border:1px solid #1c2535;margin-top:4px";
+    const sCb = document.createElement("input"); sCb.type="checkbox"; sCb.checked=!!cfg.saison_active; sCb.style.cssText="accent-color:#22c55e;width:13px;height:13px";
+    sCb.addEventListener("change",()=>save("saison_active",sCb.checked));
+    const sRow = document.createElement("div"); sRow.style.cssText="display:flex;align-items:center;gap:6px;margin-bottom:4px";
+    const sLbl = document.createElement("span"); sLbl.style.cssText="font-size:8px;font-weight:700;color:#94a3b8";
+    sLbl.textContent="📅 Saison-Modus"; sRow.append(sCb,sLbl); sBox.appendChild(sRow);
+    const sNote = document.createElement("div"); sNote.style.cssText="font-size:7.5px;color:#445566;margin-bottom:5px";
+    sNote.textContent="Für Indoor-Pools: deaktiviert lassen."; sBox.appendChild(sNote);
+    const mRow = document.createElement("div"); mRow.style.cssText="display:flex;align-items:center;gap:6px";
+    ["saison_from","saison_to"].forEach((key,i)=>{
+      const l=document.createElement("span"); l.style.cssText="font-size:8px;color:#94a3b8"; l.textContent=i===0?"Von:":"Bis:";
+      const sel=document.createElement("select"); sel.style.cssText="padding:2px 4px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
+      ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"].forEach((m,mi)=>{
+        const o=document.createElement("option"); o.value=mi+1; o.textContent=m;
+        if((parseInt(cfg[key])||(i===0?4:10))===mi+1)o.selected=true; sel.appendChild(o);
+      });
+      sel.addEventListener("change",()=>save(key,parseInt(sel.value)));
+      mRow.append(l,sel);
+    });
+    sBox.appendChild(mRow); w.appendChild(sBox);
+    return w;
+  },
+  onPoll(data, card) {
+    // Solar-Überschuss → Pool-Pumpe automatisch (wenn aktiviert)
+    const cfg = card?._opts?.pool_cfg || {};
+    if (!cfg.solar_auto || !cfg.pool_pump) return;
+    const hass = card?._hass;
+    if (!hass) return;
+    const energyCfg = card?._opts?.energie_cfg || {};
+    const solarW = parseFloat(hass.states[energyCfg.solar_power]?.state) || 0;
+    const loadW  = parseFloat(hass.states[energyCfg.load_power]?.state)  || 0;
+    const surplus = solarW - loadW;
+    const threshold = parseInt(cfg.solar_threshold || 300);
+    const pumpState = hass.states[cfg.pool_pump]?.state;
+    if (surplus >= threshold && pumpState === "off") {
+      hass.callService("switch","turn_on",{entity_id:cfg.pool_pump}).catch(()=>{});
+    } else if (surplus < threshold * 0.7 && pumpState === "on" && cfg.solar_auto_off) {
+      hass.callService("switch","turn_off",{entity_id:cfg.pool_pump}).catch(()=>{});
+    }
+  },
+};
+
+// Alle Inline-Module registrieren wenn Registry bereit ist
 function _registerInlineModules() {
-  // Nur IDs registrieren, kein eval() beim Start
-  Object.keys(_MODULE_SOURCES).forEach(id => {
-    BLEModuleRegistry._knownIds = BLEModuleRegistry._knownIds || new Set();
-    BLEModuleRegistry._knownIds.add(id);
-  });
+  BLEModuleRegistry.register(EnergieModul);
+  BLEModuleRegistry.register(PoolModul);
+  // Weitere Module hier eintragen wenn ausgebaut
 }
 
 const BLEModuleRegistry = {
@@ -572,38 +1367,15 @@ const BLEModuleRegistry = {
     );
   },
 
-  // Modul aktivieren: lazy eval des Modul-Codes erst hier
+  // Modul aktivieren (inline – kein Download nötig)
   async load(id, card) {
-    // Bereits geladen?
-    if (this._modules[id]) {
-      const m = this._modules[id];
-      if (typeof m.init === "function") m.init(card);
-      return m;
+    const m = this._modules[id];
+    if (!m) {
+      console.warn(`[BLE Modules] Modul '${id}' nicht gefunden (nicht registriert)`);
+      return null;
     }
-    // Inline-Source verfügbar? → jetzt erst eval
-    const src = _MODULE_SOURCES?.[id];
-    if (src) {
-      try {
-        // new Function erzeugt den Code im eigenen Scope
-        // kein globaler Namespace, kein Parse beim Start
-        const factory = new Function(
-          "BLEModuleRegistry",
-          src + "\nreturn typeof ElektroModul !== \"undefined\" ? ElektroModul : typeof EnergieModul !== \"undefined\" ? EnergieModul : typeof PoolModul !== \"undefined\" ? PoolModul : null;"
-        );
-        const mod = factory(BLEModuleRegistry);
-        if (mod) {
-          this.register(mod);
-          if (typeof mod.init === "function") mod.init(card);
-          console.info(`[BLE Modules] ✅ ${id} lazy-evaluiert und geladen`);
-          return mod;
-        }
-      } catch(e) {
-        console.error(`[BLE Modules] ❌ Fehler beim Laden von '${id}':`, e);
-        return null;
-      }
-    }
-    console.warn(`[BLE Modules] Modul '${id}' nicht gefunden`);
-    return null;
+    if (typeof m.init === 'function') m.init(card);
+    return m;
   },
 
   // Modul deaktivieren + destroy aufrufen
@@ -1290,17 +2062,6 @@ class BLEPositioningCard extends HTMLElement {
     requestAnimationFrame(() => this._draw());
     // Screensaver-Timer starten wenn konfiguriert
     this._resetSsTimer();
-    // Kiosk-Modus "immer" direkt beim Start anwenden
-    if (this._opts?.kiosk_hide_mode === "always") this._applyKioskMode(true);
-    // Kiosk-Shortbar permanent (außerhalb Screensaver) einsetzen
-    if (this._opts?.kiosk_bar_always) {
-      const pos = this._opts?.kiosk_bar_pos || "bottom";
-      const wrap = this.shadowRoot?.querySelector("#cwrap");
-      if (wrap) {
-        const bar = this._buildKioskBar("pos-" + pos);
-        if (bar) { wrap.appendChild(bar); this._kioskBarPermanent = bar; }
-      }
-    }
     // Ambient Light Sensor (wenn Browser unterstützt und Nutzer aktiviert)
     this._initAmbientLight();
     // WebSocket Live-Updates (wenn aktiviert, ersetzt/ergänzt Polling)
@@ -4129,8 +4890,8 @@ class BLEPositioningCard extends HTMLElement {
   // ── Canvas events ────────────────────────────────────────────────────────
 
   async _onCanvasClick(e) {
-    // ── 3D: Reset-Button prüfen ─────────────────────────────────────────────
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+    // ── 3D: nur Reset-Button prüfen ────────────────────────────────────────
+    if (this._mode === "view" && this._opts?.show3D) {
       if (this._3dResetBtn) {
         const { cx, cy } = this._canvasXY(e);
         const b = this._3dResetBtn;
@@ -4146,9 +4907,7 @@ class BLEPositioningCard extends HTMLElement {
           return;
         }
       }
-      // view + 3D: kein weiterer Click-Handler (kein Platzieren etc.)
-      // screensaver + 3D: Licht-Toggle erlauben → nicht return, weiter unten
-      if (this._mode === "view") return;
+      return;
     }
 
     // ── Deko: place element ─────────────────────────────────────────────────
@@ -4334,57 +5093,8 @@ class BLEPositioningCard extends HTMLElement {
     }
 
     // ── Energie: line endpoints + battery placing ─────────────────────────
-    // ── Musik-Bubble: Play/Pause per Klick ──────────────────────
-    if (this._opts?.show_music_bubble && this._musicClickZonesFrame?.length) {
-      const {cx:mcx,cy:mcy} = this._canvasXY(e);
-      const dpr = window.devicePixelRatio||1;
-      for (const z of this._musicClickZonesFrame) {
-        if (mcx>=z.x*dpr && mcx<=(z.x+z.w)*dpr && mcy>=z.y*dpr && mcy<=(z.y+z.h)*dpr) {
-          try { await this._hass.callService("media_player","media_play_pause",{entity_id:z.entity}); this._showToast("\u23ef Play/Pause"); } catch(e2){}
-          return;
-        }
-      }
-    }
-
-    // ── Elektro-Modul: Knoten + Leitungen anklicken ─────────────
-    if (this._mode === "elektro") {
-      const em = BLEModuleRegistry._modules?.elektro;
-      if (em?._nodes) {
-        const {cx:ecx,cy:ecy} = this._canvasXY(e);
-        const c2=this._canvas, W2=c2.width, H2=c2.height;
-        const dpr2 = window.devicePixelRatio||1;
-        const r = 28*dpr2;
-        const hit = em._nodes.find(n=>Math.hypot(ecx-n.x*W2,ecy-n.y*H2)<=r);
-        if (hit) {
-          if (this._opts?._elektro_connecting && em._connectFrom) {
-            if (em._connectFrom.id!==hit.id) {
-              if (!this._opts.elektro_wires) this._opts.elektro_wires=[];
-              this._opts.elektro_wires.push({from:em._connectFrom.id,to:hit.id,logics:[]});
-              em._wires=this._opts.elektro_wires; em._connectFrom=null;
-              this._opts._elektro_connecting=false; em._saveState(this);
-              this._showToast("\u2705 Leitung verbunden"); this._markDirty();
-            }
-          } else if (this._opts?._elektro_connecting) {
-            em._connectFrom=hit; this._showToast(`\u2192 Von "${hit.label}" \u2013 jetzt Ziel tippen`);
-          } else {
-            em._selNode=hit; em._selWire=null; this._rebuildSidebar();
-          }
-          return;
-        }
-        const hitW = em._wires?.find(wire=>{
-          const nA=em._nodes.find(n=>n.id===wire.from), nB=em._nodes.find(n=>n.id===wire.to);
-          if(!nA||!nB) return false;
-          const mx2=(nA.x*W2+nB.x*W2)/2, my2=(nA.y*H2+nB.y*H2)/2;
-          return Math.hypot(ecx-mx2,ecy-my2)<24*dpr2;
-        });
-        if (hitW) { em._selWire=hitW; em._selNode=null; this._rebuildSidebar(); return; }
-        em._selNode=null; em._selWire=null; this._rebuildSidebar();
-      }
-      return;
-    }
-
-    // Room tap → light toggle (view + screensaver mode, optional)
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.roomTapLight) {
+    // Room tap → light toggle (view mode, optional)
+    if (this._mode === "view" && this._opts?.roomTapLight) {
       const handled = await this._handleRoomTap(fl.mx, fl.my);
       if (handled) return;
     }
@@ -4434,7 +5144,7 @@ class BLEPositioningCard extends HTMLElement {
 
   _onCanvasDown(e) {
     // ── 3D mode: intercept for orbit drag ──────────────────────────────────
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+    if (this._mode === "view" && this._opts?.show3D) {
       this._3dDrag = { x: e.clientX ?? e.touches?.[0]?.clientX ?? 0,
                        y: e.clientY ?? e.touches?.[0]?.clientY ?? 0,
                        az: this._3dAzimuth, el: this._3dElevation };
@@ -4444,7 +5154,7 @@ class BLEPositioningCard extends HTMLElement {
     // Middle mouse / Alt+click / Space+LMB / right-click = pan in ANY mode (incl 3D)
     if (this._opts?.zoomPan &&
         (e.button === 1 || e.altKey || this._spaceHeld || e.button === 2)) {
-      if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+      if (this._mode === "view" && this._opts?.show3D) {
         // 3D pan via mouse
         this._is3dPanning = true;
         const rect = this._canvas.getBoundingClientRect();
@@ -5471,11 +6181,7 @@ class BLEPositioningCard extends HTMLElement {
         const useDirty = this._opts?.dirty_render !== false;
         // Immer zeichnen wenn: Animationen aktiv, Screensaver, oder dirty
         const hasAnim = this._alarmAnimFrame || this._dekoAnimFrame;
-        const hasMusicAnim = this._opts?.show_music_bubble &&
-          (this._data?.decos||[]).some(d=>(d.type==="speaker"||d.type==="tv")&&d.entity&&
-            this._hass?.states?.[d.entity]?.state==="playing");
-        const hasElektroAnim = this._mode==="elektro" && this._opts?.module_elektro;
-        if (!useDirty || this._dirty || hasAnim || this._ssActive || hasMusicAnim || hasElektroAnim) {
+        if (!useDirty || this._dirty || hasAnim || this._ssActive) {
           lastFrame = ts;
           this._dirty = false;
           // Canvas-Auflösung anpassen (optional)
@@ -5502,76 +6208,49 @@ class BLEPositioningCard extends HTMLElement {
     if (this._mode === "calibrate" && this._opts?.auto_cal_mode && this._opts.auto_cal_mode !== "off") {
       this._tryAutoMmwCalibrate();
     }
-
-    // ── Segmentiertes Polling ────────────────────────────────────────────────
-    // Bestimme welche Segmente gerade gebraucht werden
-    const needTracking = this._opts?.module_ble !== false;   // default: AN
-    const needMmwave   = !!this._opts?.module_mmwave;         // default: AUS
-
     try {
-      // BASE immer holen (lights, rooms, decos, alarms, info_sensors)
-      const base = await this._hass.callApi("GET",
-        `ble_positioning/${this._entryId}/card_data/base`);
-      if (!base || !this._data) return;
+      const res = await this._hass.callApi("GET",
+        `ble_positioning/${this._entryId}/card_data`);
+      if (!res || !this._data) return;
 
-      // Base-Daten übernehmen
-      if (base.lights?.length > 0) this._data.lights = base.lights;
-      this._data.info_sensors  = base.info_sensors || [];
-      if (base.decos) { this._data.decos = base.decos; this._pendingDecos = structuredClone(base.decos); }
-      this._pendingInfoSensors = structuredClone(base.info_sensors || []);
-      this._data.windows       = base.windows || [];
-      this._windows            = base.windows || [];
-      if (base.alarms)        this._data.alarms        = base.alarms;
-      if (base.batteries)     this._data.batteries     = base.batteries;
-      if (base.energy_lines)  this._data.energy_lines  = base.energy_lines;
+      // Always update lights, fingerprints and info sensors
+      if (res.lights?.length > 0) this._data.lights = res.lights; // FIX: nie mit leerem Array überschreiben
+      this._data.info_sensors  = res.info_sensors || [];
+      if (res.decos) { this._data.decos = res.decos; this._pendingDecos = structuredClone(res.decos); }
+      this._pendingInfoSensors = structuredClone(res.info_sensors || []);
 
-      // TRACKING nur wenn BLE-Modul aktiv
-      if (needTracking) {
-        const tracking = await this._hass.callApi("GET",
-          `ble_positioning/${this._entryId}/card_data/tracking`);
-        if (tracking) {
-          this._data.fingerprints = tracking.fingerprints;
-          this._data.fp_counts    = tracking.fp_counts;
-          this._data.scanners     = tracking.scanners || this._data.scanners;
-          if (this._mode === "view" || this._mode === "calibrate") {
-            this._data.devices = tracking.devices;
-            // EMA-Smoothing für Gerätepositionen
-            (tracking.devices || []).forEach(dev => {
-              const x = dev.x, y = dev.y;
-              if (x == null || y == null) {
-                delete this._ema[dev.device_id];
-                return;
-              }
-              if (!this._ema[dev.device_id]) {
-                this._ema[dev.device_id] = { x, y };
-              } else {
-                const e = this._ema[dev.device_id];
-                const dist = Math.hypot(x - e.x, y - e.y);
-                const alpha = dist > 2.0 ? 0.85 : dist > 1.0 ? 0.6 : 0.4;
-                e.x += alpha * (x - e.x);
-                e.y += alpha * (y - e.y);
-              }
-            });
-            this._updateSidebarFromData(tracking.devices);
+      this._data.fingerprints = res.fingerprints;  // FIX4: keep FP dots fresh
+      this._data.windows      = res.windows || [];
+      this._windows           = res.windows || [];
+      this._data.fp_counts    = res.fp_counts;
+
+      if (this._mode === "view") {
+        this._data.devices = res.devices;
+        // FIX3: device away (x/y=null) → clear EMA so dot disappears
+        res.devices.forEach(dev => {
+          const x = dev.x, y = dev.y;
+          if (x == null || y == null) {
+            delete this._ema[dev.device_id];
+            return;
           }
-        }
+          if (!this._ema[dev.device_id]) {
+            this._ema[dev.device_id] = { x, y };
+          } else {
+            const e = this._ema[dev.device_id];
+            const dist = Math.hypot(x - e.x, y - e.y);
+            const alpha = dist > 2.0 ? 0.85 : dist > 1.0 ? 0.6 : 0.4;
+            e.x += alpha * (x - e.x);
+            e.y += alpha * (y - e.y);
+          }
+        });
+        this._updateSidebarFromData(res.devices);
       }
-
-      // MMWAVE nur wenn mmWave-Modul aktiv
-      if (needMmwave) {
-        const mmwave = await this._hass.callApi("GET",
-          `ble_positioning/${this._entryId}/card_data/mmwave`);
-        if (mmwave) {
-          this._data.mmwave_sensors = mmwave.mmwave_sensors;
-        }
-      }
-
       this._setConnected(true);
       this._markDirty(); // Neue Daten → Neuzeichnen nötig
       // Module über neue Daten informieren
       Object.values(BLEModuleRegistry._modules).forEach(m => {
         if (this._opts?.['module_' + m.id] && typeof m.onPoll === 'function') {
-          try { m.onPoll(base, this); } catch(e) {}
+          try { m.onPoll(res, this); } catch(e) {}
         }
       });
     } catch (_) {
@@ -12440,28 +13119,18 @@ draw();
     // → kein ctx.scale(dpr) nötig (würde alles nochmal skalieren → schwarzer Rand)
     this._dpr2dScaled = false;
 
-    // ── Modul-eigener Canvas-Modus: Modul zeichnet alles selbst ──────────────
-    // Wenn der aktive Modus einem Modul gehört → Modul zeichnet, kein Grundriss
-    const activeModuleForMode = Object.values(BLEModuleRegistry._modules).find(
-      m => this._opts?.['module_' + m.id] && (m.tabId || m.id) === this._mode
-    );
-    if (activeModuleForMode && typeof activeModuleForMode.onDraw === 'function') {
-      try { activeModuleForMode.onDraw(this._ctx, this); } catch(e) {
-        console.error('[BLE] Modul onDraw Fehler:', e);
-      }
-      return; // Kein Grundriss zeichnen
-    }
+    // ── Kompass im 3D-Modus ausblenden ────────────────────────────────────
     {
       const _cw = this.shadowRoot?.getElementById("compass-wrap");
       if (_cw) {
-        const _is3DNow = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
+        const _is3DNow = this._mode === "view" && this._opts?.show3D;
         _cw.style.display = _is3DNow ? "none" : "block";
       }
     }
 
     // ── Kartenrotation (nur 2D) ───────────────────────────────────────────
     const _rot2d = this._mapRotation || 0;
-    const _is3D  = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
+    const _is3D  = this._mode === "view" && this._opts?.show3D;
     if (_rot2d !== 0 && !_is3D) {
       ctx.save();
       ctx.translate(W/2, H/2);
@@ -12471,7 +13140,7 @@ draw();
     } else { this._rotActive = false; }
 
     // ── 3D mode: skip all 2D drawing ─────────────────────────────────────
-    if ((this._mode === "view" || this._mode === "lights" || this._mode === "screensaver") && this._opts?.show3D) {
+    if ((this._mode === "view" || this._mode === "lights") && this._opts?.show3D) {
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
@@ -12620,7 +13289,6 @@ draw();
     // Deco elements (2D)
     if (this._mode !== 'deko') this._drawDecos(this._data?.decos || []);
     else this._drawDecos(this._pendingDecos, true);
-    this._drawMusicBubbles();
     this._drawMapLabels();
     if (this._measureMode&&this._measureP1) {
       const ctxM=this._ctx;
@@ -15188,276 +15856,6 @@ _drawDoors() {
     });
   }
 
-  // ── Musik-Bubble 3D ──────────────────────────────────────────────────────
-
-  _drawMusicBubbles3D(project, unitPx) {
-    if (!this._opts?.show_music_bubble) return;
-    const ctx  = this._ctx;
-    const data = this._data;
-    const hass = this._hass;
-    if (!ctx || !data || !hass || !project) return;
-
-    const decos = this._pendingDecos?.length ? this._pendingDecos : (data.decos || []);
-
-    decos.forEach(deco => {
-      if (deco.type !== "speaker" && deco.type !== "tv") return;
-      if (!deco.entity) return;
-
-      const st = hass.states[deco.entity];
-      if (!st || st.state !== "playing") return;
-
-      const picUrl = st.attributes?.entity_picture;
-      const title  = st.attributes?.media_title  || "";
-      const artist = st.attributes?.media_artist || "";
-      if (!picUrl && !title) return;
-
-      const size = deco.size || 1.0;
-
-      // Lautsprecher-Basis in 3D-Canvas-Koordinaten
-      const spBase = project(deco.mx, deco.my, 0);
-      // Lautsprecher-Spitze (oben, z = Wandhöhe * size)
-      const spTop  = project(deco.mx, deco.my, size * 0.8);
-
-      // Bubble schwebt ÜBER den Wänden
-      const t      = (Date.now() / 2000) % (Math.PI * 2);
-      const wallH  = this._wallHeight || 2.5;
-      const floatZ = wallH + 0.3 + Math.sin(t) * 0.15;
-      const bPos   = project(deco.mx + size * 0.4, deco.my - size * 0.3, floatZ);
-
-      const bw  = 72;
-      const barH = duration > 0 ? 14 : 0;
-      const bh  = (picUrl ? 82 : 38) + barH;
-      const bx = bPos.x - bw / 2;
-      const by = bPos.y - bh;
-
-      ctx.save();
-
-      // ── Geschwungene 3D-Linie: Lautsprecher → Bubble ──────────
-      const pulse = 0.5 + Math.abs(Math.sin(Date.now() / 400)) * 0.5;
-
-      ctx.beginPath();
-      ctx.moveTo(spTop.x, spTop.y);
-      ctx.bezierCurveTo(
-        spTop.x + (bx + bw/2 - spTop.x) * 0.2, spTop.y - 30,
-        bx + bw/2 - 10,                          by + bh + 20,
-        bx + bw/2,                                by + bh - 4
-      );
-      ctx.strokeStyle = `rgba(56,189,248,${0.3 + pulse * 0.25})`;
-      ctx.lineWidth   = 1.5;
-      ctx.setLineDash([4, 3]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Ankerpunkt am Lautsprecher
-      ctx.beginPath();
-      ctx.arc(spTop.x, spTop.y, 3, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(56,189,248,${0.5 + pulse * 0.3})`;
-      ctx.fill();
-
-      // ── Bubble-Hintergrund ────────────────────────────────────
-      ctx.shadowColor = "rgba(56,189,248,0.25)";
-      ctx.shadowBlur  = 12;
-      ctx.fillStyle   = "rgba(7,9,13,0.90)";
-      ctx.strokeStyle = `rgba(56,189,248,${0.45 + pulse * 0.2})`;
-      ctx.lineWidth   = 1;
-      ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, 8);
-      ctx.fill();
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // ── Album-Cover ───────────────────────────────────────────
-      let coverY = by + 5;
-      if (picUrl) {
-        const cKey = "mc_" + deco.entity;
-        if (!this._imgCache) this._imgCache = {};
-        const cached = this._imgCache[cKey];
-        if (!cached || cached.u !== picUrl) {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
-          img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
-          this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img) {
-          const cs = bw - 10;
-          ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(bx + 5, by + 5, cs, cs, 5);
-          ctx.clip();
-          ctx.drawImage(cached.img, bx + 5, by + 5, cs, cs);
-          ctx.restore();
-          coverY = by + 5 + cs + 4;
-        }
-      }
-
-      // ── Titel + Artist ────────────────────────────────────────
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      ctx.fillText(title.length > 10 ? title.slice(0,10) + "\u2026" : title, bx + bw/2, coverY + 9);
-      if (artist) {
-        ctx.fillStyle = "#64748b";
-        ctx.font      = "6px 'JetBrains Mono',monospace";
-        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
-      }
-
-      // ── Noten-Animation ───────────────────────────────────────
-      const nt = (Date.now() / 1200) % 1;
-      ctx.fillStyle = `rgba(148,163,184,${(1-nt)*0.8})`;
-      ctx.font      = "10px serif";
-      ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
-
-      ctx.restore();
-    });
-  }
-
-  // ── Musik-Bubble: schwebendes Album-Cover mit Linie zum Lautsprecher ────────
-
-  _drawMusicBubbles() {
-    if (!this._opts?.show_music_bubble) return;
-    const ctx  = this._ctx;
-    const data = this._data;
-    if (!ctx || !data) return;
-
-    const decos  = this._pendingDecos?.length ? this._pendingDecos : (data.decos || []);
-    const hass   = this._hass;
-    if (!hass) return;
-
-    decos.forEach(deco => {
-      if (deco.type !== "speaker" && deco.type !== "tv") return;
-      if (!deco.entity) return;
-
-      const st = hass.states[deco.entity];
-      if (!st || st.state !== "playing") return;
-
-      const picUrl = st.attributes?.entity_picture;
-      const title  = st.attributes?.media_title  || "";
-      const artist = st.attributes?.media_artist || "";
-      const duration = st.attributes?.media_duration || 0;
-      const position = st.attributes?.media_position || 0;
-      const posTs    = st.attributes?.media_position_updated_at;
-      if (!picUrl && !title) return;
-
-      // Canvas-Position des Lautsprechers
-      const sp   = this._f2c(deco.mx, deco.my);
-      const size = (deco.size || 1.0) * 18;
-
-      // Bubble-Position: oben rechts, sanft schwebend
-      const t      = (Date.now() / 2000) % (Math.PI * 2);
-      const floatY = Math.sin(t) * 4;
-      const bx  = sp.x + size * 2.2;
-      const wPx = this._canvasCssH ? (this._canvasCssH / (this._data?.floor_h||10)) * (this._wallHeight||2.5) : 80;
-      const by  = sp.y - wPx - size * 0.8 + floatY;
-      const bw = 72;
-      const bh = picUrl ? 82 : 38;
-
-      ctx.save();
-
-      // ── Geschwungene Linie ─────────────────────────────────────
-      const lsx = sp.x + size * 0.5;
-      const lsy = sp.y - size * 0.4;
-      const lex = bx + 8;
-      const ley = by + bh * 0.6;
-      const pulse = 0.5 + Math.abs(Math.sin(Date.now() / 400)) * 0.5;
-
-      ctx.beginPath();
-      ctx.moveTo(lsx, lsy);
-      ctx.bezierCurveTo(
-        lsx + (lex - lsx) * 0.3, lsy - 20,
-        lex - (lex - lsx) * 0.3, ley + 15,
-        lex, ley
-      );
-      ctx.strokeStyle = `rgba(56,189,248,${0.25 + pulse * 0.25})`;
-      ctx.lineWidth   = 1.2;
-      ctx.setLineDash([4, 3]);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Punkt am Lautsprecher-Ende
-      ctx.beginPath();
-      ctx.arc(lsx, lsy, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(56,189,248,${0.4 + pulse * 0.3})`;
-      ctx.fill();
-
-      // ── Bubble-Hintergrund ────────────────────────────────────
-      ctx.shadowColor = "rgba(56,189,248,0.2)";
-      ctx.shadowBlur  = 10;
-      ctx.fillStyle   = "rgba(7,9,13,0.88)";
-      ctx.strokeStyle = `rgba(56,189,248,${0.4 + pulse * 0.2})`;
-      ctx.lineWidth   = 1;
-      ctx.beginPath();
-      ctx.roundRect(bx, by, bw, bh, 8);
-      ctx.fill();
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-
-      // ── Album-Cover gecacht ───────────────────────────────────
-      let coverY = by + 5;
-      if (picUrl) {
-        const cKey = "mc_" + deco.entity;
-        if (!this._imgCache) this._imgCache = {};
-        const cached = this._imgCache[cKey];
-        if (!cached || cached.u !== picUrl) {
-          const img = new Image();
-          img.crossOrigin = "anonymous";
-          img.src = picUrl.startsWith("http") ? picUrl : (this._hass?.hassUrl || "") + picUrl;
-          img.onload = () => { this._imgCache[cKey] = { img, u: picUrl }; this._markDirty(); };
-          this._imgCache[cKey] = { img: null, u: picUrl };
-        } else if (cached.img) {
-          const cs = bw - 10;
-          ctx.save();
-          ctx.beginPath();
-          ctx.roundRect(bx + 5, by + 5, cs, cs, 5);
-          ctx.clip();
-          ctx.drawImage(cached.img, bx + 5, by + 5, cs, cs);
-          ctx.restore();
-          coverY = by + 5 + cs + 4;
-        }
-      }
-
-      // ── Titel + Artist ────────────────────────────────────────
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#e2e8f0";
-      ctx.font      = "bold 7px 'JetBrains Mono',monospace";
-      const mc = 10;
-      ctx.fillText(title.length > mc ? title.slice(0,mc) + "\u2026" : title, bx + bw/2, coverY + 9);
-      if (artist) {
-        ctx.fillStyle = "#64748b";
-        ctx.font      = "6px 'JetBrains Mono',monospace";
-        ctx.fillText(artist.length > 12 ? artist.slice(0,12) + "\u2026" : artist, bx + bw/2, coverY + 19);
-      }
-
-      // ── Noten-Animation ───────────────────────────────────────
-      const nt = (Date.now() / 1200) % 1;
-      ctx.fillStyle = `rgba(148,163,184,${(1-nt)*0.8})`;
-      ctx.font      = "10px serif";
-      ctx.fillText("\u266a", bx + bw + 4 + nt * 8, by + 10 - nt * 15);
-
-      // ── Zeitbalken ────────────────────────────────────────────
-      if (duration > 0 && barH > 0) {
-        const elapsed = posTs ? (Date.now() - new Date(posTs).getTime()) / 1000 : 0;
-        const curPos  = Math.min(position + elapsed, duration);
-        const prog    = Math.max(0, Math.min(1, curPos / duration));
-        const barY    = by + bh - barH + 2;
-        const barW2   = bw - 10;
-        ctx.fillStyle = '#1c2535';
-        ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2, 4, 2); ctx.fill();
-        ctx.fillStyle = '#38bdf8';
-        ctx.beginPath(); ctx.roundRect(bx+5, barY, barW2*prog, 4, 2); ctx.fill();
-        const fmt = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
-        ctx.font = "5.5px 'JetBrains Mono',monospace";
-        ctx.fillStyle = '#445566';
-        ctx.textAlign = 'left';  ctx.fillText(fmt(curPos),  bx+5,     barY+11);
-        ctx.textAlign = 'right'; ctx.fillText(fmt(duration), bx+bw-5, barY+11);
-        ctx.textAlign = 'center';
-      }
-
-      ctx.restore();
-    });
-    this._musicClickZonesFrame = [...(this._musicClickZones||[])];
-    this._musicClickZones = [];
-  }
-
   _drawDecoSymbol2D(ctx, type, s, selected=false) {
     const hs = s / 2;
     if (selected) {
@@ -17918,7 +18316,6 @@ _drawDoors() {
       { key:"showSleep",       emoji:"🌙", label:"Schlaf-Monitoring",    desc:"Schlafdauer + Schlafqualität schätzen" },
       { key:"mmwavePersonID",  emoji:"🔍", label:"Personen-Wiedererkennung",desc:"Person via Tageszeit-Muster identifizieren" },
       { key:"showEmergencyBtn",emoji:"🆘", label:"Notfall-Button",       desc:"SOS-Button mit HA-Event" },
-      { key:"show_music_bubble",emoji:"🎵", label:"Musik-Bubble",          desc:"Album-Cover schwebt beim Lautsprecher (nur bei playing)" },
       { key:"ptzTracking",    emoji:"📹", label:"PTZ Auto-Tracking",    desc:"PTZ Kameras folgen Personen automatisch" },
       { key:"showPresence",    emoji:"👁",  label:"Präsenz-Erkennung",      desc:"Grüner Glow wenn Gerät im Raum" },
       { key:"showGeofence",    emoji:"🔔",  label:"Geofence-Alarm",          desc:"Toast bei Raum-Betreten/-Verlassen" },
@@ -17975,7 +18372,6 @@ _drawDoors() {
     const knownModules = [
       { id:"energie", name:"Energie-Management", icon:"⚡", desc:"Solar, Verbrauch, Power-Routing" },
       { id:"pool",    name:"Pool & Garten",       icon:"🏊", desc:"Pumpen, Bewässerung, Smart Irrigation" },
-      { id:"elektro", name:"Elektro-Management",  icon:"🔌", desc:"Solar-Fluss, Logiken, Strom-Routing" },
       // Weitere Module erscheinen hier automatisch wenn registriert
     ];
     // Bereits geladene Module auch anzeigen
@@ -18826,111 +19222,6 @@ _drawDoors() {
     timerBox.appendChild(activBtn);
     wrap.appendChild(timerBox);
 
-    // ── Kiosk-Modus Einstellungen ──────────────────────────────────
-    const kioskBox = this._sbBox("🖥 Kiosk-Modus");
-    const save = (k,v) => { if(!this._opts)this._opts={}; this._opts[k]=v; this._saveOptions(); };
-
-    // HA-Chrome ausblenden
-    const hideRow = document.createElement("div");
-    hideRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:5px";
-    const hideLbl = document.createElement("span");
-    hideLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
-    hideLbl.textContent = "HA-Seitenleiste + Tabs ausblenden";
-    const hideSel = document.createElement("select");
-    hideSel.style.cssText = "padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-    const curHide = this._opts?.kiosk_hide_mode || "none";
-    [{v:"none",l:"Nie"},{v:"screensaver",l:"Nur im Screensaver"},{v:"always",l:"Immer (Panel-Modus)"}]
-      .forEach(({v,l}) => { const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===curHide)o.selected=true; hideSel.appendChild(o); });
-    hideSel.addEventListener("change", () => { save("kiosk_hide_mode", hideSel.value); this._applyKioskMode(hideSel.value==="always"); });
-    hideRow.append(hideLbl, hideSel); kioskBox.appendChild(hideRow);
-
-    // Shortbar Position
-    const barRow = document.createElement("div");
-    barRow.style.cssText = "display:flex;align-items:center;gap:8px;margin-bottom:5px";
-    const barLbl = document.createElement("span");
-    barLbl.style.cssText = "font-size:8px;color:#94a3b8;flex:1";
-    barLbl.textContent = "Schnellzugriff-Leiste Position";
-    const barSel = document.createElement("select");
-    barSel.style.cssText = "padding:3px 5px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-    const curPos = this._opts?.kiosk_bar_pos || "none";
-    [{v:"none",l:"Ausgeblendet"},{v:"bottom",l:"Unten (Taskbar)"},{v:"right",l:"Rechts (Spalte)"},
-     {v:"slide-right",l:"Rechts ausfahrbar"},{v:"overlay",l:"Über Screensaver"}]
-      .forEach(({v,l}) => { const o=document.createElement("option"); o.value=v; o.textContent=l; if(v===curPos)o.selected=true; barSel.appendChild(o); });
-    barSel.addEventListener("change", () => save("kiosk_bar_pos", barSel.value));
-    barRow.append(barLbl, barSel); kioskBox.appendChild(barRow);
-
-    // Shortbar auch dauerhaft zeigen (nicht nur im Screensaver)
-    const alwaysRow = document.createElement("div");
-    alwaysRow.style.cssText = "display:flex;align-items:center;gap:6px;margin-bottom:8px";
-    const alwaysCb = document.createElement("input");
-    alwaysCb.type="checkbox"; alwaysCb.checked=!!this._opts?.kiosk_bar_always;
-    alwaysCb.style.cssText="accent-color:#00e5ff;width:13px;height:13px";
-    alwaysCb.addEventListener("change", () => save("kiosk_bar_always", alwaysCb.checked));
-    const alwaysLbl = document.createElement("span");
-    alwaysLbl.style.cssText="font-size:8px;color:#94a3b8";
-    alwaysLbl.textContent="Shortbar auch außerhalb des Screensavers anzeigen";
-    alwaysRow.append(alwaysCb, alwaysLbl); kioskBox.appendChild(alwaysRow);
-
-    // Wetter Entity
-    const weatherRow = document.createElement("div");
-    weatherRow.style.cssText = "margin-bottom:6px";
-    const weatherLbl = document.createElement("div");
-    weatherLbl.style.cssText = "font-size:7px;color:#445566;margin-bottom:2px";
-    weatherLbl.textContent = "Wetter Entity (z.B. weather.home)";
-    const weatherInp = document.createElement("input");
-    weatherInp.type="text"; weatherInp.value=this._opts?.ss_weather_entity||"";
-    weatherInp.placeholder="weather.home";
-    weatherInp.style.cssText="width:100%;padding:3px 6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-    weatherInp.addEventListener("input", () => save("ss_weather_entity", weatherInp.value.trim()));
-    weatherRow.append(weatherLbl, weatherInp); kioskBox.appendChild(weatherRow);
-
-    // Shortbar Items Editor
-    const itemsLbl = document.createElement("div");
-    itemsLbl.style.cssText = "font-size:8px;font-weight:700;color:#94a3b8;margin-bottom:4px";
-    itemsLbl.textContent = "Schnellzugriff-Buttons:";
-    kioskBox.appendChild(itemsLbl);
-    const itemsHint = document.createElement("div");
-    itemsHint.style.cssText = "font-size:7.5px;color:#445566;margin-bottom:5px";
-    itemsHint.textContent = "F\u00fcr Service-Calls: service = 'light.turn_off' oder URL = '/lovelace/0'";
-    kioskBox.appendChild(itemsHint);
-
-    const items = this._opts?.kiosk_items || [];
-    const saveItems = () => { save("kiosk_items", items); };
-    const renderItems = () => {
-      kioskBox.querySelectorAll(".ki-row").forEach(r => r.remove());
-      items.forEach((item, idx) => {
-        const row = document.createElement("div");
-        row.className = "ki-row";
-        row.style.cssText = "display:grid;grid-template-columns:32px 1fr 1fr;gap:3px;margin-bottom:3px;align-items:center";
-        const eInp = document.createElement("input"); eInp.type="text"; eInp.value=item.emoji||""; eInp.placeholder="🏠";
-        eInp.style.cssText="padding:2px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:11px;text-align:center";
-        eInp.addEventListener("input",()=>{items[idx].emoji=eInp.value.trim();saveItems();});
-        const lInp = document.createElement("input"); lInp.type="text"; lInp.value=item.label||""; lInp.placeholder="Lichter aus";
-        lInp.style.cssText="padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-        lInp.addEventListener("input",()=>{items[idx].label=lInp.value.trim();saveItems();});
-        const aInp = document.createElement("input"); aInp.type="text"; aInp.value=item.service||item.url||""; aInp.placeholder="light.turn_off oder /lovelace/0";
-        aInp.style.cssText="padding:2px 4px;border-radius:3px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:8px";
-        aInp.addEventListener("input",()=>{
-          const v=aInp.value.trim();
-          if(v.includes(".")&&!v.startsWith("/")) { items[idx].service=v; delete items[idx].url; }
-          else { items[idx].url=v; delete items[idx].service; }
-          saveItems();
-        });
-        const del = document.createElement("button");
-        del.textContent="✕"; del.style.cssText="padding:2px 5px;border-radius:3px;border:1px solid #ef4444;background:transparent;color:#ef4444;font-size:8px;cursor:pointer;grid-column:span 1";
-        del.addEventListener("click",()=>{ items.splice(idx,1); saveItems(); renderItems(); });
-        row.append(eInp,lInp,aInp,del);
-        kioskBox.appendChild(row);
-      });
-    };
-    renderItems();
-    const addItemBtn = document.createElement("button");
-    addItemBtn.style.cssText="width:100%;padding:4px;border-radius:4px;border:1px solid var(--border);background:var(--surf2);color:var(--text);font-size:8px;cursor:pointer;margin-top:3px";
-    addItemBtn.textContent="+ Button hinzufügen";
-    addItemBtn.addEventListener("click",()=>{ items.push({emoji:"⚡",label:"Neu",service:""}); saveItems(); renderItems(); });
-    kioskBox.appendChild(addItemBtn);
-    wrap.appendChild(kioskBox);
-
     // ── Quick-Links ────────────────────────────────────────────────
     const linksBox = this._sbBox("Quick-Links");
     const hint = document.createElement("div");
@@ -19115,136 +19406,16 @@ _drawDoors() {
     });
   }
 
-  // ── Kiosk-Modus Engine ───────────────────────────────────────────────────
-
-  _applyKioskMode(active) {
-    const opts = this._opts || {};
-    const hideMode = opts.kiosk_hide_mode || "none"; // none | screensaver | always
-
-    if (hideMode === "none") return;
-    if (hideMode === "screensaver" && !active) {
-      // Beim Beenden wiederherstellen
-      this._restoreHaChrome();
-      return;
-    }
-    if (hideMode === "always") {
-      // Einmalig beim Start – danach nicht mehr aufrufen
-      if (!this._kioskAlwaysApplied) {
-        this._kioskAlwaysApplied = true;
-        this._hideHaChrome();
-      }
-      return;
-    }
-    // screensaver-Modus: bei Aktivierung ausblenden, bei Stop wiederherstellen
-    if (active) this._hideHaChrome();
-    else this._restoreHaChrome();
-  }
-
-  _hideHaChrome() {
-    // HA Seitenleiste ausblenden
-    const haApp = document.querySelector("home-assistant");
-    const drawer = haApp?.shadowRoot?.querySelector("ha-drawer") ||
-                   haApp?.shadowRoot?.querySelector("partial-panel-resolver");
-    const appLayout = haApp?.shadowRoot?.querySelector("ha-panel-lovelace")?.shadowRoot
-                      ?.querySelector("hui-root")?.shadowRoot?.querySelector(".header");
-    // Methode 1: CSS-Klasse auf host setzen
-    this.classList.add("kiosk-mode");
-    // Methode 2: HA-Seitenleiste per CSS verstecken
-    if (!this._kioskStyle) {
-      this._kioskStyle = document.createElement("style");
-      this._kioskStyle.id = "ble-kiosk-style";
-      this._kioskStyle.textContent = `
-        ha-sidebar { display: none !important; }
-        .mdc-drawer-app-content { margin-left: 0 !important; }
-        app-drawer-layout > * { --app-drawer-width: 0px !important; }
-      `;
-      document.head.appendChild(this._kioskStyle);
-    }
-  }
-
-  _restoreHaChrome() {
-    this.classList.remove("kiosk-mode");
-    this._kioskStyle?.remove();
-    this._kioskStyle = null;
-  }
-
-  _buildKioskBar(posClass) {
-    const items = this._opts?.kiosk_items || [];
-    if (!items.length) return null;
-
-    const bar = document.createElement("div");
-    bar.className = `kiosk-bar ${posClass}`;
-
-    items.forEach(item => {
-      if (!item.label && !item.emoji) return;
-      const btn = document.createElement("a");
-      btn.className = "kiosk-btn";
-      btn.href = item.url || "#";
-      btn.innerHTML = `<span class="kb-icon">${item.emoji||"⚡"}</span><span class="kb-label">${item.label||""}</span>`;
-
-      if (item.service) {
-        // HA-Service direkt aufrufen
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          const [domain, svc] = item.service.split(".");
-          if (domain && svc) {
-            this._hass?.callService(domain, svc,
-              item.service_data ? JSON.parse(item.service_data) : {}
-            ).catch(()=>{});
-          }
-          this._showToast(`${item.emoji||""} ${item.label||item.service}`);
-        });
-      } else if (item.url?.startsWith("/")) {
-        btn.addEventListener("click", (e) => {
-          e.preventDefault();
-          this._stopScreensaver();
-          history.pushState(null, "", item.url);
-          window.dispatchEvent(new PopStateEvent("popstate"));
-        });
-      } else if (item.url && item.url !== "#") {
-        btn.target = "_blank"; btn.rel = "noopener";
-      } else {
-        btn.addEventListener("click", (e) => e.preventDefault());
-      }
-      bar.appendChild(btn);
-    });
-
-    // Slide-Modus: Touch-Handle zum Einfahren
-    if (posClass === "pos-slide-right") {
-      const handle = document.createElement("div");
-      handle.style.cssText = "position:absolute;left:0;top:50%;transform:translateY(-50%);width:14px;height:40px;background:var(--surf2);border-radius:4px 0 0 4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted)";
-      handle.textContent = "‹";
-      handle.addEventListener("click", () => bar.classList.toggle("open"));
-      bar.appendChild(handle);
-    }
-
-    return bar;
-  }
-
   // ── Screensaver Engine ───────────────────────────────────────────────────
 
   _startScreensaver() {
     if (this._ssActive) return;
     this._ssActive = true;
-
-    // ── Kiosk-Modus: HA-Seitenleiste + Tabs ausblenden ──────────
-    this._applyKioskMode(true);
-
-    // ── Overlay aufbauen + einsetzen ─────────────────────────────
     this._ssOverlay = this._buildSsOverlay();
-    const wrap = this.shadowRoot?.querySelector("#cwrap") ||
-                 this.shadowRoot?.querySelector(".canvas-wrap") ||
-                 this.shadowRoot?.querySelector("#c")?.parentElement;
+    // Overlay über dem Canvas einfügen
+    const wrap = this.shadowRoot?.querySelector(".ble-wrap") ||
+                 this.shadowRoot?.querySelector("#ble-canvas")?.parentElement;
     if (wrap) wrap.appendChild(this._ssOverlay);
-
-    // ── Kiosk-Shortbar einsetzen (außer Overlay-Modus) ───────────
-    const pos = this._opts?.kiosk_bar_pos || "none";
-    if (pos !== "none" && pos !== "overlay") {
-      const bar = this._buildKioskBar("pos-" + pos);
-      if (bar && wrap) wrap.appendChild(bar);
-      this._kioskBar = bar;
-    }
-
     this._ssClock();
     this._setMode("screensaver");
   }
@@ -19255,9 +19426,6 @@ _drawDoors() {
     clearTimeout(this._ssClockTimer);
     this._ssOverlay?.remove();
     this._ssOverlay = null;
-    this._kioskBar?.remove();
-    this._kioskBar = null;
-    this._applyKioskMode(false);
     this._setMode("view");
     this._resetSsTimer();
   }
@@ -19283,7 +19451,7 @@ _drawDoors() {
     const ov = document.createElement("div");
     ov.className = "ss-overlay";
 
-    // ── Oben links: Uhrzeit + Datum + Wetter ────────────────────
+    // ── Oben links: Uhrzeit + Datum ─────────────────────────────
     const infoBlock = document.createElement("div");
     infoBlock.className = "ss-info-block";
 
@@ -19296,30 +19464,6 @@ _drawDoors() {
     date.textContent = new Date().toLocaleDateString("de-DE", {weekday:"long", day:"numeric", month:"long"});
 
     infoBlock.append(clock, date);
-
-    // Wetter (wenn konfiguriert)
-    const weatherEntity = this._opts?.ss_weather_entity;
-    if (weatherEntity && this._hass?.states?.[weatherEntity]) {
-      const ws = this._hass.states[weatherEntity];
-      const weatherDiv = document.createElement("div");
-      weatherDiv.className = "ss-weather";
-      const iconMap = {
-        "sunny":"☀","partlycloudy":"⛅","cloudy":"☁","rainy":"🌧",
-        "pouring":"⛈","snowy":"❄","fog":"🌫","windy":"💨",
-        "lightning":"⚡","lightning-rainy":"⛈","clear-night":"🌙",
-        "hail":"🌨","exceptional":"🌡"
-      };
-      const icon = iconMap[ws.state] || "🌡";
-      const temp = ws.attributes?.temperature;
-      const rain = ws.attributes?.precipitation_probability;
-      weatherDiv.innerHTML =
-        `<span class="ss-weather-icon">${icon}</span>` +
-        `<div><div class="ss-weather-temp">${temp != null ? temp + "°C" : ws.state}</div>` +
-        (rain != null ? `<div class="ss-weather-detail">🌧 ${rain}% Regen</div>` : "") +
-        `</div>`;
-      infoBlock.appendChild(weatherDiv);
-    }
-
     ov.appendChild(infoBlock);
 
     // ── Mitte: Platzhalter (Karte bleibt sichtbar + interaktiv) ──
@@ -19327,18 +19471,10 @@ _drawDoors() {
     spacer.style.cssText = "flex:1;pointer-events:none";
     ov.appendChild(spacer);
 
-    // ── Unten: Kiosk-Shortbar ODER Quick-Links ───────────────────
+    // ── Unten rechts: Quick-Link Buttons ─────────────────────────
     const bottomRow = document.createElement("div");
     bottomRow.style.cssText = "display:flex;flex-direction:column;align-items:flex-end;gap:6px;width:100%";
 
-    // Kiosk-Shortbar im Overlay-Modus
-    const kioskPos = this._opts?.kiosk_bar_pos || "none";
-    if (kioskPos === "overlay") {
-      const bar = this._buildKioskBar("pos-overlay");
-      if (bar) bottomRow.appendChild(bar);
-    }
-
-    // Quick-Links
     const links = this._opts?.ss_links || [];
     if (links.length) {
       const btnWrap = document.createElement("div");
@@ -19346,10 +19482,12 @@ _drawDoors() {
       links.forEach(lnk => {
         if (!lnk.url) return;
         const btn = document.createElement("a");
-        btn.className = "ss-btn"; btn.href = lnk.url;
+        btn.className = "ss-btn";
+        btn.href = lnk.url;
         if (lnk.url.startsWith("/")) {
           btn.addEventListener("click", (e) => {
-            e.preventDefault(); this._stopScreensaver();
+            e.preventDefault();
+            this._stopScreensaver();
             history.pushState(null, "", lnk.url);
             window.dispatchEvent(new PopStateEvent("popstate"));
           });
@@ -19365,7 +19503,7 @@ _drawDoors() {
 
     const hint = document.createElement("div");
     hint.className = "ss-hint";
-    hint.textContent = "Karte interaktiv · Tab antippen zum Beenden";
+    hint.textContent = "Karte bleibt interaktiv · Tab-Leiste antippen zum Beenden";
     bottomRow.appendChild(hint);
     ov.appendChild(bottomRow);
 
@@ -19630,7 +19768,7 @@ _drawDoors() {
 
   _onWheel(e) {
     // ── 3D zoom ─────────────────────────────────────────────────────────────
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+    if (this._mode === "view" && this._opts?.show3D) {
       e.preventDefault();
       const factor = e.deltaY < 0 ? 1.12 : 0.89;
       this._3dZoom = Math.max(0.3, Math.min(5, (this._3dZoom||1) * factor));
@@ -19665,7 +19803,7 @@ _drawDoors() {
     const rect = this._canvas.getBoundingClientRect();
     const mx = ((t0.clientX+t1.clientX)/2) - rect.left;
     const my = ((t0.clientY+t1.clientY)/2) - rect.top;
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+    if (this._mode === "view" && this._opts?.show3D) {
       // 3D: store for zoom + pan (midpoint) — orbit is single-finger
       this._pinchZoom3d = this._3dZoom || 1;
       this._pinch3dMidX = mx - rect.width  / 2;
@@ -19693,7 +19831,7 @@ _drawDoors() {
     const rect = this._canvas.getBoundingClientRect();
     const mx = ((t0.clientX+t1.clientX)/2) - rect.left;
     const my = ((t0.clientY+t1.clientY)/2) - rect.top;
-    if ((this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D) {
+    if (this._mode === "view" && this._opts?.show3D) {
       // 3D: pinch = zoom, midpoint movement = pan (no orbit with 2 fingers)
       this._3dZoom = Math.max(0.3, Math.min(5, (this._pinchZoom3d||1) * (dist / this._pinchDist)));
       // Pan: translate by midpoint delta
@@ -22352,11 +22490,7 @@ trigger:
     });
 
     // ── Deco elements in 3D ─────────────────────────────────────────────────
-    // project() für _drawMusicBubbles3D verfügbar machen
-    this._project3d = project;
-    this._unitPx3d  = unitPx;
     this._drawDecos3D(ctx, project, unitPx, this._data?.decos || []);
-    this._drawMusicBubbles3D(project, unitPx);
 
     // ── Alarms: floor fill + inner wall highlight ──────────────────────────
     const alarms3d = this._pendingAlarms?.length ? this._pendingAlarms : (this._data?.alarms || []);
