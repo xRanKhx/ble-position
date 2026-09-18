@@ -1020,7 +1020,12 @@ const MmwaveModul = {
     // Request next frame for animation
     if (this._opts?.showMmwave) requestAnimationFrame(() => this._draw());
     // Live-Sidebar aktualisieren (throttled via draw-cycle)
-    if (this._mode === "view") this._updateMmwavePersonsSidebar();
+    // Optionaler Aufruf: die Methode ging beim Auslagern des Moduls
+    // verloren und existiert nirgends mehr. Ungesichert warf sie in
+    // JEDEM Bild eine Exception mitten in _draw – dadurch wurde
+    // ctx.restore() nie erreicht, die Kartendrehung summierte sich auf,
+    // und die Bildrate brach auf wenige Bilder pro Sekunde ein.
+    if (this._mode === "view") this._updateMmwavePersonsSidebar?.();
   },
 
   _drawMmwaveZones(sensor, col) {

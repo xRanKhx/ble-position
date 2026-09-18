@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.15.0";
+const CARD_VERSION = "6.15.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -10092,9 +10092,18 @@ draw();
     this._drawWindows();
     // mmWave sensor overlay (targets + FOV + heatmap)
     // Im mmwave-Editor-Tab: immer anzeigen; sonst nur wenn Option aktiv
-    if (this._opts?.showMmwave || mode === "mmwave") this._drawMmwaveOverlay?.();
-    // Fall alarm overlay (always on top when active)
-    if (this._opts?.mmwaveFallDetect) this._drawFallAlarmOverlay();
+    // Gekapselt: ein Fehler in einem Overlay darf nicht das ganze Bild
+    // kosten. Genau das ist passiert – eine fehlende Methode brach _draw
+    // in jedem Bild ab, noch vor dem abschliessenden ctx.restore().
+    try {
+      if (this._opts?.showMmwave || mode === "mmwave") this._drawMmwaveOverlay?.();
+      if (this._opts?.mmwaveFallDetect) this._drawFallAlarmOverlay?.();
+    } catch (err) {
+      if (!this._mmwOverlayErr) {
+        this._mmwOverlayErr = true;   // nur einmal melden, nicht pro Bild
+        console.warn("BLE Positioning: mmWave-Overlay uebersprungen", err);
+      }
+    }
     // Analytics tick (background data collection)
     this._analyticsTick?.();
     // Sleep overlay
@@ -23382,7 +23391,12 @@ const MmwaveModul = {
     // Request next frame for animation
     if (this._opts?.showMmwave) requestAnimationFrame(() => this._draw());
     // Live-Sidebar aktualisieren (throttled via draw-cycle)
-    if (this._mode === "view") this._updateMmwavePersonsSidebar();
+    // Optionaler Aufruf: die Methode ging beim Auslagern des Moduls
+    // verloren und existiert nirgends mehr. Ungesichert warf sie in
+    // JEDEM Bild eine Exception mitten in _draw – dadurch wurde
+    // ctx.restore() nie erreicht, die Kartendrehung summierte sich auf,
+    // und die Bildrate brach auf wenige Bilder pro Sekunde ein.
+    if (this._mode === "view") this._updateMmwavePersonsSidebar?.();
   },
 
   _drawMmwaveZones(sensor, col) {
