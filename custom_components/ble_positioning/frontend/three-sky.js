@@ -481,6 +481,23 @@ export class SkyDome {
       // eingestreute Inseln dazu – so wirkt es staedtisch statt laendlich.
       x.fillStyle = "#8a8d91";
       x.fillRect(0, 0, S, S);
+      // Karomuster wie Plattenbelag – gibt der Flaeche Massstab und
+      // laesst sie befestigt wirken statt wie eine leere Ebene.
+      const cell = S / 16;
+      x.strokeStyle = "rgba(120,124,128,0.55)";
+      x.lineWidth = 1;
+      for (let i = 0; i <= 16; i++) {
+        x.beginPath(); x.moveTo(i * cell, 0); x.lineTo(i * cell, S); x.stroke();
+        x.beginPath(); x.moveTo(0, i * cell); x.lineTo(S, i * cell); x.stroke();
+      }
+      // Einzelne Platten leicht abgesetzt, sonst wirkt das Raster tot
+      for (let i = 0; i < 40; i++) {
+        const gx2 = Math.floor(Math.random() * 16) * cell;
+        const gy2 = Math.floor(Math.random() * 16) * cell;
+        x.fillStyle = `rgba(${150 + Math.random()*25|0},${152 + Math.random()*25|0},${152 + Math.random()*25|0},0.22)`;
+        x.fillRect(gx2 + 1, gy2 + 1, cell - 2, cell - 2);
+      }
+
       // Gruenflaechen einstreuen
       for (let i = 0; i < 14; i++) {
         const rr = S * (0.06 + Math.random() * 0.10);
@@ -502,7 +519,7 @@ export class SkyDome {
       const tex = new THREE.CanvasTexture(c);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.colorSpace = THREE.SRGBColorSpace;
-      tex.repeat.set(24, 24);
+      tex.repeat.set(8, 8);   // groebere Kachelung: das Karo bleibt lesbar
       this._groundTex = tex;
 
       // Auslaufmaske: in der Mitte deckend, zum Rand durchsichtig

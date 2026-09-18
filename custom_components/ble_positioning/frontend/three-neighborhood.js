@@ -27,8 +27,10 @@ function rng(seed) {
 
 /* Bewusst gedaempft: die Nachbarschaft ist Kulisse. Waeren die Fassaden
    so hell wie das eigene Gebaeude, zoege der Blick nach aussen. */
-const HOUSE_COLORS = [0x9a958c, 0x8e877c, 0x847d73, 0x938b80, 0x7d776e];
-const ROOF_COLORS  = [0x44433f, 0x3a3836, 0x4a403a, 0x333130];
+// Heller als zuvor: im Zielbild treten die Nachbarhaeuser deutlich
+// hervor, ohne vom Zentrum abzulenken.
+const HOUSE_COLORS = [0xc9c4b8, 0xbdb7aa, 0xd2ccc0, 0xc3bcae, 0xb6b0a4];
+const ROOF_COLORS  = [0x5c5a56, 0x4e4c49, 0x635a52, 0x494744];
 
 export class Neighborhood {
   /**
@@ -94,10 +96,11 @@ export class Neighborhood {
     const len = reach * 2;
     // Dunkler gehalten, damit das eigene Gebaeude der Blickanker bleibt
     const asphalt = new THREE.MeshStandardMaterial({
-      color: 0x2a2d33, roughness: 0.6, metalness: 0.02,
+      color: 0x3c4046, roughness: 0.62, metalness: 0.02,
     });
+    // Gehweg deutlich heller – er soll sich klar vom Asphalt absetzen
     const walk = new THREE.MeshStandardMaterial({
-      color: 0x60646a, roughness: 0.6, metalness: 0,
+      color: 0xa8aca8, roughness: 0.7, metalness: 0,
     });
 
     const strip = (w, d, y, mat) => {
@@ -114,6 +117,17 @@ export class Neighborhood {
     strip(len, roadW + 3.4, 0.02, walk);
     strip(roadW, len, 0.07, asphalt);
     strip(len, roadW, 0.07, asphalt);
+
+    // Zusaetzliche Nebenstrassen – im Zielbild ist mehr Netz zu sehen
+    const sideOff = reach * 0.52;
+    for (const s2 of [-1, 1]) {
+      const n1 = new THREE.Mesh(new THREE.BoxGeometry(roadW * 0.7, 0.05, len), asphalt);
+      n1.position.set(s2 * sideOff, 0.05, 0);
+      n1.receiveShadow = true; g.add(n1); this._roadTargets.push(n1);
+      const n2 = new THREE.Mesh(new THREE.BoxGeometry(len, 0.05, roadW * 0.7), asphalt);
+      n2.position.set(0, 0.05, s2 * sideOff);
+      n2.receiveShadow = true; g.add(n2); this._roadTargets.push(n2);
+    }
 
     // Mittelstreifen, an der Kreuzung ausgespart
     const dash = new THREE.MeshStandardMaterial({
@@ -241,57 +255,100 @@ export class Neighborhood {
   }
 
   /* Bäume: Stamm plus zwei versetzte Kugeln, das genügt auf Distanz. */
+  /* Baeume in Gruppen auf eigenen Gruen-Inseln, mit verschiedenen
+     Formen. Einzeln verstreute Baeume gleicher Bauart wirken wie
+     Platzhalter; erst die Mischung liest sich als Bepflanzung. */
   _addTrees(g, reach, roadW, ownW, ownD, r) {
     const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 0.95 });
-    for (let i = 0; i < 34; i++) {
-      const x = (r() - 0.5) * reach * 1.9;
-      const z = (r() - 0.5) * reach * 1.9;
-      if (Math.hypot(x, z) > reach) continue;
-      if (Math.abs(x) < ownW / 2 + 2 && Math.abs(z) < ownD / 2 + 2) continue;
-      // Nicht auf der Fahrbahn, aber gern am Gehwegrand
-      if (Math.abs(x) < roadW / 2 + 1.6 || Math.abs(z) < roadW / 2 + 1.6) continue;
+    const islandMat = new THREE.MeshStandardMaterial({ color: 0x6d8a4e, roughness: 0.95 });
+    const margin2 = roadW / 2 + 2.2;
+    this._snowCaps = this._snowCaps || [];
 
-      const hh = 3 + r() * 2.6;
-      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, hh, 6), trunkMat);
+    const addCap = (mesh, objs) => {
+      const cap = new THREE.Mesh(
+        new THREE.SphereGeometry(1.06, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.42),
+        new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.92 }));
+      cap.scale.copy(mesh.scale);
+      cap.position.copy(mesh.position);
+      cap.visible = false;
+      cap.userData.isSnowCap = true;
+      cap.userData.weatherOk = false;
+      g.add(cap); objs.push(cap);
+      this._snowCaps.push(cap);
+    };
+
+    const makeTree = (kind, x, z) => {
+      const objs = [];
+      const hh = (kind === "column" ? 5.0 : kind === "broad" ? 3.2 : 4.0) * (0.8 + r() * 0.45);
+      const t = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.2, hh, 6), trunkMat);
       t.position.set(x, hh / 2, z);
-      t.castShadow = true;
-      t.receiveShadow = true;
-      g.add(t);
-      const tree = { objs: [t], x, z, r: 1.8 };
-      this._blockers.push(tree);
+      t.castShadow = true; t.receiveShadow = true;
+      g.add(t); objs.push(t);
 
       const green = new THREE.MeshStandardMaterial({
-        color: new THREE.Color().setHSL(0.26 + r() * 0.06, 0.38, 0.26 + r() * 0.1),
+        color: new THREE.Color().setHSL(0.24 + r() * 0.08, 0.34 + r() * 0.18,
+                                        0.28 + r() * 0.14),
         roughness: 0.95,
       });
-      for (let k = 0; k < 2; k++) {
-        const rad = (1.1 + r() * 0.7) * (k ? 0.75 : 1);
-        const c = new THREE.Mesh(new THREE.SphereGeometry(rad, 10, 8), green);
-        c.position.set(x + (r() - 0.5) * 0.7, hh + rad * 0.5 + k * 0.7, z + (r() - 0.5) * 0.7);
-        c.castShadow = true;
-        c.receiveShadow = true;
-        g.add(c);
-        tree.objs.push(c);
-
-        // Schneehaube statt Einfaerbung: eine weisse Kappe auf der
-        // Oberseite. Die Krone selbst bleibt gruen und der Stamm braun –
-        // nur oben liegt etwas, so wie in Wirklichkeit.
-        const cap = new THREE.Mesh(
-          new THREE.SphereGeometry(rad * 1.04, 10, 6, 0, Math.PI * 2, 0, Math.PI * 0.42),
-          new THREE.MeshStandardMaterial({ color: 0xf2f6fa, roughness: 0.92, metalness: 0 })
-        );
-        cap.position.copy(c.position);
-        cap.castShadow = true;
-        cap.visible = false;            // erscheint nur bei Schnee
-        cap.userData.isSnowCap = true;
-        cap.userData.weatherOk = false;
-        g.add(cap);
-        tree.objs.push(cap);
-        this._snowCaps = this._snowCaps || [];
-        this._snowCaps.push(cap);
+      const blobs = [];
+      if (kind === "column") {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 10), green);
+        m.scale.set(0.7, 1.9, 0.7);
+        m.position.set(x, hh + 1.3, z);
+        blobs.push(m);
+      } else if (kind === "broad") {
+        for (let k = 0; k < 3; k++) {
+          const rad = 1.2 + r() * 0.6;
+          const m = new THREE.Mesh(new THREE.SphereGeometry(rad, 10, 8), green);
+          m.position.set(x + (r() - 0.5) * 1.5, hh + 0.4 + k * 0.42, z + (r() - 0.5) * 1.5);
+          blobs.push(m);
+        }
+      } else {
+        const m = new THREE.Mesh(new THREE.ConeGeometry(1.2 + r() * 0.4, 3.2, 9), green);
+        m.position.set(x, hh + 1.1, z);
+        blobs.push(m);
       }
+      for (const m of blobs) {
+        m.castShadow = true; m.receiveShadow = true;
+        g.add(m); objs.push(m);
+        addCap(m, objs);
+      }
+      return objs;
+    };
+
+    const kinds = ["broad", "column", "cone"];
+    for (let gi = 0; gi < 7; gi++) {
+      let gx = 0, gz = 0, ok = false;
+      for (let t = 0; t < 40 && !ok; t++) {
+        gx = (r() - 0.5) * reach * 1.5;
+        gz = (r() - 0.5) * reach * 1.5;
+        if (Math.hypot(gx, gz) > reach * 0.9) continue;
+        if (Math.abs(gx) < ownW / 2 + 3 && Math.abs(gz) < ownD / 2 + 3) continue;
+        if (Math.abs(gx) < margin2 + 2 || Math.abs(gz) < margin2 + 2) continue;
+        ok = true;
+      }
+      if (!ok) continue;
+
+      // Gruen-Insel unter der Gruppe
+      const isl = new THREE.Mesh(new THREE.CircleGeometry(3.2 + r() * 1.6, 24), islandMat);
+      isl.rotation.x = -Math.PI / 2;
+      isl.position.set(gx, 0.035, gz);
+      isl.receiveShadow = true;
+      g.add(isl);
+      this._roadTargets.push(isl);
+
+      const objs = [isl];
+      const n = 3 + Math.floor(r() * 3);
+      for (let i2 = 0; i2 < n; i2++) {
+        const ang = (i2 / n) * Math.PI * 2 + r();
+        const rad = 0.7 + r() * 1.9;
+        const kind = kinds[Math.floor(r() * kinds.length)];
+        objs.push(...makeTree(kind, gx + Math.cos(ang) * rad, gz + Math.sin(ang) * rad));
+      }
+      this._blockers.push({ objs, x: gx, z: gz, r: 4.5 });
     }
   }
+
 
   /**
    * Alles ausblenden, was zwischen Kamera und eigenem Gebaeude steht.

@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.16.0";
+const CARD_VERSION = "6.17.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20148,7 +20148,9 @@ trigger:
         /pouring|storm|lightning/.test(cond2)? [0x5a6678, 0.012]  :
         /rain/.test(cond2)                   ? [0x6b7681, 0.004]  :
         /snow|sleet|hail/.test(cond2)        ? [0xd5dfea, 0.005]  :
-                                               null;   // sonst gar keiner
+        // Auch bei klarem Wetter ein Hauch Nebel: entfernte Haeuser
+        // verlieren dadurch an Kontrast, und die Insel bekommt Tiefe.
+                                               [0x9fc4e8, 0.0035];
       // Hintergrund: die Kuppel traegt den Himmel, aber wo sie nicht
       // hinreicht – ausserhalb ihres Radius, beim Rauszoomen – war es
       // totes Schwarz. Ein passender Grundton dahinter verhindert das.

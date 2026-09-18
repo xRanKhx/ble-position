@@ -22,7 +22,7 @@ import * as THREE from "./vendor/three.module.js";
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
 import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
 import { SkyDome } from "./three-sky.js?s=19";
-import { Neighborhood } from "./three-neighborhood.js?n=8";
+import { Neighborhood } from "./three-neighborhood.js?n=9";
 
 /* ── Prozedurale Texturen ────────────────────────────────────────────────
    Canvas-generiert statt mitgeliefert: keine Binaerdateien im Repo, und
