@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.15.1";
+const CARD_VERSION = "6.16.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20159,8 +20159,9 @@ trigger:
         /pouring|storm|lightning/.test(cond2)? 0x1a1e29 :
         /rain/.test(cond2)                   ? 0x5a636e :
         /snow|sleet|hail/.test(cond2)        ? 0xc6d2de :
+        /partlycloudy/.test(cond2)           ? 0x7ab4e0 :
         /cloudy/.test(cond2)                 ? 0x9fb0c0 :
-                                               0x87ceeb;
+                                               0x4a9fe0;   // kraeftiges Himmelblau
       sc.setBackdrop(bg);
       // Nebelfarbe exakt auf den Hintergrund ziehen, sonst zeichnet sich
       // der Horizont als harte Kante ab statt weich auszulaufen.

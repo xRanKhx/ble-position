@@ -477,12 +477,24 @@ export class SkyDome {
       const S = 256, c = document.createElement("canvas");
       c.width = c.height = S;
       const x = c.getContext("2d");
-      x.fillStyle = "#6f7d5c";
+      // Grundton ist befestigte Flaeche, nicht Wiese. Gruen kommt als
+      // eingestreute Inseln dazu – so wirkt es staedtisch statt laendlich.
+      x.fillStyle = "#8a8d91";
       x.fillRect(0, 0, S, S);
+      // Gruenflaechen einstreuen
+      for (let i = 0; i < 14; i++) {
+        const rr = S * (0.06 + Math.random() * 0.10);
+        const gx = Math.random() * S, gy = Math.random() * S;
+        const gg = x.createRadialGradient(gx, gy, rr * 0.3, gx, gy, rr);
+        gg.addColorStop(0, "rgba(108,126,86,0.95)");
+        gg.addColorStop(1, "rgba(108,126,86,0)");
+        x.fillStyle = gg;
+        x.beginPath(); x.arc(gx, gy, rr, 0, Math.PI * 2); x.fill();
+      }
       // Unruhe, damit es nicht wie ein Filzteppich wirkt
       for (let i = 0; i < 2600; i++) {
         const r = 1 + Math.random() * 6;
-        x.fillStyle = `rgba(${90 + Math.random()*60|0},${105 + Math.random()*55|0},${60 + Math.random()*45|0},0.5)`;
+        x.fillStyle = `rgba(${120 + Math.random()*50|0},${124 + Math.random()*45|0},${118 + Math.random()*45|0},0.35)`;
         x.beginPath();
         x.arc(Math.random() * S, Math.random() * S, r, 0, Math.PI * 2);
         x.fill();
@@ -783,7 +795,9 @@ export class SkyDome {
       this._body.renderOrder = -1;
       this.scene.add(this._body);
     }
-    this._body.scale.setScalar(sp * (isNight ? 0.34 : 0.42));
+    // Deutlich kleiner: bei 0.42 nahm die Sonnenscheibe ein Viertel des
+    // Himmels ein. Die echte Sonne misst ein halbes Grad.
+    this._body.scale.setScalar(sp * (isNight ? 0.22 : 0.16));
     // An den Sonnenstand hängen; nachts gegenüber, wie der echte Mond
     const d = this._sunDir.clone();
     if (isNight) { d.x = -d.x; d.z = -d.z; d.y = Math.abs(d.y) * 0.8 + 0.3; }
@@ -854,8 +868,8 @@ export class SkyDome {
     const x = c.getContext("2d");
     const r = S * 0.3, cx = S / 2, cy = S / 2;
     // Schein ringsum
-    const g = x.createRadialGradient(cx, cy, r * 0.7, cx, cy, S * 0.5);
-    g.addColorStop(0, isNight ? "rgba(200,215,255,0.5)" : "rgba(255,240,190,0.85)");
+    const g = x.createRadialGradient(cx, cy, r * 0.85, cx, cy, S * 0.42);
+    g.addColorStop(0, isNight ? "rgba(200,215,255,0.45)" : "rgba(255,240,190,0.55)");
     g.addColorStop(1, "rgba(255,255,255,0)");
     x.fillStyle = g; x.fillRect(0, 0, S, S);
 
