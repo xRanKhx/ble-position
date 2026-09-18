@@ -273,7 +273,13 @@ export class ThreeScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.shadowMap.autoUpdate = true;
+    // NICHT jedes Bild neu rechnen. Die Szene steht meist still; Schatten
+    // muessen nur nach Aenderungen an Geometrie oder Licht neu. Mit
+    // autoUpdate lief pro Bild ein kompletter Schattendurchlauf je
+    // Lichtquelle – bei acht Punktlichtern sechs Wuerfelseiten, also 48
+    // zusaetzliche Durchgaenge ueber die ganze Szene.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.2;
@@ -921,6 +927,7 @@ export class ThreeScene {
   updateLights(lights) {
     if (!this.ok) return;
     this._lastLamps = lights;
+    this._lampShadowBudget = 0;
     this._lamps = this._lamps || new Map();
     const seen = new Set();
     // WebGL bindet Lichter im Shader: jede zusätzliche Lampe kostet in
@@ -944,8 +951,11 @@ export class ThreeScene {
         // Punktschatten kosten sechs Durchlaeufe pro Lampe – aber ohne sie
         // scheint das Licht durch die Waende. 512er Maps halten das im
         // Rahmen, die Sonne bleibt bei voller Aufloesung.
-        pl.castShadow = true;
-        pl.shadow.mapSize.set(512, 512);
+        // Nur die ersten Lampen werfen Schatten. Jede kostet sechs
+        // Durchlaeufe; ab der dritten ist der Gewinn fuers Auge klein
+        // und der Preis hoch.
+        pl.castShadow = (this._lampShadowBudget = (this._lampShadowBudget || 0) + 1) <= 2;
+        pl.shadow.mapSize.set(256, 256);
         pl.shadow.bias = -0.004;
         pl.shadow.camera.near = 0.08;
         const bulb = new THREE.Mesh(
@@ -1014,6 +1024,12 @@ export class ThreeScene {
       lamp.bulb.material.dispose();
       this._lamps.delete(key);
     }
+  }
+
+  /** Schatten einmal neu berechnen lassen (nach Aenderungen an Szene
+      oder Licht). Ohne diesen Anstoss bleiben sie stehen. */
+  refreshShadows() {
+    if (this.ok) this.renderer.shadowMap.needsUpdate = true;
   }
 
   /** Alte Geometrie freigeben – sonst waechst der GPU-Speicher bei jedem Neubau. */
@@ -1309,6 +1325,7 @@ export class ThreeScene {
     this._objects.push(group);
 
     this.setSun(d.sunAzimuth ?? 135, d.sunElevation ?? 55);
+    this.refreshShadows();
     this.resize();
   }
 

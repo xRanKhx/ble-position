@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.14.1";
+const CARD_VERSION = "6.15.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -20096,6 +20096,7 @@ trigger:
       });
       this._glDataKey = key;
       this._glLightKey = null;
+      sc.refreshShadows?.();      // Geometrie hat sich geaendert
     }
     sc.setSun(parseFloat(att.azimuth) || 135, parseFloat(att.elevation) || 45);
 
@@ -20113,6 +20114,7 @@ trigger:
         night: this._isDark(),
       });
       this._glDayKey = lkeyDay;
+      sc.refreshShadows?.();      // Sonnenstand hat sich geaendert
 
       // Bloom und Nebel folgen der Wetterlage: nachts leuchten Lampen
       // kraeftiger, tagsueber soll nichts ueberstrahlen.
@@ -20254,7 +20256,11 @@ trigger:
       };
     });
     const lkey = JSON.stringify(lamps.map(l => [l.entity, l.on, l.brightness, l.rgb, l.kelvin]));
-    if (lkey !== this._glLightKey) { sc.updateLights(lamps); this._glLightKey = lkey; }
+    if (lkey !== this._glLightKey) {
+      sc.updateLights(lamps);
+      this._glLightKey = lkey;
+      sc.refreshShadows?.();      // Licht hat sich geaendert
+    }
 
     // Lampen anklickbar machen: Position auf dem Bildschirm merken.
     // Ein Raycaster waere genauer, aber die Lampen sind kleine Kugeln –
