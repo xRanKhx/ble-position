@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.13.3";
+const CARD_VERSION = "6.14.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -3988,6 +3988,22 @@ class BLEPositioningCard extends HTMLElement {
     const W = this._canvas.width, H = this._canvas.height;
     const fw = d.floor_w || 10, fh = d.floor_h || 10;
     const { scale, ox, oy } = this._floorScale();
+
+    // Kartenrotation zuruecknehmen. _draw dreht den Kontext um die
+    // Canvas-Mitte; ohne die Gegenrechnung liegt jeder Mausklick um
+    // denselben Winkel daneben – bei 90 Grad wirkt es wie gespiegelt.
+    // Zustand selbst bestimmen: _rotActive gilt nur waehrend des
+    // Zeichnens und steht beim Mausklick laengst wieder auf false.
+    const _is3Dnow = (this._mode === "view" || this._mode === "screensaver")
+                     && this._opts?.show3D;
+    const rot = _is3Dnow ? 0 : (this._mapRotation || 0);
+    if (rot) {
+      const ccx = W / 2, ccy = H / 2;
+      const dx = cx - ccx, dy = cy - ccy;
+      const co = Math.cos(-rot), si = Math.sin(-rot);
+      cx = ccx + dx * co - dy * si;
+      cy = ccy + dx * si + dy * co;
+    }
     if (!this._opts?.zoomPan || (this._zoom||1) === 1) {
       return {
         mx: Math.max(0, Math.min(fw, (cx - ox) / scale)),
@@ -9907,8 +9923,10 @@ draw();
     // ── Kartenrotation (nur 2D) ───────────────────────────────────────────
     const _rot2d = this._mapRotation || 0;
     const _is3D  = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
-    if (_rot2d !== 0 && !_is3D) {
-      // ── Generischer Modul Draw-Hook ─────────────────────────────────────────
+    // ── Generischer Modul Draw-Hook ───────────────────────────────────────
+    // Stand versehentlich INNERHALB des Rotations-Blocks: Module wurden
+    // dadurch nur gezeichnet, wenn die Karte gedreht war, und die
+    // Rotation nur, wenn kein Modul zeichnete. Beides gehoert getrennt.
     {
       const _activeMod = Object.values(BLEModuleRegistry._modules).find(
         m => this._opts?.["module_" + m.id] && (m.tabId || m.id) === this._mode
@@ -9920,10 +9938,13 @@ draw();
         // Türen/Fenster über Modul-Canvas zeichnen
         this._drawDoors();
         this._drawWindows();
+        this._rotActive = false;
         return;
       }
     }
-    ctx.save();
+
+    if (_rot2d !== 0 && !_is3D) {
+      ctx.save();
       ctx.translate(W/2, H/2);
       ctx.rotate(_rot2d);
       ctx.translate(-W/2, -H/2);
