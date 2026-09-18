@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.14.0";
+const CARD_VERSION = "6.14.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -9922,7 +9922,14 @@ draw();
 
     // ── Kartenrotation (nur 2D) ───────────────────────────────────────────
     const _rot2d = this._mapRotation || 0;
-    const _is3D  = (this._mode === "view" || this._mode === "screensaver") && this._opts?.show3D;
+    // Muss exakt der Bedingung des 3D-Blocks weiter unten entsprechen.
+    // Dort steht zusaetzlich "lights": stimmen die beiden nicht ueberein,
+    // wird die Rotation angewendet, der 3D-Block steigt danach mit return
+    // aus, und das zugehoerige ctx.restore() wird nie erreicht. Pro Bild
+    // bleibt dann eine Drehung auf dem Stack liegen – die Karte dreht
+    // sich scheinbar von allein weiter.
+    const _is3D  = (this._mode === "view" || this._mode === "lights"
+                 || this._mode === "screensaver") && this._opts?.show3D;
     // ── Generischer Modul Draw-Hook ───────────────────────────────────────
     // Stand versehentlich INNERHALB des Rotations-Blocks: Module wurden
     // dadurch nur gezeichnet, wenn die Karte gedreht war, und die
@@ -9938,7 +9945,6 @@ draw();
         // Türen/Fenster über Modul-Canvas zeichnen
         this._drawDoors();
         this._drawWindows();
-        this._rotActive = false;
         return;
       }
     }
@@ -9953,6 +9959,20 @@ draw();
 
     // ── 3D mode: skip all 2D drawing ─────────────────────────────────────
     if ((this._mode === "view" || this._mode === "lights" || this._mode === "screensaver") && this._opts?.show3D) {
+      // Sicherheitsnetz: dieser Zweig verlaesst _draw mit return. Eine
+      // offene Rotation wuerde sich sonst Bild fuer Bild aufsummieren.
+      if (this._rotActive) { ctx.restore(); this._rotActive = false; }
+
+      // Das 2D-Canvas liegt ueber der WebGL-Szene und traegt nur noch
+      // Overlays. Ohne Loeschen bleibt der zuletzt gezeichnete 2D-Inhalt
+      // stehen und legt sich als graue Flaeche ueber das 3D-Bild –
+      // besonders dann, wenn _drawWebGL nicht zum Zuge kommt.
+      if (this._gl?.ok && this._webglWanted()) {
+        try {
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+        } catch (e) { /* egal */ }
+      }
       // 2D DPR-Scale aufheben – _draw3DScene skaliert selbst
       if (this._dpr2dScaled) { ctx.restore(); this._dpr2dScaled = false; }
       // Im LIGHTS-Tab: simulierte Lichter (alle on:true) wie im 2D-Modus
