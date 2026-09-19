@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.17.0";
+const CARD_VERSION = "6.18.1";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -19984,6 +19984,71 @@ trigger:
     }
   }
 
+  /* Live-Anzeige der erkannten Personen in der Seitenleiste.
+     Diese Methode ging beim Auslagern des mmWave-Moduls verloren – sie
+     wurde an drei Stellen aufgerufen, existierte aber nirgends mehr.
+     Deshalb blieb der Zaehler dauerhaft auf 0, obwohl die Sensoren
+     Ziele melden. Sie fuellt die Elemente, die _sidebarView anlegt:
+     mmw_total_count, mmw_persons_container und je Sensor
+     mmw_sens_<id>_cnt. */
+  _updateMmwavePersonsSidebar() {
+    const root = this.shadowRoot;
+    if (!root) return;
+    const totalEl = root.getElementById("mmw_total_count");
+    if (!totalEl) return;          // Panel gerade nicht sichtbar
+
+    const sensors = (this._pendingMmwave?.length > 0
+      ? this._pendingMmwave : this._data?.mmwave_sensors) || [];
+    const mod = BLEModuleRegistry._modules?.mmwave;
+    const persons = [];
+
+    for (const sensor of sensors) {
+      let cnt = 0;
+      // Bis zu drei Ziele je Sensor, wie im Entitaeten-Schema
+      for (let t = 1; t <= 3; t++) {
+        let tgt = null;
+        try {
+          // Die Methode liegt nach dem Einbetten auf der Card selbst;
+          // der Umweg ueber das Modul bleibt als Rueckfall.
+          tgt = (typeof this._getMmwaveTarget === "function")
+            ? this._getMmwaveTarget(sensor, t)
+            : (mod?._getMmwaveTarget ? mod._getMmwaveTarget.call(this, sensor, t) : null);
+        } catch (e) { tgt = null; }
+        if (!tgt) continue;
+        cnt++;
+        persons.push({
+          name: (sensor.target_names && sensor.target_names[t - 1]) || ("Person " + t),
+          color: sensor.color || "#ff6b35",
+          sensor: sensor.name || sensor.id,
+          posture: tgt.posture || null,
+        });
+      }
+      const sEl = root.getElementById("mmw_sens_" + sensor.id + "_cnt");
+      if (sEl) sEl.textContent = cnt + " P";
+    }
+
+    totalEl.textContent = String(persons.length);
+
+    // Personen-Karten nur bei Aenderung neu aufbauen, sonst flackert es
+    const box = root.getElementById("mmw_persons_container");
+    if (!box) return;
+    const key = persons.map(p => p.name + "|" + p.posture).join(",");
+    if (key === this._mmwPersonsKey) return;
+    this._mmwPersonsKey = key;
+    box.innerHTML = "";
+    for (const p of persons) {
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:6px;padding:3px 6px;" +
+        "background:#0d1219;border-radius:4px;border-left:2px solid " + p.color;
+      const posture = p.posture
+        ? ({ standing: "steht", sitting: "sitzt", lying: "liegt" }[p.posture] || p.posture)
+        : "";
+      row.innerHTML = '<span style="font-size:8.5px;color:var(--text);flex:1">' + p.name + "</span>" +
+        (posture ? '<span style="font-size:7.5px;color:#94a3b8">' + posture + "</span>" : "");
+      box.appendChild(row);
+    }
+  }
+
   /* Temperatur als DOM-Element statt auf ein Canvas: mit Himmelskuppel
      liegt kein Canvas mehr hinter der Szene, und vor die Szene gemalt
      wuerde sie mit dem Gebaeude kollidieren. */
@@ -22961,6 +23026,10 @@ const MmwaveModul = {
     const slots = [
       { key:"presence",            label:"Präsenz",         suffix:"_presence" },
       { key:"target_count",        label:"Ziel-Anzahl",     suffix:"_moving_target_count" },
+      // Polarwerte mit aufnehmen: Sensoren ohne X/Y liefern stattdessen
+      // Winkel und Entfernung, daraus rechnet die Karte die Position.
+      { key:"target_1_angle",     label:"Ziel 1 Winkel",   suffix:"_target_1_angle" },
+      { key:"target_1_distance",  label:"Ziel 1 Distanz",  suffix:"_target_1_distance" },
       { key:"target_1_x",         label:"Ziel 1 X",        suffix:"_target_1_x" },
       { key:"target_1_y",         label:"Ziel 1 Y",        suffix:"_target_1_y" },
       { key:"target_2_x",         label:"Ziel 2 X",        suffix:"_target_2_x" },
@@ -23052,9 +23121,32 @@ const MmwaveModul = {
     const spState = this._hass.states[ent(`target_${targetNum}_speed`, `_target_${targetNum}_speed`)];
     const angState= this._hass.states[ent(`target_${targetNum}_angle`, `_target_${targetNum}_angle`)];
     const dirState= this._hass.states[ent(`target_${targetNum}_direction`, `_target_${targetNum}_direction`)];
-    if (!xState || !yState) return null;
-    const x_raw = parseFloat(xState.state);
-    const y_raw = parseFloat(yState.state);
+    const distState = this._hass.states[ent(`target_${targetNum}_distance`, `_target_${targetNum}_distance`)];
+
+    // Position bestimmen. Manche Sensoren liefern kartesische X/Y, andere
+    // – wie der LD2450 in der ESPHome-Variante – nur Winkel und
+    // Entfernung. Fehlen X/Y oder sind sie unavailable, wird aus
+    // Polarkoordinaten umgerechnet, statt das Ziel zu verwerfen.
+    let x_raw = NaN, y_raw = NaN;
+    const num = (st) => {
+      if (!st || st.state === "unavailable" || st.state === "unknown") return NaN;
+      const v = parseFloat(st.state);
+      return isNaN(v) ? NaN : v;
+    };
+    x_raw = num(xState);
+    y_raw = num(yState);
+
+    if (isNaN(x_raw) || isNaN(y_raw)) {
+      const ang = num(angState);
+      const dist = num(distState);
+      if (!isNaN(ang) && !isNaN(dist) && dist > 0) {
+        // Winkel in Grad, 0 = geradeaus vom Sensor weg, positiv nach rechts.
+        // Entfernung kommt in mm, genau wie die X/Y-Werte.
+        const a = (ang * Math.PI) / 180;
+        x_raw = Math.sin(a) * dist;
+        y_raw = Math.cos(a) * dist;
+      }
+    }
     if (isNaN(x_raw) || isNaN(y_raw)) return null;
     const present = (Math.abs(x_raw) > 1 || y_raw > 10);
     const speed_raw = parseFloat(spState?.state) || 0;
