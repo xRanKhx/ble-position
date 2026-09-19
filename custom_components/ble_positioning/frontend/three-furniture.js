@@ -244,6 +244,46 @@ export function makeSpeaker(o = {}) {
  * Blickrichtung zeigen, ohne in der isometrischen Ansicht unangenehm
  * aufzufallen. `posture`: "standing" | "sitting" | "lying".
  */
+/** Fensterrollo mit fahrbarer Animation */
+export function makeBlind(o = {}) {
+  const g = new THREE.Group();
+  const width = o.width ?? 1.0;
+  const height = o.height ?? 1.5;
+  const position = o.position ?? 0;  // 0 = offen, 1 = geschlossen
+  
+  const frameCol = o.frameColor ?? 0x8b8b7a;
+  const blindCol = o.blindColor ?? 0xd9cfc4;
+  const frame = M.matte(frameCol);
+  const blind = M.matte(blindCol);
+  
+  // Rahmen oben
+  put(g, box(width, 0.04, 0.03, frame, 0.002), 0, height / 2 + 0.02, 0);
+  
+  // Lamellenhalter – animierbar
+  const holder = new THREE.Group();
+  
+  // Lamellen als gestapelte Streifen
+  const slats = Math.ceil(height * 4);  // 4 Lamellen pro Meter
+  const slatH = height / slats;
+  for (let i = 0; i < slats; i++) {
+    const slat = box(width - 0.01, slatH * 0.92, 0.006, blind, 0.0005);
+    slat.position.y = height / 2 - (i * slatH) - slatH / 2;
+    // Animation: nach oben fahren bei position 1
+    slat.position.y -= position * height * 0.95;
+    holder.add(slat);
+  }
+  
+  // Schnur/Kette auf einer Seite
+  const chain = box(0.008, height * (1 - position * 0.95), 0.008, M.metal(0xa0a0a0), 0.001);
+  chain.position.set(width / 2 - 0.02, height / 2 - (position * height * 0.95 * 0.5), 0);
+  holder.add(chain);
+  
+  g.add(holder);
+  g.userData.holder = holder;
+  g.userData.position = position;
+  return g;
+}
+
 export function makePerson(o = {}) {
   const g = new THREE.Group();
   const skin = M.matte(o.skinColor ?? 0xe0ac86);
@@ -308,6 +348,9 @@ export const FURNITURE = {
   tv: makeTV,
   speaker: makeSpeaker,
   person: makePerson,
+  blind: makeBlind,
+  shutter: makeBlind,
+  rollo: makeBlind,
 };
 
 /** Baut ein Objekt nach Typ und stellt es an seinen Platz. */

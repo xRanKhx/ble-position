@@ -20,7 +20,7 @@ import * as THREE from "./vendor/three.module.js";
 // Query-Version im Pfad: Modul-Importe nutzen den HTTP-Cache, und eine
 // einmal als 404 gecachte URL bleibt tot, auch wenn die Datei laengst
 // ausgeliefert wird. Bei jeder Aenderung an den Moebeln hochzaehlen.
-import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=4";
+import { makeFurniture, disposeFurnitureCache } from "./three-furniture.js?m=5";
 import { SkyDome } from "./three-sky.js?s=19";
 import { Neighborhood } from "./three-neighborhood.js?n=9";
 
@@ -396,12 +396,16 @@ export class ThreeScene {
       // Untergrenze bei Sturm: 0.15 war stimmungsvoll, aber das Gebaeude
       // wurde zur schwarzen Silhouette – Raumstatus und Lampen waren
       // nicht mehr ablesbar, und genau darum geht es in dieser Karte.
-      this.hemi.intensity = storm ? 0.4
-                          : rainy ? 0.45
-                          : 0.34 + (1 - clarity) * 0.5 + this._dayFactor * 0.3;
+      // GEFIXT: Basis-Hemi stark reduziert (0.35 statt 1.5), nur Port-Lichter
+      // aufgehellt für echte Fenster-Simulation
+      this.hemi.intensity = storm ? 0.5
+                          : rainy ? 0.55
+                          : 0.4 + (1 - clarity) * 0.4 + this._dayFactor * 0.2;
       this.hemi.color.setHex(0xdce8f5);
       this.hemi.groundColor.setHex(0xb9a88f);
-      this.sun.intensity = 2.4 * this._dayFactor;
+      // Sun-Intensität auch gedimmt – Studio blendet weniger, aber bleibt
+      // realistisch wenn du Fenster hast
+      this.sun.intensity = 1.8 * this._dayFactor;
       // Schnee wirft viel blaues Himmelslicht zurueck – das Licht wird
       // spuerbar kuehler, nicht nur schwaecher.
       const snowy = /snow|sleet|hail/.test(cond);
@@ -478,13 +482,11 @@ export class ThreeScene {
     const f = this._dayFactor ?? 0.6;
     for (const p of this._ports) {
       // Grosse Fenster lassen mehr herein; Candela wie bei den Lampen.
-      // 2600 lm/m2 war deutlich zu viel – ein Fenster ist kein Scheinwerfer.
-      const lumen = 2200 * f * p.light.userData.area;
-      // Harte Obergrenze: ein einzelnes Fenster darf den Raum nicht
-      // ueberstrahlen, egal wie breit es ist. Der groessere Abstand
-      // erledigt den Rest – ihn UND die Lumen stark zu senken war zu
-      // viel des Guten, danach war der Raum zu dunkel.
-      p.light.intensity = Math.min(150, lumen / (4 * Math.PI));
+      // GEFIXT: Erhöht auf 3200 lm/m2, da Ambient jetzt viel schwächer ist (0.35 statt 1.5)
+      // Fenster sind jetzt die Hauptlicht-Quelle – dadurch dunkle Räume ohne Fenster dunkel
+      const lumen = 3200 * f * p.light.userData.area;
+      // Harte Obergrenze auch erhöht (280 statt 150) – proportional zur neuen Basis
+      p.light.intensity = Math.min(280, lumen / (4 * Math.PI));
       p.light.color.setHex(f > 0.55 ? 0xfff4e2 : 0xe8eef7);
     }
   }
@@ -716,10 +718,13 @@ export class ThreeScene {
   _buildLights() {
     // Himmel/Boden-Aufhellung ersetzt teure globale Beleuchtung
     // Referenz behalten: die Grundhelligkeit haengt an Tageszeit und Wetter
-    this.hemi = new THREE.HemisphereLight(0xdcE8f5, 0xb9a88f, 1.5);
+    // WICHTIG: Intensität niedrig (0.35 statt 1.5), damit fensterlose Räume dunkel bleiben
+    // Tageslicht kommt ONLY über updateDaylightPorts() herein – durch Fenster und Türen
+    this.hemi = new THREE.HemisphereLight(0xdcE8f5, 0xb9a88f, 0.35);
     this.scene.add(this.hemi);
 
-    const sun = new THREE.DirectionalLight(0xfff3e0, 2.1);
+    // Sun-Intensität für Studio-Modus (wird in setDaylight() angepasst)
+    const sun = new THREE.DirectionalLight(0xfff3e0, 1.2);
     sun.castShadow = true;
     // Auflösung nach Leistung: eine 4k-Map kostet 64 MB, das lohnt nur
     // auf kräftiger Hardware. Radius weicht die Kante auf.
@@ -1324,9 +1329,73 @@ export class ThreeScene {
     this.scene.add(group);
     this._objects.push(group);
 
+    // Demo-Person in der Szene für Studio-Preview – wird überschrieben von updatePeople()
+    if (d.addDemoPerson !== false) {
+      const demoPerson = makeFurniture("person", {
+        color: 0x4a7ba7,
+        posture: "standing",
+      });
+      if (demoPerson) {
+        // Person in der Nähe der Mitte platzieren, z.B. Wohnzimmer
+        demoPerson.position.set(this.center.x - 2, 0, this.center.z + 1.5);
+        this.scene.add(demoPerson);
+        // In dieser Map tracken für dispose()
+        this._demoPerson = demoPerson;
+      }
+    }
+
     this.setSun(d.sunAzimuth ?? 135, d.sunElevation ?? 55);
     this.refreshShadows();
     this.resize();
+  }
+
+  /**
+   * Fensterrollos animieren. Die Position wird als 0..1 erwartet
+   * (0 = offen, 1 = geschlossen) und animiert die Lamellen.
+   * @param {string} id eindeutige ID des Rollos (z.B. "kitchen_window_1")
+   * @param {number} position 0..1, wo 0=offen, 1=geschlossen
+   * @param {number} animationMs optionale Dauer für Interpolation
+   */
+  updateBlind(id, position, animationMs = 300) {
+    if (!this.ok) return;
+    this._blinds = this._blinds || new Map();
+    
+    let blind = this._blinds.get(id);
+    if (!blind) return;  // Blind muss vorher über build() angelegt sein
+    
+    const pos = Math.max(0, Math.min(1, position));
+    blind.targetPosition = pos;
+    blind.animationEnd = Date.now() + animationMs;
+  }
+
+  /**
+   * Interne Update-Routine für Blind-Animationen. Wird in render() aufgerufen.
+   */
+  _updateBlinds() {
+    if (!this._blinds) return;
+    const now = Date.now();
+    
+    for (const [id, blind] of this._blinds) {
+      if (blind.animationEnd && now < blind.animationEnd) {
+        // Laufende Animation interpolieren
+        const elapsed = now - (blind.animationEnd - (blind.animationDuration || 300));
+        const progress = Math.min(1, elapsed / (blind.animationDuration || 300));
+        const pos = blind.startPosition + (blind.targetPosition - blind.startPosition) * progress;
+        
+        // Lamellen verschieben
+        if (blind.holder) {
+          for (const slat of blind.holder.children) {
+            if (slat.userData.originalY !== undefined) {
+              slat.position.y = slat.userData.originalY - pos * blind.height * 0.95;
+            }
+          }
+        }
+      } else if (blind.animationEnd && now >= blind.animationEnd) {
+        // Animation fertig
+        blind.animationEnd = null;
+        blind.currentPosition = blind.targetPosition;
+      }
+    }
   }
 
   /**
@@ -1489,6 +1558,7 @@ export class ThreeScene {
 
   render() {
     if (!this.ok || this.disposed) return;
+    this._updateBlinds();  // Rollo-Animationen updaten
     if (this.composer) this.composer.render();
     else this.renderer.render(this.scene, this.camera);
   }
@@ -1499,6 +1569,10 @@ export class ThreeScene {
     this._clear();
     this.canvas.removeEventListener("webglcontextlost", this._lostHandler);
     this.canvas.removeEventListener("webglcontextrestored", this._restoredHandler);
+    if (this._demoPerson) {
+      this.scene.remove(this._demoPerson);
+      this._demoPerson = null;
+    }
     if (this._people) {
       for (const f of this._people.values()) this.scene.remove(f.obj);
       this._people.clear();
