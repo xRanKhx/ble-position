@@ -9,7 +9,7 @@
  *   rooms      – draw / edit rooms on floorplan
  */
 
-const CARD_VERSION = "6.18.1";
+const CARD_VERSION = "6.19.0";
 const DOMAIN       = "ble_positioning";
 
 // ── Colour palette for scanners ───────────────────────────────────────────
@@ -16742,7 +16742,11 @@ _drawDoors() {
     }
 
     // ── 3D wall color + transparency controls ──────────────────────────────
-    if (this._opts?.show3D) {
+    // Frueher an show3D gekoppelt: bei ausgeschaltetem 3D fehlten damit
+    // auch die Theme-Auswahl und die Wetter-Optionen – und ohne
+    // Theme-Auswahl kam man gar nicht erst zu WebGL. Der Block ist
+    // jetzt immer da; die Einstellungen wirken, sobald 3D laeuft.
+    if (true) {
       // Color override toggle
       const colorRow = document.createElement("div");
       colorRow.style.cssText = "display:flex;align-items:center;gap:6px;padding:6px 8px;background:var(--surf2);border-radius:6px;border:1px solid #00e5ff44";
@@ -23492,6 +23496,54 @@ const MmwaveModul = {
     // ctx.restore() nie erreicht, die Kartendrehung summierte sich auf,
     // und die Bildrate brach auf wenige Bilder pro Sekunde ein.
     if (this._mode === "view") this._updateMmwavePersonsSidebar?.();
+  },
+
+  /* Zone eines Ziels bestimmen. Die Methode ging beim Auslagern des
+     mmWave-Moduls verloren, wurde aber an zwei Stellen aufgerufen –
+     unter anderem mitten im Zeichnen der Figur. Dadurch brach das
+     Overlay ab und es erschien weder Punkt noch Figur, obwohl die
+     Sensordaten korrekt ankamen.
+
+     Liefert { zone, room } oder null. Zonen sind optional: ohne
+     konfigurierte Zonenkoordinaten gibt es schlicht keine Zuordnung. */
+  _getMmwaveZoneForTarget(sensor, target) {
+    if (!sensor || !target) return null;
+    // Zielposition in Grundriss-Metern – die rechnet _getMmwaveTarget aus
+    const mx = target.floor_mx, my = target.floor_my;
+    if (mx == null || my == null) return null;
+
+    for (let z = 1; z <= 3; z++) {
+      const zConf = sensor["zone_" + z];
+      if (!zConf) continue;
+      // Zonenecken liegen in Sensor-Millimetern; in Grundriss-Meter
+      // umrechnen, analog zu _drawMmwaveZones.
+      const rot = (sensor.rotation || 0) * Math.PI / 180;
+      const toFloor = (xmm, ymm) => {
+        const xs = xmm / 1000, ys = ymm / 1000;
+        return {
+          x: (sensor.mx || 0) + xs * Math.cos(rot) - ys * Math.sin(rot),
+          y: (sensor.my || 0) + xs * Math.sin(rot) + ys * Math.cos(rot),
+        };
+      };
+      const a1 = toFloor(zConf.x1, zConf.y1);
+      const b1 = toFloor(zConf.x2, zConf.y2);
+      const xa = Math.min(a1.x, b1.x), xb = Math.max(a1.x, b1.x);
+      const ya = Math.min(a1.y, b1.y), yb = Math.max(a1.y, b1.y);
+      if (mx >= xa && mx <= xb && my >= ya && my <= yb) {
+        return { zone: z, room: zConf.room || zConf.name || null };
+      }
+    }
+
+    // Keine Zone getroffen: dann wenigstens den Raum aus dem Grundriss
+    for (const r of (this._data?.rooms || [])) {
+      if (r.x1 == null || r.x2 == null) continue;
+      const xa = Math.min(r.x1, r.x2), xb = Math.max(r.x1, r.x2);
+      const ya = Math.min(r.y1, r.y2), yb = Math.max(r.y1, r.y2);
+      if (mx >= xa && mx <= xb && my >= ya && my <= yb) {
+        return { zone: null, room: r.name || null };
+      }
+    }
+    return null;
   },
 
   _drawMmwaveZones(sensor, col) {
